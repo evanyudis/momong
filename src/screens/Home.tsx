@@ -173,7 +173,7 @@ function NewbornHome() {
           <hr className="divider" style={{ margin: "16px 0" }} />
           <div className="label">Terakhir minum</div>
           <div className="stat" style={{ marginTop: 6 }}>
-            {lastFeed ? <>{agoLabel(lastFeed.at)}<small> lalu</small></> : <small>Belum ada catatan</small>}
+            {lastFeed ? (Date.now() - lastFeed.at < 60_000 ? "Baru saja" : <>{agoLabel(lastFeed.at)}<small> lalu</small></>) : <small>Belum ada catatan</small>}
           </div>
         </section>
 

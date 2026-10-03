@@ -218,7 +218,7 @@ function NewbornLog() {
       <div className="stack">
         <div className="grid2">
           {KINDS.map(({ kind, label, glyph, Icon }) => (
-            <button key={kind} className="card" onClick={() => setOpen(kind)} style={{ transition: "scale 150ms ease-out" }}>
+            <button key={kind} className="card" onClick={() => setOpen(kind)}>
               <span className={`glyph ${glyph}`}><Icon size={22} /></span>
               <div className="card-title" style={{ marginTop: 12 }}>{label}</div>
               <div className="card-sub num">{list(kind).filter((r) => isToday(r.at)).length}× hari ini</div>

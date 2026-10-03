@@ -139,7 +139,9 @@ function Household() {
 
   return (
     <>
-      <Hero title="Ajak pasangan mencatat bersama" body="Berdua lebih ringan. Catat kontraksi, gerakan, menyusu, dan popok dari HP masing-masing." />
+      {h.partner
+        ? <Hero title="Kalian mencatat berdua" body={`Catatan kamu dan ${h.partnerName} tersinkron di kedua HP. Kalian berdua bisa menambah dan mengedit.`} />
+        : <Hero title="Ajak pasangan mencatat bersama" body="Berdua lebih ringan. Catat kontraksi, gerakan, menyusu, dan popok dari HP masing-masing." />}
       <div className="stack">
         <section className="card solid">
           <div className="spread">
@@ -203,7 +205,7 @@ function Household() {
           </div>
         )}
         {full && (
-          <p className="muted" style={{ textAlign: "center", fontSize: 15 }}>Kedua kursi sudah terisi. Kalian berdua bisa mencatat dan mengedit.</p>
+          <p className="muted" style={{ textAlign: "center", fontSize: 15 }}>Kedua kursi sudah terisi.</p>
         )}
 
         <button className="link-btn muted" style={{ justifySelf: "center", fontWeight: 500 }} onClick={() => { void signOut(); toast("Keluar dari akun. Catatan tetap di HP ini."); }}>
