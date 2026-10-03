@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 /** Local-first data. Every record syncs by id with last-write-wins on updatedAt; deletes are tombstones. */
 export type Collection =
   | "settings" | "contractions" | "kicks" | "symptoms" | "bag"
-  | "bottle" | "breast" | "pump" | "diaper";
+  | "bottle" | "breast" | "pump" | "diaper" | "wishlist";
 export type Rec = { id: string; updatedAt: number; deleted?: boolean; updatedBy?: string; [k: string]: any };
 type DB = Partial<Record<Collection, Record<string, Rec>>>;
 
@@ -118,7 +118,7 @@ export const settings = (): Settings => (get("settings", "main") ?? {}) as Setti
 export const saveSettings = (s: Settings) => put("settings", { ...settings(), ...s, id: "main" });
 
 // Device-only preferences (not synced).
-export type Prefs = { name?: string; theme?: "light" | "dark" | "system"; reportMonth?: string };
+export type Prefs = { name?: string; theme?: "light" | "dark" | "system" };
 const PREFS_KEY = "bb_prefs_v1";
 let prefs: Prefs = read<Prefs>(PREFS_KEY, {});
 export const getPrefs = () => prefs;

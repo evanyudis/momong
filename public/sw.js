@@ -1,6 +1,6 @@
 // Offline shell: network-first for navigations, stale-while-revalidate for same-origin assets and fonts.
 // API calls are never cached (sync handles offline itself).
-const CACHE = "bb-v1";
+const CACHE = "bb-v2";
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(["/", "/manifest.webmanifest", "/icon.svg"])));
   self.skipWaiting();

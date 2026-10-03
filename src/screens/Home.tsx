@@ -1,4 +1,4 @@
-import { Baby, BriefcaseMedical, ChevronRight, Settings as Gear, Sprout, Users } from "lucide-react";
+import { Baby, BriefcaseMedical, ChevronRight, Gift, Settings as Gear, Sprout, Users } from "lucide-react";
 import { BAG_DEFAULTS, weekNote } from "../content";
 import { agoLabel, babyAge, dateLabel, isToday, pregnancy } from "../dates";
 import { initial, useHousehold } from "../household";
@@ -76,6 +76,8 @@ function PregnancyHome() {
           <PartnerCard />
         </div>
 
+        <WishlistCard />
+
         <section className="card">
           <div className="row">
             <span className="glyph mint" style={{ width: 36, height: 36 }}><Sprout size={18} /></span>
@@ -114,6 +116,23 @@ function BagCard() {
       </div>
       <div style={{ color: "var(--success-ink)", fontSize: 14, fontWeight: 500, marginTop: 12 }}>
         {pct}% siap · {total - done} lagi
+      </div>
+    </a>
+  );
+}
+
+function WishlistCard() {
+  const items = list("wishlist");
+  const left = items.filter((i) => !i.have).length;
+  return (
+    <a className="card" href="#/kado">
+      <div className="row">
+        <span className="glyph peach" style={{ width: 40, height: 40 }}><Gift size={20} /></span>
+        <div style={{ flex: 1 }}>
+          <div className="card-title" style={{ fontSize: 16 }}>Daftar kado</div>
+          <div className="card-sub num">{items.length ? `${left} barang masih dibutuhkan` : "Buat daftar kebutuhan si kecil"}</div>
+        </div>
+        <ChevronRight size={20} className="faint" />
       </div>
     </a>
   );
@@ -191,6 +210,7 @@ function NewbornHome() {
         </section>
 
         <PartnerCard />
+        <WishlistCard />
         {s.hpl && (
           <button className="link-btn faint" style={{ justifySelf: "center", fontWeight: 500 }} onClick={() => saveSettings({ birthMode: "pregnant" })}>
             Kembali ke mode hamil

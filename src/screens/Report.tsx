@@ -1,23 +1,23 @@
 import { DIAPER_LABEL } from "../content";
 import { dateLabel, durationLabel, pregnancy, timeLabel } from "../dates";
-import { getPrefs, list, setPrefs, settings, useDB } from "../store";
+import { get, getPrefs, list, put, settings, useDB } from "../store";
 import { TopBar } from "../ui";
 import { contractionStats, describe } from "./Log";
 
 const DAY = 86_400_000;
 const monthKey = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}`;
 
-/** PRD Free: PDF 1× per month. Printed via the browser's "Save as PDF". */
+/** PRD Free: PDF 1× per month per household (synced, so both partners share it). Printed via "Save as PDF". */
 export function Report() {
   useDB();
   const s = settings();
   const since = Date.now() - 14 * DAY;
-  const usedThisMonth = getPrefs().reportMonth === monthKey();
+  const usedThisMonth = get("settings", "report")?.month === monthKey();
   const born = s.birthMode === "postpartum";
   const p = s.hpl ? pregnancy(s.hpl) : null;
 
   function print() {
-    setPrefs({ reportMonth: monthKey() });
+    put("settings", { id: "report", month: monthKey() });
     window.print();
   }
 

@@ -8,6 +8,7 @@ import { JoinLanding, MagicLanding, Partner } from "./screens/Partner";
 import { Report } from "./screens/Report";
 import { Settings } from "./screens/Settings";
 import { Welcome } from "./screens/Welcome";
+import { Wishlist } from "./screens/Wishlist";
 import { settings, useDB } from "./store";
 import { Toaster } from "./ui";
 
@@ -36,6 +37,7 @@ export function App() {
   else if (path === "/pengaturan") screen = <Settings />;
   else if (path === "/tas") screen = <Bag />;
   else if (path === "/laporan") screen = <Report />;
+  else if (path === "/kado") screen = <Wishlist />;
   else screen = <Home />;
 
   const showTabs = ready && TABS.some((t) => t.path === path);
