@@ -5,7 +5,10 @@ export function useHousehold() {
   const acc = useAccount();
   const me = acc.me;
   const partner = me?.household.members.find((m) => m.id !== me.user.id);
-  const name = (m?: { name: string; email: string }) => (m ? m.name || m.email.split("@")[0] : "");
+  const name = (m?: { name: string; email: string }) => {
+    const n = m ? m.name || m.email.split("@")[0] : "";
+    return n.charAt(0).toUpperCase() + n.slice(1);
+  };
   return {
     acc,
     signedIn: !!acc.token && !!me,

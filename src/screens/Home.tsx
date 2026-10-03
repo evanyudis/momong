@@ -52,7 +52,7 @@ function PregnancyHome() {
               <div style={{ fontWeight: 600, fontSize: 17, marginTop: 12 }}>HPL {dateLabel(s.hpl!)}</div>
               <div className="muted num" style={{ fontSize: 15, marginTop: 4 }}>Hari ke-{p.day} dari 280</div>
             </div>
-            <Ring value={p.progress} size={128} stroke={11}>
+            <Ring value={p.progress} size={128} stroke={11} knob>
               <div className="num" style={{ fontSize: 34, fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1 }}>{p.week}</div>
               <div className="muted" style={{ fontSize: 14 }}>minggu</div>
             </Ring>
@@ -110,7 +110,7 @@ function BagCard() {
       </div>
       <div className="spread" style={{ marginTop: 14 }}>
         <div className="stat num">{done}<small> / {total}</small></div>
-        <Ring value={done / (total || 1)} size={52} stroke={7} />
+        <Ring value={done / (total || 1)} size={44} stroke={6} />
       </div>
       <div style={{ color: "var(--success-ink)", fontSize: 14, fontWeight: 500, marginTop: 12 }}>
         {pct}% siap · {total - done} lagi
@@ -139,7 +139,7 @@ export function PartnerCard() {
       </div>
       <div className="avatars" style={{ marginTop: 12 }}>
         <span className="avatar blue" style={{ width: 44, height: 44, fontSize: 16 }}>{myInitial}</span>
-        <span className={`avatar ${h.partner ? "coral" : "empty"}`} style={{ width: 44, height: 44, fontSize: 16 }}>
+        <span className={`avatar ${h.partner ? "coral" : "vacant"}`} style={{ width: 44, height: 44, fontSize: 16 }}>
           {h.partner ? initial(h.partnerName) : "+"}
         </span>
       </div>

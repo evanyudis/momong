@@ -113,6 +113,8 @@ export function syncNow(): Promise<void> {
       });
       markPushed(changes);
       applyRemote(data.changes);
+      // ponytail: second request per sync so partner joins/leaves show up; fold into /sync if traffic matters.
+      await refreshMe().catch(() => {});
       localStorage.setItem("bb_cursor", String(data.cursor));
       set({ status: "synced", lastSyncAt: Date.now(), error: undefined });
     } catch (e) {

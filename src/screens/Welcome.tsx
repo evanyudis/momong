@@ -1,3 +1,4 @@
+import { Baby, Heart } from "lucide-react";
 import { useState } from "react";
 import { todayISO } from "../dates";
 import { saveSettings, setPrefs } from "../store";
@@ -20,8 +21,8 @@ export function Welcome() {
   return (
     <form onSubmit={start} className="stack" style={{ paddingTop: 24 }}>
       <div className="avatars" aria-hidden="true">
-        <span className="avatar xl blue" style={{ fontSize: 32 }}>B</span>
-        <span className="avatar xl coral" style={{ fontSize: 32 }}>B</span>
+        <span className="avatar xl blue"><Heart size={38} /></span>
+        <span className="avatar xl coral"><Baby size={40} /></span>
       </div>
       <h1 style={{ fontSize: 38, letterSpacing: "-0.035em", lineHeight: 1.08, marginTop: 12 }}>Selamat datang di BumpBuddy</h1>
       <p className="muted" style={{ fontSize: 17, lineHeight: 1.5 }}>

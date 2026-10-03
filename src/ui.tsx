@@ -62,7 +62,7 @@ export function TopBar({ title, back = "#/" }: { title: string; back?: string })
 }
 
 /** Progress ring; `value` 0–1. Gradient matches the couple accents. */
-export function Ring({ value, size = 150, stroke = 12, children }: { value: number; size?: number; stroke?: number; children?: ReactNode }) {
+export function Ring({ value, size = 150, stroke = 12, knob, children }: { value: number; size?: number; stroke?: number; knob?: boolean; children?: ReactNode }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const id = `g${size}`;
@@ -81,6 +81,12 @@ export function Ring({ value, size = 150, stroke = 12, children }: { value: numb
           cx={size / 2} cy={size / 2} r={r} fill="none" stroke={`url(#${id})`} strokeWidth={stroke}
           strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(Math.max(value, 0), 1))}
         />
+        {knob && value > 0.02 && (
+          <circle
+            cx={size / 2 + r * Math.cos(2 * Math.PI * value)} cy={size / 2 + r * Math.sin(2 * Math.PI * value)}
+            r={stroke * 0.9} fill="#E8A0A8" stroke="var(--surface)" strokeWidth={3}
+          />
+        )}
       </svg>
       <div className="center">{children}</div>
     </div>

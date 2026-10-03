@@ -10,6 +10,8 @@ import {
 import { toast, TopBar } from "../ui";
 
 const PENDING_INVITE = "bb_pending_invite";
+// A magic-link token is single-use; dedupe so a re-run effect can't burn it twice.
+const verifying = new Map<string, Promise<void>>();
 
 export function SyncDot() {
   const acc = useAccount();
@@ -165,7 +167,7 @@ function Household() {
                 </>
               ) : (
                 <>
-                  <span className="avatar empty" style={{ width: 48, height: 48 }}><UserRoundPlus size={20} /></span>
+                  <span className="avatar vacant" style={{ width: 48, height: 48 }}><UserRoundPlus size={20} /></span>
                   <div className="grow">
                     <div className="title">Pasangan</div>
                     <div className="sub">Belum bergabung · bisa mengedit</div>
@@ -219,7 +221,8 @@ export function MagicLanding({ token }: { token: string | null }) {
     if (!token) { setState("error"); return; }
     (async () => {
       try {
-        await verifyMagicLink(token);
+        if (!verifying.has(token)) verifying.set(token, verifyMagicLink(token));
+        await verifying.get(token);
         const pendingInvite = localStorage.getItem(PENDING_INVITE);
         if (pendingInvite) {
           localStorage.removeItem(PENDING_INVITE);
