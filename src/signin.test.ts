@@ -39,8 +39,20 @@ test("typing after a failure clears it", () => {
   assert.equal(signIn(net, { type: "password", value: "x" }).failure, null);
 });
 
-test("google goes to cancelled with both fields empty", () => {
-  assert.deepEqual(signIn(filled(), { type: "google" }), { ...SIGNIN_EMPTY, googleCancelled: true });
+test("google is pending until the browser leaves; back without a session shows cancelled", () => {
+  const g = signIn(signIn(filled(), { type: "googleCancelled" }), { type: "google" });
+  assert.deepEqual([g.pending, g.googleCancelled, g.failure, g.emailError], [true, false, null, false]);
+  const back = signIn(g, { type: "googleCancelled" });
+  assert.deepEqual([back.pending, back.googleCancelled], [false, true]);
+});
+
+test("google request failures never say Email tidak cocok", () => {
+  const g = signIn(filled(), { type: "google" });
+  assert.equal(signIn(g, { type: "googleFail", status: 0 }).failure, "network");
+  for (const status of [401, 500]) {
+    const s = signIn(g, { type: "googleFail", status });
+    assert.deepEqual([s.failure, s.emailError, s.pending], ["other", false, false]);
+  }
 });
 
 test("daftar and masuk swap modes in place; state never holds a token or signed-in flag", () => {

@@ -1,4 +1,4 @@
-/** Sign-in screen state. Pure: the network call lives in sync.ts (authEmail); this only decides what the screen shows. */
+/** Sign-in screen state. Pure: the network calls live in sync.ts (authEmail, startGoogle); this only decides what the screen shows. */
 export type SignInMode = "masuk" | "daftar";
 /** Shown under the button. "Email tidak cocok" is not here: it sits on the email field (emailError). */
 export type SignInFailure = "network" | "daftar" | "other";
@@ -14,7 +14,8 @@ export type SignInState = {
 export type SignInAction =
   | { type: "email" | "password"; value: string }
   | { type: "mode"; mode: SignInMode }
-  | { type: "google" }
+  | { type: "google" | "googleCancelled" }
+  | { type: "googleFail"; status: number }
   | { type: "submit" }
   | { type: "fail"; status: number };
 
@@ -44,7 +45,10 @@ export function signIn(s: SignInState, a: SignInAction): SignInState {
     case "email": return { ...s, email: a.value, emailError: false, failure: null };
     case "password": return { ...s, password: a.value, failure: null };
     case "mode": return { ...s, mode: a.mode, emailError: false, googleCancelled: false, failure: null };
-    case "google": return { ...SIGNIN_EMPTY, mode: s.mode, googleCancelled: true }; // never calls Google
+    // Google: pending while the app asks for the Google URL; the browser then leaves. Back without a session = cancelled.
+    case "google": return { ...s, pending: true, emailError: false, googleCancelled: false, failure: null };
+    case "googleCancelled": return { ...s, pending: false, googleCancelled: true };
+    case "googleFail": return { ...s, pending: false, failure: a.status === 0 ? "network" : "other" }; // never "Email tidak cocok"
     case "submit": return { ...s, pending: true, emailError: false, googleCancelled: false, failure: null };
     case "fail": return { ...s, pending: false, ...failureFor(s.mode, a.status) }; // fields stay filled
   }

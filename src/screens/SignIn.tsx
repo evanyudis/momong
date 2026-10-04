@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { Button, Form, Input, Label, TextField } from "react-aria-components";
 import { reducedMotion } from "../motion";
 import { FAILURE_TEXT, SIGNIN_EMPTY, signIn } from "../signin";
-import { ApiError, authEmail } from "../sync";
+import { ApiError, authEmail, startGoogle, takeGoogleReturn } from "../sync";
 import { TopBar } from "../ui";
 
 const EXIT_MS = 150; // matches the quiet exit in styles.css; enter (settle-in) is 200ms
@@ -23,7 +23,7 @@ function useLeaving(show: boolean, still: boolean) {
   return leaving;
 }
 
-/** Masuk / Daftar from Profil, signed out only. Real Better Auth email + password; Google stays off. Leaving keeps local data.
+/** Masuk / Daftar from Profil, signed out only. Real Better Auth email + password and Google OAuth. Leaving keeps local data.
  *  Controls are react-aria-components (unstyled), dressed only by the app's .btn / .input / .field rules. */
 export function SignIn() {
   const [s, dispatch] = useReducer(signIn, SIGNIN_EMPTY);
@@ -54,6 +54,25 @@ export function SignIn() {
     }
   }
 
+  // Came back from Google without a session: reload or errorCallbackURL lands here; Back may restore this page from bfcache.
+  useEffect(() => {
+    const back = () => { if (takeGoogleReturn()) dispatch({ type: "googleCancelled" }); };
+    back();
+    const onShow = (e: PageTransitionEvent) => { if (e.persisted) back(); };
+    addEventListener("pageshow", onShow);
+    return () => removeEventListener("pageshow", onShow);
+  }, []);
+
+  async function google() {
+    if (s.pending) return;
+    dispatch({ type: "google" });
+    try {
+      await startGoogle(); // the browser leaves for Google; success comes back to #/profil
+    } catch (err) {
+      dispatch({ type: "googleFail", status: err instanceof ApiError ? err.status : 0 });
+    }
+  }
+
   const msg = (leaving: boolean) => ({ "data-still": still || undefined, "data-leaving": leaving || undefined });
 
   return (
@@ -64,7 +83,7 @@ export function SignIn() {
         <p className="muted" style={{ textAlign: "center" }}>Supaya data tersimpan online. Sync dan pasangan tetap gratis.</p>
         {/* aria validation: no native email check; "Email tidak cocok" comes only from a real Masuk failure. */}
         <Form className="card stack" onSubmit={submit} validationBehavior="aria" aria-busy={s.pending}>
-          <Button className="btn btn-ghost block" isDisabled={s.pending} onPress={() => dispatch({ type: "google" })}>Lanjut dengan Google</Button>
+          <Button className="btn btn-ghost block" isDisabled={s.pending} onPress={google}>Lanjut dengan Google</Button>
           {(s.googleCancelled || googleLeaving) && (
             <p className="muted signin-msg" role="status" style={{ fontSize: 14, textAlign: "center" }} {...msg(googleLeaving)}>Masuk Google dibatalkan</p>
           )}

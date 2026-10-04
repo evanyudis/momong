@@ -76,11 +76,59 @@ export async function authEmail(mode: SignInMode, email: string, password: strin
   const body = mode === "daftar" ? { name: nameFromEmail(email), email, password } : { email, password };
   const { data, res } = await api<{ token?: string }>(path, { method: "POST", body: JSON.stringify(body) });
   set({ token: res.headers.get("set-auth-token") ?? data.token ?? null });
-  // Signed in means token and /me. No /me, no session: drop the token rather than half sign in.
+  await signedIn();
+}
+
+/** Signed in means token and /me. No /me, no session: drop the token rather than half sign in. Then a full sync. */
+async function signedIn() {
   await refreshMe().catch((e) => { set({ token: null, me: null }); throw e; });
   localStorage.removeItem("bb_cursor");
   markAllDirty();
   void syncNow();
+}
+
+// Set while the browser is away at Google. Success returns to #/profil, cancel/deny to #/masuk-akun (errorCallbackURL).
+const GOOGLE_AWAY = "bb_google";
+
+/** Better Auth social sign-in: the API answers with Google's URL (and sets its OAuth state cookie on this origin), then we leave. */
+export async function startGoogle() {
+  const { data } = await api<{ url?: string }>("/api/auth/sign-in/social", {
+    method: "POST",
+    body: JSON.stringify({
+      provider: "google",
+      callbackURL: `${location.origin}/#/profil`,
+      errorCallbackURL: `${location.origin}/#/masuk-akun`,
+    }),
+  });
+  if (!data.url) throw new ApiError(502, "no_url");
+  sessionStorage.setItem(GOOGLE_AWAY, "away");
+  location.assign(data.url);
+}
+
+/** True once per Google round trip that came back without signing in; clears the marker. SignIn shows "Masuk Google dibatalkan". */
+export function takeGoogleReturn() {
+  const away = sessionStorage.getItem(GOOGLE_AWAY) === "away";
+  sessionStorage.removeItem(GOOGLE_AWAY);
+  return away;
+}
+
+/** Boot after Google: the callback left a Better Auth session cookie on this origin. Trade it for the bearer, then the email path.
+ *  No session (cancelled, closed, denied): send them to the sign-in screen, which reads the marker and says so. */
+export async function finishGoogle() {
+  if (sessionStorage.getItem(GOOGLE_AWAY) !== "away") return;
+  if (state.token) return sessionStorage.removeItem(GOOGLE_AWAY);
+  if (location.hash.startsWith("#/masuk-akun")) return; // error landing: SignIn takes the marker itself
+  try {
+    const { data, res } = await api<{ session?: { token?: string } } | null>("/api/auth/get-session");
+    const token = res.headers.get("set-auth-token") ?? data?.session?.token;
+    if (!token) throw new ApiError(401, "no_session");
+    set({ token });
+    await signedIn();
+    sessionStorage.removeItem(GOOGLE_AWAY);
+    location.hash = "#/profil";
+  } catch {
+    location.hash = "#/masuk-akun";
+  }
 }
 
 export async function refreshMe() {

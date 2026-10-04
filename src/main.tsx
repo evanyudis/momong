@@ -3,12 +3,13 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { applyTheme } from "./screens/Profil";
 import { getPrefs } from "./store";
-import { startSync } from "./sync";
+import { finishGoogle, startSync } from "./sync";
 import "./styles.css";
 
 applyTheme(getPrefs().theme);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme(getPrefs().theme));
 startSync();
+void finishGoogle(); // back from Google: session cookie → bearer → /me → /sync, like email Masuk
 
 createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
 
