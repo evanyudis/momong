@@ -263,19 +263,30 @@ button.card:active, a.card:active { scale: 0.96; }
 /* Sign-in screen */
 .field > .signin-error { font-size: 14px; color: var(--field-danger); font-weight: 500; }
 .signin-failure { font-size: 14px; color: var(--field-danger); font-weight: 500; text-align: center; }
-/* No card: large left title, fields on the canvas, actions docked to the bottom edge. No tab bar here, so the
-   page drops the tab-bar reserve and lets the form fill the screen. */
-main.app:has(> .signin) { display: flex; flex-direction: column; padding-bottom: calc(env(safe-area-inset-bottom) + 16px); }
-.signin-head { display: grid; justify-items: start; gap: 10px; margin-bottom: 28px; }
-.signin-head .icon-btn { margin-bottom: 14px; }
+/* Full page, no card (Bloom frame): back, BumpBuddy, title, sub, Google, atau, Email, Kata sandi, Masuk, Nanti saja.
+   Each control is its own glass pill on the canvas; resting blur is the existing control blur. */
+.signin-head { display: grid; justify-items: start; gap: 6px; margin-bottom: 28px; }
+.signin-head .icon-btn { margin-bottom: 18px; }
 .signin-head h1 { margin-top: 0; }
-.signin-head p { max-width: 34ch; }
-.signin, .signin > form { flex: 1; display: flex; flex-direction: column; }
-.signin > form { gap: 18px; }
-.signin-dock { margin-top: auto; padding-top: 32px; display: grid; gap: 14px; }
+.signin-head p { max-width: 34ch; margin-top: 2px; }
+.signin-brand { font-size: 14px; font-weight: 500; color: var(--ink-muted); }
+.signin .input, .btn-glass {
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(var(--blur-glass-control));
+  backdrop-filter: blur(var(--blur-glass-control));
+  box-shadow: var(--elevation-raised);
+}
+.signin .input { padding: 0 20px; }
+.signin .input[aria-invalid="true"] { box-shadow: inset 0 0 0 1.5px var(--field-danger); }
+.signin .input::placeholder { color: var(--ink-faint); }
+.signin .field > label { padding-left: 4px; }
+.signin .btn-signin { color: oklch(1 0 0); margin-top: 8px; }
+.signin > form > .signin-msg { font-size: 14px; text-align: center; }
 .signin-or { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; font-size: 14px; color: var(--ink-faint); }
 .signin-or::before, .signin-or::after { content: ""; height: var(--border-hairline); background: var(--border-subtle); }
-.signin-links { display: flex; justify-content: center; gap: 24px; }
+.signin-later { justify-self: center; font-weight: 500; }
 /* State messages: enter with the shared settle-in (200ms, --ease-out); leave with the alert's quiet exit (150ms).
    Press on every control here comes from the existing .btn / .link-btn rules. Keyboard-driven changes don't move. */
 .signin-msg { animation: settle-in 200ms var(--ease-out); }

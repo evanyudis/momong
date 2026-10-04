@@ -23,6 +23,15 @@ function useLeaving(show: boolean, still: boolean) {
   return leaving;
 }
 
+/** Google "G" drawn inline in the label color. No fetched logo, no client id. */
+function GoogleMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+      <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />
+    </svg>
+  );
+}
+
 /** Masuk / Daftar from Profil, signed out only. Real Better Auth email + password and Google OAuth. Leaving keeps local data.
  *  Controls are react-aria-components (unstyled), dressed only by the app's .btn / .input / .field rules. */
 export function SignIn() {
@@ -79,20 +88,26 @@ export function SignIn() {
     <>
       <header className="header signin-head">
         <a className="icon-btn" href="#/profil" aria-label="Kembali"><ChevronLeft size={22} /></a>
+        <span className="signin-brand">BumpBuddy</span>
         <h1>{daftar ? "Daftar" : "Masuk"}</h1>
         <p className="muted">Supaya data tersimpan online. Sync dan pasangan tetap gratis.</p>
       </header>
       <div className="signin" onKeyDownCapture={() => setStill(true)} onPointerDownCapture={() => setStill(false)}>
-        <Form onSubmit={submit} validationBehavior="aria" aria-busy={s.pending}>
+        <Form className="stack" onSubmit={submit} validationBehavior="aria" aria-busy={s.pending}>
+          <Button className="btn btn-glass block" isDisabled={s.pending} onPress={google}><GoogleMark />Lanjut dengan Google</Button>
+          {(s.googleCancelled || googleLeaving) && (
+            <p className="muted signin-msg" role="status" {...msg(googleLeaving)}>Masuk Google dibatalkan.</p>
+          )}
+          <p className="signin-or" aria-hidden="true">atau</p>
           <TextField
             className="field" type="email" inputMode="email" autoComplete="email"
             value={s.email} isInvalid={s.emailError} aria-describedby={s.emailError ? "signin-email-error" : undefined}
             onChange={(value) => dispatch({ type: "email", value })}
           >
             <Label>Email</Label>
-            <Input ref={emailRef} className="input" autoCapitalize="none" spellCheck={false} />
+            <Input ref={emailRef} className="input" placeholder="nama@email.com" autoCapitalize="none" spellCheck={false} />
             {(s.emailError || errLeaving) && (
-              <span id="signin-email-error" className="signin-error signin-msg" role="alert" {...msg(errLeaving)}>Email tidak cocok</span>
+              <span id="signin-email-error" className="signin-error signin-msg" role="alert" {...msg(errLeaving)}>Email tidak cocok.</span>
             )}
           </TextField>
           <TextField
@@ -102,24 +117,11 @@ export function SignIn() {
             <Label>Kata sandi</Label>
             <Input ref={passwordRef} className="input" />
           </TextField>
-          {/* Actions sit on the bottom edge, in thumb reach: primary first, Google as the alternative below "atau". */}
-          <div className="signin-dock">
-            <Button type="submit" className="btn btn-signin block" isDisabled={s.pending}>{daftar ? "Buat akun" : "Masuk"}</Button>
-            {(s.failure || failLeaving) && lastFailure.current && (
-              <p className="signin-failure signin-msg" role="alert" {...msg(failLeaving)}>{FAILURE_TEXT[lastFailure.current]}</p>
-            )}
-            <p className="signin-or" aria-hidden="true">atau</p>
-            <Button className="btn btn-ghost block" isDisabled={s.pending} onPress={google}>Lanjut dengan Google</Button>
-            {(s.googleCancelled || googleLeaving) && (
-              <p className="muted signin-msg" role="status" style={{ fontSize: 14, textAlign: "center" }} {...msg(googleLeaving)}>Masuk Google dibatalkan</p>
-            )}
-            <div className="signin-links">
-              <Button className="link-btn" isDisabled={s.pending} onPress={() => dispatch({ type: "mode", mode: daftar ? "masuk" : "daftar" })}>
-                {daftar ? "Masuk" : "Daftar"}
-              </Button>
-              <a className="link-btn muted" href="#/profil">Nanti saja</a>
-            </div>
-          </div>
+          <Button type="submit" className="btn btn-signin block" isDisabled={s.pending}>{daftar ? "Buat akun" : "Masuk"}</Button>
+          {(s.failure || failLeaving) && lastFailure.current && (
+            <p className="signin-failure signin-msg" role="alert" {...msg(failLeaving)}>{FAILURE_TEXT[lastFailure.current]}</p>
+          )}
+          <a className="link-btn muted signin-later" href="#/profil">Nanti saja</a>
         </Form>
       </div>
     </>
