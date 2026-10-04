@@ -1,8 +1,9 @@
-import { Baby, ChevronRight, Droplet, FileText, Hand, Milk, NotebookPen, Play, Plus, Square, Timer, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Baby, ChevronRight, Droplet, FileText, Hand, Hospital, Milk, NotebookPen, Play, Plus, RotateCcw, Square, Timer, Trash2, TriangleAlert, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { DIAPER_LABEL, SIDE_LABEL, SYMPTOMS } from "../content";
+import { alertVisible, analyzePattern, clock, distanceTier, durLabel, finished, gapLabel, intervalFor } from "../contractions";
 import { durationLabel, isToday, pregnancy, timeLabel } from "../dates";
-import { list, put, remove, type Rec, settings, useDB } from "../store";
+import { getPrefs, list, put, remove, type Rec, setPrefs, settings, useDB } from "../store";
 import { Header, Sheet, toast } from "../ui";
 
 export function Log() {
@@ -37,6 +38,8 @@ function PregnancyLog() {
   const today = contractions.filter((c) => isToday(c.at));
   const st = contractionStats(today);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Last saved duration shown on the clock until "Reset". Display only; never touches data.
+  const [saved, setSaved] = useState<number | null>(null);
 
   const kick = list("kicks")[0];
   const kickActive = kick && !kick.done;
@@ -44,8 +47,16 @@ function PregnancyLog() {
   const symToday = list("symptoms").filter((r) => isToday(r.at));
 
   function toggleContraction() {
-    if (running) put("contractions", { id: running.id, end: Date.now() });
-    else put("contractions", { at: Date.now() });
+    if (running) {
+      const end = Date.now();
+      // Start-to-start, like v1: this start minus the previous finished start.
+      put("contractions", { id: running.id, end, interval: intervalFor(running.at, contractions) });
+      setSaved(end - running.at);
+      toast(`Kontraksi ${durLabel(end - running.at)} dicatat`);
+    } else {
+      setSaved(null);
+      put("contractions", { at: Date.now() });
+    }
   }
 
   function addKick() {
@@ -63,6 +74,7 @@ function PregnancyLog() {
     <>
       <Header title="Log Kehamilan" aside={<span className="pill" style={{ boxShadow: "var(--elevation-raised)", background: "transparent" }}>Minggu ke-{p.week}</span>} />
       <div className="stack">
+        <PatternAlert />
         <section className="card">
           <button className="row" style={{ width: "100%", background: "none", border: 0, padding: 0, textAlign: "left" }} onClick={() => setHistoryOpen(true)}>
             <span className="glyph coral"><Timer size={24} /></span>
@@ -77,9 +89,20 @@ function PregnancyLog() {
             <div className="vsep"><div className="stat">{st.avgDur ? durationLabel(st.avgDur) : "–"}</div><div className="stat-label">rata-rata durasi</div></div>
             <div className="vsep"><div className="stat">{st.avgGap ? durationLabel(st.avgGap) : "–"}</div><div className="stat-label">rata-rata jarak</div></div>
           </div>
+          <div className="spread timer-clock">
+            <div>
+              <div className="num clock">{clock(running ? now - running.at : saved ?? 0)}</div>
+              <div className="stat-label">{running ? "Sedang berjalan" : saved != null ? "Tersimpan" : "Timer"}</div>
+            </div>
+            {!running && saved != null && (
+              <button className="btn btn-soft sm" onClick={() => setSaved(null)}>
+                <RotateCcw size={16} /> Reset
+              </button>
+            )}
+          </div>
           <button className={`btn lg block ${running ? "btn-coral" : "btn-ink"}`} onClick={toggleContraction}>
             {running ? <Square size={18} fill="currentColor" /> : <Play size={20} style={{ marginLeft: 2 }} />}
-            {running ? <span className="num">Selesai · {durationLabel(now - running.at)}</span> : "Mulai kontraksi"}
+            {running ? <span className="num">Selesai · {durLabel(now - running.at)}</span> : "Mulai kontraksi"}
           </button>
         </section>
 
@@ -136,29 +159,128 @@ function PregnancyLog() {
         </a>
       </div>
 
-      <Sheet open={historyOpen} onOpenChange={setHistoryOpen} title="Kontraksi hari ini">
-        {today.length === 0 ? (
-          <div className="empty"><strong>Belum ada kontraksi</strong>Tekan Mulai kontraksi saat terasa, lalu tekan lagi saat selesai.</div>
-        ) : (
-          <div className="list">
-            {today.map((c, i) => (
-              <div key={c.id} className="list-row">
-                <div className="grow">
-                  <div className="title num">{timeLabel(c.at)}</div>
-                  <div className="sub num">
-                    {c.end ? `Durasi ${durationLabel(c.end - c.at)}` : "Sedang berjalan"}
-                    {today[i + 1] ? ` · jarak ${durationLabel(c.at - today[i + 1].at)}` : ""}
-                  </div>
-                </div>
-                <button className="icon-btn" aria-label="Hapus" onClick={() => remove("contractions", c.id)}><Trash2 size={18} /></button>
-              </div>
-            ))}
-          </div>
-        )}
-      </Sheet>
+      <ContractionHistory open={historyOpen} onOpenChange={setHistoryOpen} />
 
       <SymptomSheet open={symOpen} onOpenChange={setSymOpen} />
     </>
+  );
+}
+
+const dayTime = (t: number) =>
+  isToday(t) ? timeLabel(t) : `${new Date(t).toLocaleDateString("id-ID", { day: "numeric", month: "short" })} · ${timeLabel(t)}`;
+
+function ContractionHistory({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => { if (!open) setConfirming(false); }, [open]);
+  const confirmRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (confirming) confirmRef.current?.scrollIntoView({ block: "nearest" }); }, [confirming]);
+  const all = list("contractions");
+  const running = all.find((c) => !c.end);
+  const rows = finished(all).reverse();
+
+  function deleteAll() {
+    // Contractions only. Kicks and symptoms stay.
+    list("contractions").forEach((c) => remove("contractions", c.id));
+    setConfirming(false);
+    toast("Riwayat kontraksi dihapus");
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange} title="Riwayat kontraksi">
+      {rows.length === 0 && !running ? (
+        <div className="empty"><strong>Belum ada kontraksi</strong>Tekan Mulai kontraksi saat terasa, lalu tekan lagi saat selesai.</div>
+      ) : (
+        <>
+          <div className="list">
+            {running && (
+              <div className="list-row">
+                <div className="grow">
+                  <div className="title num">{dayTime(running.at)}</div>
+                  <div className="sub">Sedang berjalan</div>
+                </div>
+                <button className="icon-btn" aria-label="Hapus" onClick={() => remove("contractions", running.id)}><Trash2 size={18} /></button>
+              </div>
+            )}
+            {rows.map((c) => {
+              const tier = distanceTier(c.interval);
+              return (
+                <div key={c.id} className="list-row">
+                  <div className="grow">
+                    <div className="title num">{dayTime(c.at)}</div>
+                    <div className="sub num">Durasi {durLabel(c.end - c.at)}</div>
+                  </div>
+                  {tier ? (
+                    <span className="badge num" data-tier={tier} aria-label={`Jarak ${gapLabel(c.interval!)}`}>
+                      <span className="dot" />{gapLabel(c.interval!)}
+                    </span>
+                  ) : (
+                    <span className="faint" style={{ fontSize: 13 }}>Kontraksi pertama</span>
+                  )}
+                  <button className="icon-btn" aria-label="Hapus" onClick={() => remove("contractions", c.id)}><Trash2 size={18} /></button>
+                </div>
+              );
+            })}
+          </div>
+          <div className="legend" aria-hidden="true">
+            <span><span className="dot" data-tier="danger" />&lt; 4m</span>
+            <span><span className="dot" data-tier="warning" />4–5m</span>
+            <span><span className="dot" data-tier="calm" />≥ 5m</span>
+            <span className="faint">jarak mulai ke mulai</span>
+          </div>
+          {confirming ? (
+            <div ref={confirmRef} className="confirm" role="alertdialog" aria-label="Hapus semua riwayat kontraksi?">
+              <p style={{ fontWeight: 600 }}>Hapus semua riwayat kontraksi?</p>
+              <p className="muted" style={{ fontSize: 14, marginTop: 2 }}>Catatan gerakan dan gejala tidak ikut terhapus.</p>
+              <div className="grid2" style={{ marginTop: 14 }}>
+                <button className="btn btn-ghost" onClick={() => setConfirming(false)} autoFocus>Batal</button>
+                <button className="btn btn-danger-solid" onClick={deleteAll}>Ya, hapus semua</button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn btn-soft block" style={{ marginTop: 16 }} onClick={() => setConfirming(true)}>
+              <Trash2 size={18} /> Hapus semua
+            </button>
+          )}
+        </>
+      )}
+    </Sheet>
+  );
+}
+
+/** 10-minute pattern alert (v1 parity). Renders nothing when there is no pattern; never an empty card. */
+export function PatternAlert() {
+  useDB();
+  const [now, setNow] = useState(Date.now());
+  // The window slides with time, so re-check while the screen is open.
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
+  const p = analyzePattern(list("contractions"), now);
+  if (!p || !alertVisible(p, getPrefs(), now)) return null;
+  const critical = p.level === "critical";
+  return (
+    <section className="alert card" data-level={p.level} role={critical ? "alert" : "status"}>
+      <div className="row" style={{ alignItems: "flex-start" }}>
+        <span className="alert-icon">{critical ? <Hospital size={20} /> : <TriangleAlert size={20} />}</span>
+        <div style={{ flex: 1 }}>
+          <div className="card-title">{critical ? "Waktunya ke RS!" : "Perhatian"}</div>
+          <p className="muted" style={{ fontSize: 15, marginTop: 4, lineHeight: 1.45 }}>
+            {critical
+              ? "Kontraksi sudah teratur dan kuat. Segera hubungi dokter atau pergi ke rumah sakit."
+              : "Kontraksi mulai sering. Terus pantau dan siapkan diri untuk ke RS."}
+          </p>
+        </div>
+        <button
+          className="alert-close" aria-label="Tutup"
+          onClick={() => setPrefs(critical ? { criticalDismissedAt: Date.now() } : { warningDismissedFor: p.ids })}
+        >
+          <X size={18} />
+        </button>
+      </div>
+      <div className="alert-stats">
+        <div><div className="stat num">{p.count}×</div><div className="stat-label">10 menit terakhir</div></div>
+        <div className="vsep"><div className="stat num">{gapLabel(p.avgGap)}</div><div className="stat-label">rata-rata jarak</div></div>
+        <div className="vsep"><div className="stat num">{durLabel(p.avgDur)}</div><div className="stat-label">rata-rata durasi</div></div>
+      </div>
+    </section>
   );
 }
 

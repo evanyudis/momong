@@ -118,7 +118,13 @@ export const settings = (): Settings => (get("settings", "main") ?? {}) as Setti
 export const saveSettings = (s: Settings) => put("settings", { ...settings(), ...s, id: "main" });
 
 // Device-only preferences (not synced).
-export type Prefs = { name?: string; theme?: "light" | "dark" | "system" };
+export type Prefs = {
+  name?: string;
+  theme?: "light" | "dark" | "system";
+  // Contraction pattern alert dismissals (device only).
+  criticalDismissedAt?: number;
+  warningDismissedFor?: string;
+};
 const PREFS_KEY = "bb_prefs_v1";
 let prefs: Prefs = read<Prefs>(PREFS_KEY, {});
 export const getPrefs = () => prefs;

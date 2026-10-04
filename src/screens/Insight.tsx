@@ -1,7 +1,7 @@
 import { durationLabel, isToday, midnight, timeLabel } from "../dates";
 import { list, settings, useDB } from "../store";
 import { Header } from "../ui";
-import { contractionStats } from "./Log";
+import { contractionStats, PatternAlert } from "./Log";
 
 const DAY = 86_400_000;
 const dayName = (t: number) => new Date(t).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" });
@@ -13,7 +13,6 @@ export function Insight() {
 
 function PregnancyInsight() {
   const now = Date.now();
-  const lastHour = contractionStats(list("contractions").filter((c) => c.at >= now - 60 * 60 * 1000));
   const today = contractionStats(list("contractions").filter((c) => isToday(c.at)));
   const sessions = list("kicks").slice(0, 7);
   const counts = new Map<string, number>();
@@ -24,16 +23,15 @@ function PregnancyInsight() {
     <>
       <Header title="Insight" />
       <div className="stack">
+        <PatternAlert />
         <section className="card">
-          <div className="label">Pola kontraksi · 60 menit terakhir</div>
+          <div className="label">Kontraksi hari ini</div>
           <div style={{ display: "grid", gridTemplateColumns: "0.8fr 1fr 1fr", marginTop: 12 }}>
-            <div><div className="stat">{lastHour.count}×</div><div className="stat-label">kontraksi</div></div>
-            <div className="vsep"><div className="stat">{lastHour.avgDur ? durationLabel(lastHour.avgDur) : "–"}</div><div className="stat-label">rata-rata durasi</div></div>
-            <div className="vsep"><div className="stat">{lastHour.avgGap ? durationLabel(lastHour.avgGap) : "–"}</div><div className="stat-label">rata-rata jarak</div></div>
+            <div><div className="stat">{today.count}×</div><div className="stat-label">kontraksi</div></div>
+            <div className="vsep"><div className="stat">{today.avgDur ? durationLabel(today.avgDur) : "–"}</div><div className="stat-label">rata-rata durasi</div></div>
+            <div className="vsep"><div className="stat">{today.avgGap ? durationLabel(today.avgGap) : "–"}</div><div className="stat-label">rata-rata jarak</div></div>
           </div>
-          <p className="muted" style={{ fontSize: 14, marginTop: 14 }}>
-            Hari ini {today.count}× kontraksi. Angka ini catatan, bukan diagnosis. Tunjukkan ke bidan atau dokter kalau kamu ragu.
-          </p>
+          <p className="muted" style={{ fontSize: 14, marginTop: 14 }}>Angka ini catatan, bukan diagnosis.</p>
         </section>
 
         <section className="card">
