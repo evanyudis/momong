@@ -41,5 +41,26 @@ export function weekNote(week: number): string {
   return "Sudah dekat. Simpan timer kontraksi di layar utama dan pastikan tas RS siap dibawa.";
 }
 
+// Plus soft paywall. Titles are fixed by the brief; body and bullets reuse copy already in the app.
+// No price here on purpose: the package details come in the next step.
+export type PlusVariant = "insights" | "perkiraan" | "pdf";
+export const PLUS_COPY: Record<PlusVariant, { title: string; body: string; bullets: string[] }> = {
+  insights: {
+    title: "Lihat pola hariannya",
+    body: "Riwayat ASI, pompa, dan popok: 30 hari terakhir. Botol: semua.",
+    bullets: ["ASI", "Pompa", "Popok"],
+  },
+  perkiraan: {
+    title: "Perkiraan kapan berikutnya",
+    body: "Catat dari tab Log; ringkasannya muncul di sini.",
+    bullets: ["Terakhir minum", "Menyusu & popok", "Kontraksi hari ini"],
+  },
+  pdf: {
+    title: "Laporan kontrol lebih lengkap",
+    body: "PDF untuk bidan · 1× gratis per bulan",
+    bullets: ["PDF tanpa batas", "Kontraksi", "Menyusu & popok"],
+  },
+};
+
 export const DIAPER_LABEL: Record<string, string> = { pee: "Pipis", poo: "Pup", both: "Pipis + pup" };
 export const SIDE_LABEL: Record<string, string> = { left: "Kiri", right: "Kanan", both: "Keduanya" };

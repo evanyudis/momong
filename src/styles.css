@@ -414,6 +414,13 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 .sheet-backdrop[data-open="true"] { opacity: 1; }
 .sheet[data-open="false"], .sheet-backdrop[data-open="false"] { transition-duration: 200ms; }
 
+/* Plus sheet: rides the sheet motion above. Existing tokens only; CTA is the locked coral (.btn-coral). */
+.plus-points { list-style: none; margin: 16px 0; padding: 0; display: grid; gap: 10px; }
+.plus-points li { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+.plus-points svg { flex: none; color: var(--accent-partner-ink); }
+.plus-plan { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 16px; margin-bottom: 16px; border-radius: var(--radius-icon); background: var(--surface-sunk); }
+.plus-plan .muted { font-size: 14px; text-align: right; }
+
 /* ---------- Toast ---------- */
 .toast {
   position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 12px);

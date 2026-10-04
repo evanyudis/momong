@@ -62,6 +62,10 @@ export function list(col: Collection, now = Date.now()): Rec[] {
   return visible.sort((a, b) => (b.at ?? b.updatedAt) - (a.at ?? a.updatedAt));
 }
 
+/** True when the Free window is hiding older ASI / pump / diaper entries (history is truncated). */
+export const hasHidden = (now = Date.now()) =>
+  THIN.some((col) => Object.values(db[col] ?? {}).some((r) => !r.deleted && typeof r.at === "number" && r.at < now - FREE_WINDOW_MS));
+
 /** Changes waiting to be pushed. */
 export function pending() {
   return [...dirty].flatMap((key) => {

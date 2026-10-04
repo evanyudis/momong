@@ -1,6 +1,7 @@
-import { CalendarDays, ChevronLeft } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft } from "lucide-react";
 import { type ComponentProps, type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
+import { PLUS_COPY, type PlusVariant } from "./content";
 import { dayLabel } from "./dates";
 import { EASE_OUT, reducedMotion } from "./motion";
 
@@ -50,6 +51,32 @@ export function Sheet({ open, onOpenChange, title, children }: {
       </div>
     </>,
     document.body,
+  );
+}
+
+/**
+ * Plus soft paywall: one sheet, three variants. UI only. Nothing here grants Plus, charges, or calls the network.
+ * Keeps the last variant through the exit so the copy does not blank while the sheet slides down.
+ */
+export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; onClose: () => void }) {
+  const [last, setLast] = useState<PlusVariant>("insights");
+  useEffect(() => { if (variant) setLast(variant); }, [variant]);
+  const c = PLUS_COPY[variant ?? last];
+  return (
+    <Sheet open={!!variant} onOpenChange={(o) => !o && onClose()} title={c.title}>
+      <p className="muted">{c.body}</p>
+      <ul className="plus-points">
+        {c.bullets.map((b) => <li key={b}><Check size={18} strokeWidth={2.5} aria-hidden="true" />{b}</li>)}
+      </ul>
+      <div className="plus-plan">
+        <strong>Selamanya</strong>
+        <span className="muted">Detail paket di langkah berikutnya</span>
+      </div>
+      {/* ponytail: intentional no-op. Keel wires checkout here; no entitlement, no network, no navigation until then. */}
+      <button type="button" className="btn btn-coral lg block" onClick={() => {}}>Coba Plus</button>
+      <button type="button" className="btn btn-soft block" style={{ marginTop: 10 }} onClick={onClose}>Nanti saja</button>
+      <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 14 }}>Catatan, bukan saran medis.</p>
+    </Sheet>
   );
 }
 

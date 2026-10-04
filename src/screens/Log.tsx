@@ -1,11 +1,11 @@
 import { Baby, ChevronRight, Droplet, FileText, Hand, Hospital, Milk, NotebookPen, Play, Plus, RotateCcw, Square, Timer, Trash2, TriangleAlert, X } from "lucide-react";
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { DIAPER_LABEL, SIDE_LABEL, SYMPTOMS } from "../content";
+import { DIAPER_LABEL, type PlusVariant, SIDE_LABEL, SYMPTOMS } from "../content";
 import { alertVisible, analyzePattern, clock, distanceTier, durLabel, finished, gapLabel, intervalFor } from "../contractions";
 import { durationLabel, isToday, pregnancy, timeLabel } from "../dates";
 import { fillIn, reducedMotion } from "../motion";
-import { getPrefs, list, put, remove, type Rec, setPrefs, settings, useDB } from "../store";
-import { Header, Sheet, toast } from "../ui";
+import { getPrefs, hasHidden, list, put, remove, type Rec, setPrefs, settings, useDB } from "../store";
+import { Header, PlusSheet, Sheet, toast } from "../ui";
 
 export function Log() {
   useDB();
@@ -343,6 +343,7 @@ export function describe(kind: Kind, r: Rec) {
 
 function NewbornLog() {
   const [open, setOpen] = useState<Kind | null>(null);
+  const [plus, setPlus] = useState<PlusVariant | null>(null);
   const entries = KINDS.flatMap(({ kind }) => list(kind).map((r) => ({ kind, r })))
     .sort((a, b) => b.r.at - a.r.at)
     .slice(0, 30);
@@ -378,9 +379,14 @@ function NewbornLog() {
             </div>
           )}
           <p className="faint" style={{ fontSize: 13, marginTop: 12 }}>Riwayat ASI, pompa, dan popok: 30 hari terakhir. Botol: semua.</p>
+          {/* Only when the 30-day Free window is actually hiding entries. */}
+          {hasHidden() && (
+            <button className="chip" style={{ marginTop: 12 }} aria-haspopup="dialog" onClick={() => setPlus("insights")}>Buka tren lengkap di Plus</button>
+          )}
         </section>
       </div>
       <NewbornSheet kind={open} onClose={() => setOpen(null)} />
+      <PlusSheet variant={plus} onClose={() => setPlus(null)} />
     </>
   );
 }

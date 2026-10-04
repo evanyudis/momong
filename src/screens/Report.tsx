@@ -1,7 +1,8 @@
-import { DIAPER_LABEL } from "../content";
+import { useState } from "react";
+import { DIAPER_LABEL, type PlusVariant } from "../content";
 import { dateLabel, durationLabel, pregnancy, timeLabel } from "../dates";
 import { get, getPrefs, list, put, settings, useDB } from "../store";
-import { TopBar } from "../ui";
+import { PlusSheet, TopBar } from "../ui";
 import { contractionStats, describe } from "./Log";
 
 const DAY = 86_400_000;
@@ -15,6 +16,7 @@ export function Report() {
   const usedThisMonth = get("settings", "report")?.month === monthKey();
   const born = s.birthMode === "postpartum";
   const p = s.hpl ? pregnancy(s.hpl) : null;
+  const [plus, setPlus] = useState<PlusVariant | null>(null);
 
   function print() {
     put("settings", { id: "report", month: monthKey() });
@@ -72,7 +74,12 @@ export function Report() {
         )}
 
         <div className="no-print stack" style={{ marginTop: 8 }}>
-          <button className="btn btn-ink lg block" onClick={print} disabled={usedThisMonth}>
+          {/* Free quota used: the button opens the Plus sheet instead of printing. The 1×/bulan rule itself is unchanged. */}
+          <button
+            className={`btn lg block ${usedThisMonth ? "btn-soft" : "btn-ink"}`}
+            aria-haspopup={usedThisMonth ? "dialog" : undefined}
+            onClick={usedThisMonth ? () => setPlus("pdf") : print}
+          >
             {usedThisMonth ? "PDF bulan ini sudah dibuat" : "Simpan sebagai PDF"}
           </button>
           <p className="faint" style={{ fontSize: 14, textAlign: "center" }}>
@@ -80,6 +87,7 @@ export function Report() {
           </p>
         </div>
       </div>
+      <PlusSheet variant={plus} onClose={() => setPlus(null)} />
     </>
   );
 }

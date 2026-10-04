@@ -37,3 +37,14 @@ test("Free 30-day window hides old ASI/pump/diaper but not bottle", () => {
   assert.equal(s.list("diaper").length, 0);
   assert.equal(s.list("bottle").length, 1);
 });
+
+test("hasHidden is true only while the Free window hides a thin entry", () => {
+  for (const col of s.THIN) s.list(col, 0).forEach((r) => s.remove(col, r.id)); // clean slate
+  const old = Date.now() - s.FREE_WINDOW_MS - 1000;
+  s.put("bottle", { at: old, ml: 90 });
+  assert.equal(s.hasHidden(), false, "old bottle is never hidden");
+  const d = s.put("diaper", { at: old, type: "pee" });
+  assert.equal(s.hasHidden(), true);
+  s.remove("diaper", d.id);
+  assert.equal(s.hasHidden(), false, "tombstones do not count");
+});
