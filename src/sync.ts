@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { nameFromEmail, type SignInMode } from "./signin";
 import { applyRemote, markAllDirty, markPushed, onLocalChange, pending } from "./store";
 
 /** Public API base URL only. Secrets never live in this client. */
@@ -62,6 +63,19 @@ export async function verifyMagicLink(token: string) {
   const { data, res } = await api<{ token: string }>(`/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`);
   set({ token: res.headers.get("set-auth-token") ?? data.token });
   await refreshMe();
+  localStorage.removeItem("bb_cursor");
+  markAllDirty();
+  void syncNow();
+}
+
+/** Better Auth email + password. Sign-up signs in at once; both hand the bearer back on set-auth-token. */
+export async function authEmail(mode: SignInMode, email: string, password: string) {
+  const path = mode === "daftar" ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email";
+  const body = mode === "daftar" ? { name: nameFromEmail(email), email, password } : { email, password };
+  const { data, res } = await api<{ token?: string }>(path, { method: "POST", body: JSON.stringify(body) });
+  set({ token: res.headers.get("set-auth-token") ?? data.token ?? null });
+  // Signed in means token and /me. No /me, no session: drop the token rather than half sign in.
+  await refreshMe().catch((e) => { set({ token: null, me: null }); throw e; });
   localStorage.removeItem("bb_cursor");
   markAllDirty();
   void syncNow();
