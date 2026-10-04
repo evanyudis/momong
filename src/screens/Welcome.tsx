@@ -2,7 +2,7 @@ import { Baby, Heart } from "lucide-react";
 import { useState } from "react";
 import { todayISO } from "../dates";
 import { saveSettings, setPrefs } from "../store";
-import { API_URL } from "../sync";
+import { HAS_API } from "../sync";
 import { DateInput } from "../ui";
 
 /** First run: HPL is the one thing the pregnancy tools need. No account required. */
@@ -52,7 +52,7 @@ export function Welcome() {
       <button type="button" className="link-btn muted" style={{ justifySelf: "center", fontWeight: 500 }} onClick={() => setBorn(!born)}>
         {born ? "Masih hamil? Isi HPL" : "Si kecil sudah lahir?"}
       </button>
-      {API_URL && (
+      {HAS_API && (
         <a className="link-btn muted" href="#/pasangan" style={{ justifySelf: "center", fontWeight: 500, textDecoration: "none" }}>
           Diundang pasangan? Masuk dulu
         </a>

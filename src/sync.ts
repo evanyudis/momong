@@ -2,8 +2,10 @@ import { useSyncExternalStore } from "react";
 import { nameFromEmail, type SignInMode } from "./signin";
 import { applyRemote, markAllDirty, markPushed, onLocalChange, pending } from "./store";
 
-/** Public API base URL only. Secrets never live in this client. */
-export const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+/** Public API base URL only. Secrets never live in this client.
+ *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
+export const API_URL = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+export const HAS_API = import.meta.env.PROD || !!API_URL;
 
 export type Member = { id: string; email: string; name: string; role: "owner" | "member" };
 export type Me = {
@@ -40,7 +42,7 @@ export class ApiError extends Error {
 }
 
 async function api<T>(path: string, init: RequestInit = {}): Promise<{ data: T; res: Response }> {
-  if (!API_URL) throw new ApiError(0, "no_api");
+  if (!HAS_API) throw new ApiError(0, "no_api");
   const res = await fetch(API_URL + path, {
     ...init,
     headers: {
@@ -114,7 +116,7 @@ export async function removeMember(id: string) {
 
 let inFlight: Promise<void> | null = null;
 export function syncNow(): Promise<void> {
-  if (!state.token || !API_URL) return Promise.resolve();
+  if (!state.token || !HAS_API) return Promise.resolve();
   if (!navigator.onLine) { set({ status: "offline" }); return Promise.resolve(); }
   inFlight ??= (async () => {
     set({ status: "syncing" });

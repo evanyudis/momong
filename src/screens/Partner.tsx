@@ -5,7 +5,7 @@ import { initial, useHousehold } from "../household";
 import { go } from "../route";
 import { getPrefs } from "../store";
 import {
-  API_URL, ApiError, createInvite, joinHousehold, removeMember, requestMagicLink, signOut, syncNow, useAccount, verifyMagicLink,
+  HAS_API, ApiError, createInvite, joinHousehold, removeMember, requestMagicLink, signOut, syncNow, useAccount, verifyMagicLink,
 } from "../sync";
 import { toast, TopBar } from "../ui";
 
@@ -36,7 +36,7 @@ export function Partner() {
   return (
     <>
       <TopBar title="Pasangan" />
-      {!API_URL ? <NoServer /> : h.signedIn ? <Household /> : <SignIn />}
+      {!HAS_API ? <NoServer /> : h.signedIn ? <Household /> : <SignIn />}
     </>
   );
 }
@@ -254,7 +254,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   const [busy, setBusy] = useState(false);
   useEffect(() => { if (invite && !h.signedIn) localStorage.setItem(PENDING_INVITE, invite); }, [invite, h.signedIn]);
 
-  if (!API_URL) return <><TopBar title="Gabung" /><NoServer /></>;
+  if (!HAS_API) return <><TopBar title="Gabung" /><NoServer /></>;
   if (!invite) return <><TopBar title="Gabung" /><div className="card solid empty"><strong>Tautan tidak lengkap</strong>Minta pasangan kirim ulang undangan.</div></>;
   if (!h.signedIn) return <><TopBar title="Gabung" /><SignIn invite /></>;
 
