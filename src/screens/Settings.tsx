@@ -10,7 +10,8 @@ export function applyTheme(theme: Prefs["theme"]) {
   const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
   // Theme flips must not run every color transition on the page.
   const style = document.createElement("style");
-  style.textContent = "*{transition:none!important}";
+  // Colors snap; only transform/opacity motion (e.g. the segmented thumb) keeps playing.
+  style.textContent = "*,*::before,*::after{transition-property:transform,translate,scale,opacity!important}";
   document.head.appendChild(style);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#1b1917" : "#f7f2eb");
@@ -76,7 +77,7 @@ export function Settings() {
 
         <section className="card solid">
           <div className="card-title" style={{ fontSize: 16, marginBottom: 12 }}>Tema</div>
-          <div className="segmented">
+          <div className="segmented" style={{ "--n": 3, "--i": ["light", "dark", "system"].indexOf(prefs.theme ?? "system") } as React.CSSProperties}>
             {([["light", "Terang"], ["dark", "Gelap"], ["system", "Sistem"]] as const).map(([v, l]) => (
               <button key={v} aria-pressed={(prefs.theme ?? "system") === v} onClick={() => { setPrefs({ theme: v }); applyTheme(v); }}>{l}</button>
             ))}

@@ -37,7 +37,7 @@ export function Bag() {
                     className="check" role="checkbox" aria-checked={i.checked} aria-label={i.label}
                     onClick={() => put("bag", { id: i.id, checked: !i.checked })}
                   >
-                    {i.checked && <Check size={16} strokeWidth={3} />}
+                    <Check size={16} strokeWidth={3} />
                   </button>
                   <span className="grow" style={{ color: i.checked ? "var(--ink-muted)" : undefined }}>{i.label}</span>
                   {i.custom && <button className="icon-btn" aria-label={`Hapus ${i.label}`} onClick={() => remove("bag", i.id)}><Trash2 size={18} /></button>}

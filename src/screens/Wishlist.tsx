@@ -35,7 +35,7 @@ export function Wishlist() {
                     className="check" role="checkbox" aria-checked={!!i.have} aria-label={`${i.label} sudah ada`}
                     onClick={() => put("wishlist", { id: i.id, have: !i.have })}
                   >
-                    {i.have && <Check size={16} strokeWidth={3} />}
+                    <Check size={16} strokeWidth={3} />
                   </button>
                   <span className="grow" style={{ color: i.have ? "var(--ink-muted)" : undefined }}>{i.label}</span>
                   <button className="icon-btn" aria-label={`Hapus ${i.label}`} onClick={() => remove("wishlist", i.id)}><Trash2 size={18} /></button>

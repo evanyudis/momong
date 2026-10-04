@@ -7,7 +7,7 @@ import { Header, Ring } from "../ui";
 import { SyncDot } from "./Partner";
 
 const GearLink = () => (
-  <a className="icon-btn" href="#/pengaturan" aria-label="Pengaturan"><Gear size={20} /></a>
+  <a className="icon-btn" href="#/pengaturan" data-morph="/pengaturan" aria-label="Pengaturan"><Gear size={20} /></a>
 );
 
 export function Home() {
@@ -28,7 +28,7 @@ function PregnancyHome() {
       <Header title={`Halo, ${getPrefs().name || "Bunda"}`} aside={<GearLink />} />
       <div className="stack">
         {p.daysLeft <= 0 && (
-          <a className="card" href="#/pengaturan" style={{ background: "var(--accent-partner-soft)" }}>
+          <a className="card" href="#/pengaturan" data-morph="/pengaturan" style={{ background: "var(--accent-partner-soft)" }}>
             <div className="spread">
               <div>
                 <div className="card-title">Si kecil sudah lahir?</div>
@@ -106,7 +106,7 @@ function BagCard() {
   const total = BAG_DEFAULTS.length + list("bag").filter((r) => r.custom).length;
   const pct = total ? Math.round((done / total) * 100) : 0;
   return (
-    <a className="card" href="#/tas">
+    <a className="card" href="#/tas" data-morph="/tas">
       <div className="spread">
         <span className="row" style={{ gap: 8, fontWeight: 600 }}><BriefcaseMedical size={20} color="var(--success-ink)" />Tas RS</span>
         <ChevronRight size={18} className="faint" />
@@ -126,7 +126,7 @@ function WishlistCard() {
   const items = list("wishlist");
   const left = items.filter((i) => !i.have).length;
   return (
-    <a className="card" href="#/kado">
+    <a className="card" href="#/kado" data-morph="/kado">
       <div className="row">
         <span className="glyph peach" style={{ width: 40, height: 40 }}><Gift size={20} /></span>
         <div style={{ flex: 1 }}>
@@ -152,7 +152,7 @@ export function PartnerCard() {
     sub = <SyncDot />;
   }
   return (
-    <a className="card" href="#/pasangan">
+    <a className="card" href="#/pasangan" data-morph="/pasangan">
       <div className="spread">
         <span className="row" style={{ gap: 8, fontWeight: 600 }}><Users size={20} color="var(--accent-primary-ink)" />Pasangan</span>
         <ChevronRight size={18} className="faint" />

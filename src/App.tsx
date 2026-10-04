@@ -1,4 +1,6 @@
 import { Baby, ChartNoAxesColumn, House, Users } from "lucide-react";
+import { type CSSProperties, useLayoutEffect } from "react";
+import { afterNavigate } from "./motion";
 import { useRoute } from "./route";
 import { Bag } from "./screens/Bag";
 import { Home } from "./screens/Home";
@@ -41,12 +43,13 @@ export function App() {
   else screen = <Home />;
 
   const showTabs = ready && TABS.some((t) => t.path === path);
+  useLayoutEffect(() => afterNavigate(), [path]);
   return (
     <>
       <div className="page-wash" aria-hidden="true" />
       <main className="app">{screen}</main>
       {showTabs && (
-        <nav className="tabbar" aria-label="Navigasi utama">
+        <nav className="tabbar" aria-label="Navigasi utama" style={{ "--tab": TABS.findIndex((t) => t.path === path) } as CSSProperties}>
           {TABS.map(({ href, path: p, label, Icon }) => (
             <a key={p} href={href} aria-current={p === path ? "page" : undefined}>
               <Icon size={24} strokeWidth={1.75} />

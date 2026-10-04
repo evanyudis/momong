@@ -1,7 +1,8 @@
 import { CalendarDays, ChevronLeft } from "lucide-react";
-import { type ComponentProps, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
+import { type ComponentProps, type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { dayLabel } from "./dates";
+import { EASE_OUT, reducedMotion } from "./motion";
 
 /**
  * Native date picker that fits its container: full width, value left-aligned, calendar glyph on the right.
@@ -79,6 +80,16 @@ export function Ring({ value, size = 150, stroke = 12, knob, children }: { value
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const id = `g${size}`;
+  const v = Math.min(Math.max(value, 0), 1);
+  const arc = useRef<SVGCircleElement>(null);
+  const dot = useRef<SVGGElement>(null);
+  // First-run entrance: the ring draws from 0 and the knob travels with it. Mount only; later updates are instant.
+  useLayoutEffect(() => {
+    if (reducedMotion()) return;
+    const timing = { duration: 700, delay: 100, easing: EASE_OUT, fill: "backwards" as const };
+    arc.current?.animate([{ strokeDashoffset: c }, { strokeDashoffset: c * (1 - v) }], timing);
+    dot.current?.animate([{ transform: "rotate(0deg)" }, { transform: `rotate(${v * 360}deg)` }], timing);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="ring" style={{ width: size, height: size }}>
       <svg width={size} height={size} aria-hidden="true">
@@ -91,14 +102,14 @@ export function Ring({ value, size = 150, stroke = 12, knob, children }: { value
         </defs>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-sunk)" strokeWidth={stroke} />
         <circle
+          ref={arc}
           cx={size / 2} cy={size / 2} r={r} fill="none" stroke={`url(#${id})`} strokeWidth={stroke}
-          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - Math.min(Math.max(value, 0), 1))}
+          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - v)}
         />
-        {knob && value > 0.02 && (
-          <circle
-            cx={size / 2 + r * Math.cos(2 * Math.PI * value)} cy={size / 2 + r * Math.sin(2 * Math.PI * value)}
-            r={stroke * 0.9} fill="#E8A0A8" stroke="var(--surface)" strokeWidth={3}
-          />
+        {knob && v > 0.02 && (
+          <g ref={dot} style={{ transformOrigin: `${size / 2}px ${size / 2}px`, transform: `rotate(${v * 360}deg)` }}>
+            <circle cx={size / 2 + r} cy={size / 2} r={stroke * 0.9} fill="#E8A0A8" stroke="var(--surface)" strokeWidth={3} />
+          </g>
         )}
       </svg>
       <div className="center">{children}</div>
@@ -118,5 +129,14 @@ export function toast(msg: string) {
 }
 export function Toaster() {
   const msg = useSyncExternalStore((l) => { toastListeners.add(l); return () => toastListeners.delete(l); }, () => toastMsg);
-  return msg ? <div className="toast" role="status" key={msg}>{msg}</div> : null;
+  // Stays mounted so the exit can play; visibility is an interruptible transition.
+  const [text, setText] = useState<string | null>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!msg) { setVisible(false); return; }
+    setText(msg);
+    const raf = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(raf);
+  }, [msg]);
+  return text ? <div className="toast" role="status" data-visible={visible}>{text}</div> : null;
 }

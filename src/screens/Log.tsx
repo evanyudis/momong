@@ -1,8 +1,9 @@
 import { Baby, ChevronRight, Droplet, FileText, Hand, Hospital, Milk, NotebookPen, Play, Plus, RotateCcw, Square, Timer, Trash2, TriangleAlert, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DIAPER_LABEL, SIDE_LABEL, SYMPTOMS } from "../content";
 import { alertVisible, analyzePattern, clock, distanceTier, durLabel, finished, gapLabel, intervalFor } from "../contractions";
 import { durationLabel, isToday, pregnancy, timeLabel } from "../dates";
+import { fillIn, reducedMotion } from "../motion";
 import { getPrefs, list, put, remove, type Rec, setPrefs, settings, useDB } from "../store";
 import { Header, Sheet, toast } from "../ui";
 
@@ -40,6 +41,9 @@ function PregnancyLog() {
   const [historyOpen, setHistoryOpen] = useState(false);
   // Last saved duration shown on the clock until "Reset". Display only; never touches data.
   const [saved, setSaved] = useState<number | null>(null);
+  // Kick progress fills in on enter (first-run entrance).
+  const segRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { if (segRef.current) fillIn(segRef.current.querySelectorAll("i.on")); }, []);
 
   const kick = list("kicks")[0];
   const kickActive = kick && !kick.done;
@@ -117,7 +121,7 @@ function PregnancyLog() {
             </div>
             <div className="stat num">{kickActive ? kick.count : 0}<small> / 10</small></div>
           </div>
-          <div className="segments" aria-hidden="true">
+          <div ref={segRef} className="segments" aria-hidden="true">
             {Array.from({ length: 10 }, (_, i) => <i key={i} className={kickActive && i < kick.count ? "on" : ""} />)}
           </div>
           <button className="btn btn-soft block" style={{ marginTop: 16 }} onClick={addKick}>
@@ -147,7 +151,7 @@ function PregnancyLog() {
           )}
         </section>
 
-        <a className="card" href="#/laporan">
+        <a className="card" href="#/laporan" data-morph="/laporan">
           <div className="row">
             <span className="glyph coral"><FileText size={22} /></span>
             <div style={{ flex: 1 }}>
@@ -251,13 +255,14 @@ function ContractionHistory({ open, onOpenChange }: { open: boolean; onOpenChang
 export function PatternAlert() {
   useDB();
   const [now, setNow] = useState(Date.now());
+  const [leaving, setLeaving] = useState(false);
   // The window slides with time, so re-check while the screen is open.
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
   const p = analyzePattern(list("contractions"), now);
   if (!p || !alertVisible(p, getPrefs(), now)) return null;
   const critical = p.level === "critical";
   return (
-    <section className="alert card" data-level={p.level} role={critical ? "alert" : "status"}>
+    <section className="alert card" data-level={p.level} data-leaving={leaving || undefined} role={critical ? "alert" : "status"}>
       <div className="row" style={{ alignItems: "flex-start" }}>
         <span className="alert-icon">{critical ? <Hospital size={20} /> : <TriangleAlert size={20} />}</span>
         <div style={{ flex: 1 }}>
@@ -270,7 +275,14 @@ export function PatternAlert() {
         </div>
         <button
           className="alert-close" aria-label="Tutup"
-          onClick={() => setPrefs(critical ? { criticalDismissedAt: Date.now() } : { warningDismissedFor: p.ids })}
+          onClick={() => {
+            // Quiet exit (fade + small lift), then dismiss.
+            setLeaving(true);
+            setTimeout(() => {
+              setPrefs(critical ? { criticalDismissedAt: Date.now() } : { warningDismissedFor: p.ids });
+              setLeaving(false);
+            }, reducedMotion() ? 0 : 150);
+          }}
         >
           <X size={18} />
         </button>
@@ -373,6 +385,16 @@ function NewbornLog() {
   );
 }
 
+/** Segmented control. The thumb slides with an interruptible transition (--i = selected index). */
+function Seg({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: [string, string][] }) {
+  const i = Math.max(0, options.findIndex(([v]) => v === value));
+  return (
+    <div className="segmented" style={{ "--n": options.length, "--i": i } as CSSProperties}>
+      {options.map(([v, l]) => <button key={v} aria-pressed={value === v} onClick={() => onChange(v)}>{l}</button>)}
+    </div>
+  );
+}
+
 function NewbornSheet({ kind, onClose }: { kind: Kind | null; onClose: () => void }) {
   const [last, setLast] = useState<Kind>("bottle");
   const k = kind ?? last;
@@ -394,11 +416,6 @@ function NewbornSheet({ kind, onClose }: { kind: Kind | null; onClose: () => voi
     toast("Tersimpan");
   }
 
-  const Seg = ({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: [string, string][] }) => (
-    <div className="segmented">
-      {options.map(([v, l]) => <button key={v} aria-pressed={value === v} onClick={() => onChange(v)}>{l}</button>)}
-    </div>
-  );
 
   return (
     <Sheet open={!!kind} onOpenChange={(o) => !o && onClose()} title={title}>
