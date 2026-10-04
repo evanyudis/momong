@@ -1,5 +1,5 @@
 import { CalendarDays, Check, ChevronLeft } from "lucide-react";
-import { type ComponentProps, type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type ComponentProps, type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { PLUS_COPY, type PlusVariant } from "./content";
 import { dayLabel } from "./dates";
@@ -54,29 +54,158 @@ export function Sheet({ open, onOpenChange, title, children }: {
   );
 }
 
+type Stage = "closed" | "compact" | "expanded";
+type Motion = "none" | "enter" | "expand" | "collapse" | "exit";
+const SETTLE: Record<Stage, Motion> = { closed: "exit", compact: "collapse", expanded: "expand" };
+const INSET = 12; // compact card's side gap (px); the card grows to full width as it expands
+const EXIT_MS = 200; // matches [data-motion="exit"] in styles.css
+
 /**
- * Plus soft paywall: one sheet, three variants. UI only. Nothing here grants Plus, charges, or calls the network.
- * Keeps the last variant through the exit so the copy does not blank while the sheet slides down.
+ * Plus soft paywall: one surface, three variants. UI only. Nothing here grants Plus, charges, or calls the network.
+ * A compact floating sheet that grows into a full page: tap or drag up expands, swipe down collapses, further down
+ * dismisses. Transform + opacity only. Drag writes styles directly (no per-frame renders); on release a CSS
+ * transition retargets from the live pose, so grabbing it mid-flight and reversing reverses the motion.
  */
 export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; onClose: () => void }) {
   const [last, setLast] = useState<PlusVariant>("insights");
   useEffect(() => { if (variant) setLast(variant); }, [variant]);
-  const c = PLUS_COPY[variant ?? last];
-  return (
-    <Sheet open={!!variant} onOpenChange={(o) => !o && onClose()} title={c.title}>
-      <p className="muted">{c.body}</p>
-      <ul className="plus-points">
-        {c.bullets.map((b) => <li key={b}><Check size={18} strokeWidth={2.5} aria-hidden="true" />{b}</li>)}
-      </ul>
-      <div className="plus-plan">
-        <strong>Selamanya</strong>
-        <span className="muted">Detail paket di langkah berikutnya</span>
+  const c = PLUS_COPY[variant ?? last]; // keep the copy through the exit
+  const [mounted, setMounted] = useState(!!variant);
+  const [expanded, setExpanded] = useState(false);
+  const backdrop = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const head = useRef<HTMLDivElement>(null);
+  const foot = useRef<HTMLDivElement>(null);
+  const stage = useRef<Stage>("closed");
+  const drag = useRef<{ y0: number; Y0: number; Y: number; y: number; t: number; v: number; moved: boolean } | null>(null);
+  const swallowClick = useRef(false);
+
+  // Y = the panel's translateY. Compact parks it so only head + footer show; expanded is Y = 0.
+  function geo() {
+    const H = panel.current!.offsetHeight, W = panel.current!.offsetWidth;
+    const sc = (W - 2 * INSET) / W;
+    const Yc = H - sc * (head.current!.offsetTop + head.current!.offsetHeight + foot.current!.offsetHeight);
+    return { H, sc, Yc };
+  }
+  // One pose drives every layer, so panel, footer and backdrop always move as a unit.
+  function place(Y: number, motion: Motion) {
+    const { H, sc, Yc } = geo();
+    const s = sc + (1 - sc) * Math.min(Math.max(1 - Y / Yc, 0), 1);
+    for (const el of [backdrop.current!, panel.current!, foot.current!]) el.dataset.motion = motion;
+    panel.current!.style.transform = `translate(-50%, ${Y}px) scale(${s})`;
+    foot.current!.style.transform = `translate(-50%, ${Math.max(0, Y - Yc)}px) scale(${s})`;
+    backdrop.current!.style.opacity = String(Math.min(Math.max((H - Y) / (H - Yc), 0), 1));
+  }
+  function go(to: Stage, motion = SETTLE[to]) {
+    stage.current = to;
+    const { H, Yc } = geo();
+    place(to === "expanded" ? 0 : to === "compact" ? Yc : H, motion);
+    setExpanded(to === "expanded");
+  }
+
+  useLayoutEffect(() => {
+    if (!mounted) return;
+    panel.current!.style.paddingBottom = `${foot.current!.offsetHeight}px`; // expanded list clears the pinned footer
+    place(geo().H, "none");
+    panel.current!.getBoundingClientRect(); // commit the off-screen pose so the enter transitions from it
+  }, [mounted]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (variant) {
+      if (!mounted) setMounted(true);
+      else if (stage.current === "closed") go("compact", "enter");
+      return;
+    }
+    if (!mounted) return;
+    go("closed");
+    const t = setTimeout(() => setMounted(false), EXIT_MS);
+    return () => clearTimeout(t);
+  }, [variant, mounted]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!mounted) return;
+    const onResize = () => go(stage.current, "none");
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    addEventListener("resize", onResize);
+    addEventListener("keydown", onKey);
+    return () => { removeEventListener("resize", onResize); removeEventListener("keydown", onKey); };
+  }, [mounted, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function onPointerDown(e: React.PointerEvent) {
+    if (e.button !== 0 || stage.current === "closed") return;
+    swallowClick.current = false;
+    // Grab the sheet where it is right now, even mid-transition.
+    const Y = new DOMMatrix(getComputedStyle(panel.current!).transform).f;
+    place(Y, "none");
+    head.current!.setPointerCapture(e.pointerId);
+    drag.current = { y0: e.clientY, Y0: Y, Y, y: e.clientY, t: e.timeStamp, v: 0, moved: false };
+  }
+  function onPointerMove(e: React.PointerEvent) {
+    const d = drag.current;
+    if (!d) return;
+    const dy = e.clientY - d.y0;
+    if (!d.moved && Math.abs(dy) < 6) return;
+    d.moved = true;
+    const { H, Yc } = geo();
+    d.Y = Math.min(Math.max(d.Y0 + dy, 0), H);
+    place(d.Y, "none");
+    if (e.timeStamp > d.t) d.v = (e.clientY - d.y) / (e.timeStamp - d.t);
+    d.y = e.clientY;
+    d.t = e.timeStamp;
+    setExpanded(d.Y < Yc / 2); // the list staggers in or out as the sheet crosses halfway
+  }
+  function onPointerUp(e: React.PointerEvent) {
+    const d = drag.current;
+    if (!d) return;
+    drag.current = null;
+    const from = stage.current;
+    if (!d.moved) return go(from); // a tap: resume, then onClick toggles
+    swallowClick.current = true;
+    const { Yc } = geo();
+    const v = e.timeStamp - d.t > 80 ? 0 : d.v; // a finger that stopped has no fling
+    let to: Stage;
+    if (v < -0.3) to = "expanded";
+    else if (v > 0.3) to = from === "expanded" && d.Y < Yc ? "compact" : "closed";
+    else to = d.Y < Yc / 2 ? "expanded" : d.Y > Yc + 60 ? "closed" : "compact";
+    if (to === "closed") onClose();
+    else go(to);
+  }
+  function onHeadClick() {
+    if (swallowClick.current) { swallowClick.current = false; return; }
+    go(stage.current === "expanded" ? "compact" : "expanded");
+  }
+
+  if (!mounted) return null;
+  return createPortal(
+    <div className="paywall" role="dialog" aria-modal="true" aria-label={c.title} data-expanded={expanded}>
+      <div ref={backdrop} className="paywall-backdrop" onClick={onClose} />
+      <div ref={panel} className="paywall-panel">
+        <div
+          ref={head} className="paywall-head" onClick={onHeadClick}
+          onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+        >
+          <button type="button" className="paywall-grip" aria-expanded={expanded} aria-label={expanded ? "Ciutkan" : "Perluas"} />
+          <h3>{c.title}</h3>
+          <p className="muted">{c.body}</p>
+        </div>
+        <ul className="plus-points">
+          {c.bullets.map((b, i) => (
+            <li key={b} style={{ "--i": i } as CSSProperties}><Check size={18} strokeWidth={2.5} aria-hidden="true" />{b}</li>
+          ))}
+        </ul>
       </div>
-      {/* ponytail: intentional no-op. Keel wires checkout here; no entitlement, no network, no navigation until then. */}
-      <button type="button" className="btn btn-coral lg block" onClick={() => {}}>Coba Plus</button>
-      <button type="button" className="btn btn-soft block" style={{ marginTop: 10 }} onClick={onClose}>Nanti saja</button>
-      <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 14 }}>Catatan, bukan saran medis.</p>
-    </Sheet>
+      <div ref={foot} className="paywall-foot">
+        <div className="plus-plan">
+          <strong>Selamanya</strong>
+          <span className="muted">Detail paket di langkah berikutnya</span>
+        </div>
+        {/* ponytail: intentional no-op. Keel wires checkout here; no entitlement, no network, no navigation until then. */}
+        <button type="button" className="btn btn-coral lg block" onClick={() => {}}>Coba Plus</button>
+        <button type="button" className="btn btn-soft block" style={{ marginTop: 10 }} onClick={onClose}>Nanti saja</button>
+        <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 14 }}>Catatan, bukan saran medis.</p>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
