@@ -48,6 +48,16 @@
   --plus-pill: var(--blush-500);
   --plus-pill-ink: oklch(0.32 0.07 12);
 
+  /* Sign-in: logo blue #7EB8D4 ≈ oklch(0.753 0.072 229.7), one hue. 500 is light (L > 0.6) in both themes, so its ink stays dark. */
+  --sky-500: oklch(0.753 0.072 229.7);
+  --sky-950: oklch(0.26 0.03 229.7); /* 7.1:1 on sky-500 */
+  --signin-primary: var(--sky-500);
+  --signin-primary-ink: var(--sky-950);
+  /* Field error: one red hue and chroma; dark swaps to the light step. Not the hex --danger. */
+  --alert-red-300: oklch(0.74 0.14 25); /* 7.0:1 on dark surface */
+  --alert-red-700: oklch(0.52 0.14 25); /* 5.9:1 on white */
+  --field-danger: var(--alert-red-700);
+
   --blur-glass: 24px;
   --blur-glass-control: 16px; /* circle buttons */
   /* Glass edge: inner 1px white ring + one soft shadow. */
@@ -89,6 +99,7 @@
   --warning-ink: #f0c09b;
   --plus-fill-top: var(--blush-950);
   --plus-fill: var(--blush-900);
+  --field-danger: var(--alert-red-300);
   /* Dark: elevation collapses to the 1px white ring only. */
   --elevation-raised: inset 0 0 0 1px var(--ring-glass);
   --elevation-float: inset 0 0 0 1px var(--ring-glass);
@@ -214,6 +225,7 @@ button.card, a.card { display: block; width: 100%; text-align: left; border: 0; 
 .btn-ghost { background: var(--surface); box-shadow: var(--elevation-raised); }
 .btn-soft { background: var(--surface-sunk); }
 .btn-danger { background: var(--danger-soft); color: var(--danger); }
+.btn-signin { background: var(--signin-primary); color: var(--signin-primary-ink); }
 .icon-btn {
   position: relative;
   width: 44px; height: 44px;
@@ -246,6 +258,12 @@ button.card:active, a.card:active { scale: 0.96; }
   font-size: 17px;
 }
 .input:focus { outline: 2px solid var(--ink-faint); outline-offset: 1px; }
+.input[aria-invalid="true"] { border-color: var(--field-danger); box-shadow: inset 0 0 0 1px var(--field-danger); }
+
+/* Sign-in screen */
+.field > .signin-error { font-size: 14px; color: var(--field-danger); font-weight: 500; }
+.signin-or { text-align: center; font-size: 14px; color: var(--ink-faint); }
+.signin-links { display: flex; justify-content: center; gap: 24px; }
 
 /* DateInput: native picker, but sized like every other .input (iOS gives date inputs an intrinsic width). */
 .date-input { position: relative; display: block; min-width: 0; }

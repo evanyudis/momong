@@ -9,6 +9,7 @@ import { Log } from "./screens/Log";
 import { JoinLanding, MagicLanding, Partner } from "./screens/Partner";
 import { Profil } from "./screens/Profil";
 import { Report } from "./screens/Report";
+import { SignIn } from "./screens/SignIn";
 import { Welcome } from "./screens/Welcome";
 import { Wishlist } from "./screens/Wishlist";
 import { settings, useDB } from "./store";
@@ -29,7 +30,7 @@ export function App() {
 
   // Account routes work before onboarding so an invited partner can join first.
   // Account routes work before onboarding so an invited partner can join first.
-  const accountRoute = path === "/masuk" || path === "/gabung" || path === "/pasangan" || path === "/profil";
+  const accountRoute = path === "/masuk" || path === "/gabung" || path === "/pasangan" || path === "/profil" || path === "/masuk-akun";
   let screen;
   if (path === "/masuk") screen = <MagicLanding token={params.get("token")} />;
   else if (path === "/gabung") screen = <JoinLanding invite={params.get("invite")} />;
@@ -38,6 +39,7 @@ export function App() {
   else if (path === "/insight") screen = <Insight />;
   else if (path === "/pasangan") screen = <Partner />;
   else if (path === "/profil") screen = <Profil />;
+  else if (path === "/masuk-akun") screen = <SignIn />;
   else if (path === "/tas") screen = <Bag />;
   else if (path === "/laporan") screen = <Report />;
   else if (path === "/kado") screen = <Wishlist />;

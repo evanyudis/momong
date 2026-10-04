@@ -41,7 +41,7 @@ export function Profil() {
 
   return (
     <>
-      <Header title="Profil" />
+      <Header title="Profil" aside={h.signedIn ? undefined : <a className="btn sm btn-signin" href="#/masuk-akun">Masuk</a>} />
       <div className="stack">
         <section className="card solid stack">
           <label className="field">
@@ -98,7 +98,7 @@ export function Profil() {
           </div>
         </section>
 
-        <a className="card solid" href="#/pasangan">
+        <a className="card solid" href={h.signedIn ? "#/pasangan" : "#/masuk-akun"}>
           <div className="spread">
             <div>
               <div className="card-title" style={{ fontSize: 16 }}>Sinkron & pasangan</div>
