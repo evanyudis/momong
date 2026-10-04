@@ -1,9 +1,9 @@
+import { ChevronLeft } from "lucide-react";
 import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { Button, Form, Input, Label, TextField } from "react-aria-components";
 import { reducedMotion } from "../motion";
 import { FAILURE_TEXT, SIGNIN_EMPTY, signIn } from "../signin";
 import { ApiError, authEmail, startGoogle, takeGoogleReturn } from "../sync";
-import { TopBar } from "../ui";
 
 const EXIT_MS = 150; // matches the quiet exit in styles.css; enter (settle-in) is 200ms
 
@@ -77,17 +77,13 @@ export function SignIn() {
 
   return (
     <>
-      <TopBar title={daftar ? "Daftar" : "Masuk"} back="#/profil" />
-      {/* Capture phase: react-aria's press handling stops keydown/pointerdown from bubbling out of its buttons. */}
-      <div className="stack" onKeyDownCapture={() => setStill(true)} onPointerDownCapture={() => setStill(false)}>
-        <p className="muted" style={{ textAlign: "center" }}>Supaya data tersimpan online. Sync dan pasangan tetap gratis.</p>
-        {/* aria validation: no native email check; "Email tidak cocok" comes only from a real Masuk failure. */}
-        <Form className="card stack" onSubmit={submit} validationBehavior="aria" aria-busy={s.pending}>
-          <Button className="btn btn-ghost block" isDisabled={s.pending} onPress={google}>Lanjut dengan Google</Button>
-          {(s.googleCancelled || googleLeaving) && (
-            <p className="muted signin-msg" role="status" style={{ fontSize: 14, textAlign: "center" }} {...msg(googleLeaving)}>Masuk Google dibatalkan</p>
-          )}
-          <p className="signin-or" aria-hidden="true">atau</p>
+      <header className="header signin-head">
+        <a className="icon-btn" href="#/profil" aria-label="Kembali"><ChevronLeft size={22} /></a>
+        <h1>{daftar ? "Daftar" : "Masuk"}</h1>
+        <p className="muted">Supaya data tersimpan online. Sync dan pasangan tetap gratis.</p>
+      </header>
+      <div className="signin" onKeyDownCapture={() => setStill(true)} onPointerDownCapture={() => setStill(false)}>
+        <Form onSubmit={submit} validationBehavior="aria" aria-busy={s.pending}>
           <TextField
             className="field" type="email" inputMode="email" autoComplete="email"
             value={s.email} isInvalid={s.emailError} aria-describedby={s.emailError ? "signin-email-error" : undefined}
@@ -106,17 +102,25 @@ export function SignIn() {
             <Label>Kata sandi</Label>
             <Input ref={passwordRef} className="input" />
           </TextField>
-          <Button type="submit" className="btn btn-signin block" isDisabled={s.pending}>{daftar ? "Buat akun" : "Masuk"}</Button>
-          {(s.failure || failLeaving) && lastFailure.current && (
-            <p className="signin-failure signin-msg" role="alert" {...msg(failLeaving)}>{FAILURE_TEXT[lastFailure.current]}</p>
-          )}
+          {/* Actions sit on the bottom edge, in thumb reach: primary first, Google as the alternative below "atau". */}
+          <div className="signin-dock">
+            <Button type="submit" className="btn btn-signin block" isDisabled={s.pending}>{daftar ? "Buat akun" : "Masuk"}</Button>
+            {(s.failure || failLeaving) && lastFailure.current && (
+              <p className="signin-failure signin-msg" role="alert" {...msg(failLeaving)}>{FAILURE_TEXT[lastFailure.current]}</p>
+            )}
+            <p className="signin-or" aria-hidden="true">atau</p>
+            <Button className="btn btn-ghost block" isDisabled={s.pending} onPress={google}>Lanjut dengan Google</Button>
+            {(s.googleCancelled || googleLeaving) && (
+              <p className="muted signin-msg" role="status" style={{ fontSize: 14, textAlign: "center" }} {...msg(googleLeaving)}>Masuk Google dibatalkan</p>
+            )}
+            <div className="signin-links">
+              <Button className="link-btn" isDisabled={s.pending} onPress={() => dispatch({ type: "mode", mode: daftar ? "masuk" : "daftar" })}>
+                {daftar ? "Masuk" : "Daftar"}
+              </Button>
+              <a className="link-btn muted" href="#/profil">Nanti saja</a>
+            </div>
+          </div>
         </Form>
-        <div className="signin-links">
-          <Button className="link-btn" isDisabled={s.pending} onPress={() => dispatch({ type: "mode", mode: daftar ? "masuk" : "daftar" })}>
-            {daftar ? "Masuk" : "Daftar"}
-          </Button>
-          <a className="link-btn muted" href="#/profil">Nanti saja</a>
-        </div>
       </div>
     </>
   );
