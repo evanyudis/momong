@@ -264,6 +264,10 @@ button.card:active, a.card:active { scale: 0.96; }
 .field > .signin-error { font-size: 14px; color: var(--field-danger); font-weight: 500; }
 .signin-or { text-align: center; font-size: 14px; color: var(--ink-faint); }
 .signin-links { display: flex; justify-content: center; gap: 24px; }
+/* State messages: enter with the shared settle-in (200ms, --ease-out); leave with the alert's quiet exit (150ms).
+   Press on every control here comes from the existing .btn / .link-btn rules. Keyboard-driven changes don't move. */
+.signin-msg { animation: settle-in 200ms var(--ease-out); }
+.signin-msg:is([data-still], [data-leaving]) { animation: none; } /* an exit mid-enter retargets from rest */
 
 /* DateInput: native picker, but sized like every other .input (iOS gives date inputs an intrinsic width). */
 .date-input { position: relative; display: block; min-width: 0; }
@@ -620,7 +624,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 /* Kick segments fill from the left on enter. */
 .segments i { transform-origin: left center; }
 /* Alert dismiss: quiet exit. */
-.alert[data-leaving] {
+.alert[data-leaving], .signin-msg[data-leaving] {
   opacity: 0;
   transform: translateY(-8px);
   transition: opacity 150ms cubic-bezier(0.55, 0, 1, 0.45), transform 150ms cubic-bezier(0.55, 0, 1, 0.45);
