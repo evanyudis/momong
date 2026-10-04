@@ -247,7 +247,7 @@ button.card, a.card { transition: scale 150ms ease-out; }
 button.card:active, a.card:active { scale: 0.96; }
 
 .field { display: grid; gap: 6px; }
-.field > span, .field > [data-slot="label"] { font-size: 14px; color: var(--ink-muted); font-weight: 500; }
+.field > span, .field > label { font-size: 14px; color: var(--ink-muted); font-weight: 500; }
 .input {
   width: 100%;
   min-height: 52px;
