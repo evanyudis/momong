@@ -43,11 +43,12 @@ function PregnancyHome() {
           <div className="spread" style={{ alignItems: "center" }}>
             <div>
               <span className="pill warm"><span className="dot" />Trimester {p.trimester}</span>
-              <div className="row" style={{ alignItems: "baseline", gap: 8, marginTop: 14 }}>
-                <span className="num" style={{ fontSize: 64, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1 }}>
+              {/* Stacked so 3-digit counts never wrap "lagi" beside the number. */}
+              <div style={{ marginTop: 14 }}>
+                <div className="num" style={{ fontSize: 64, fontWeight: 700, letterSpacing: "-0.04em", lineHeight: 1 }}>
                   {Math.max(p.daysLeft, 0)}
-                </span>
-                <span className="muted" style={{ fontSize: 18 }}>hari lagi</span>
+                </div>
+                <div className="muted" style={{ fontSize: 18, marginTop: 4 }}>hari lagi</div>
               </div>
               <div style={{ fontWeight: 600, fontSize: 17, marginTop: 12 }}>HPL {dateLabel(s.hpl!)}</div>
               <div className="muted num" style={{ fontSize: 15, marginTop: 4 }}>Hari ke-{p.day} dari 280</div>
