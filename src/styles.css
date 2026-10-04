@@ -6,6 +6,8 @@
   --bg-muted: oklch(0.985 0 0);
   --surface: oklch(1 0 0); /* opaque: inputs, sheets */
   --surface-glass: oklch(1 0 0 / 0.72);
+  /* What the glass composites to over the flat canvas. Used only while a glass layer is moving. */
+  --surface-glass-flat: color-mix(in oklch, oklch(1 0 0) 72%, oklch(0.985 0 0));
   --surface-sunk: oklch(0.970 0 0); /* #F5F5F5 */
   --border-subtle: oklch(0.937 0 0); /* #EAEAEA, lists only */
   --ink: oklch(0.475 0 0); /* #5C5C5C */
@@ -62,6 +64,7 @@
   --bg-muted: oklch(0.191 0 0);
   --surface: oklch(0.226 0 0); /* opaque card tone: inputs, sheets */
   --surface-glass: oklch(0.226 0 0 / 0.72); /* rgb(28 28 28 / 0.72) */
+  --surface-glass-flat: color-mix(in oklch, oklch(0.226 0 0) 72%, oklch(0.191 0 0));
   --surface-sunk: oklch(1 0 0 / 0.05);
   --border-subtle: oklch(1 0 0 / 0.1);
   --ink: oklch(0.94 0 0);
@@ -531,9 +534,21 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
   background: var(--surface);
   box-shadow: var(--elevation-float);
   transform-origin: 0 0;
-  will-change: transform, opacity;
   pointer-events: none;
   opacity: 0;
+}
+/* Outgoing title, held in place while it dissolves into the new one. */
+.title-leaving { position: fixed; z-index: 96; margin: 0; pointer-events: none; }
+
+/* Moving glass skips backdrop-filter (the frame cost in the trace) and shows its flat equivalent,
+   which looks the same over the flat canvas. Resting glass keeps blur 24px. */
+.page-leaving :is(.card:not(.solid, .alert), .icon-btn),
+html[data-moving] main.app :is(.card:not(.solid, .alert), .icon-btn),
+:is(a.card, button.card):not(.solid):active,
+.icon-btn:active {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--surface-glass-flat);
 }
 
 @media (prefers-reduced-motion: reduce) {
