@@ -39,7 +39,7 @@ function PregnancyHome() {
           </a>
         )}
 
-        <section className="card" aria-label="Kehamilan">
+        <section className="card" data-glow="couple" aria-label="Kehamilan">
           <div className="spread" style={{ alignItems: "center" }}>
             <div>
               <span className="pill warm"><span className="dot" />Trimester {p.trimester}</span>
@@ -180,7 +180,7 @@ function NewbornHome() {
     <>
       <Header title={`Halo, ${getPrefs().name || "Bunda"}`} aside={<GearLink />} />
       <div className="stack">
-        <section className="card">
+        <section className="card" data-glow="couple">
           <div className="row">
             <span className="glyph peach"><Baby size={24} /></span>
             <div>

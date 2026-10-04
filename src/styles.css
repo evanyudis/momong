@@ -127,6 +127,25 @@ p { margin: 0; }
   padding: 20px;
 }
 .card.solid { background: var(--surface); }
+
+/* Glow orbs (pen.dev "Warm Glass Glow"): two soft radial orbs layered over the card surface, hero cards only.
+   Colors are existing accent tokens at the board's alpha; eased stops avoid banding. Same in light and dark. */
+.card[data-glow] {
+  background:
+    radial-gradient(circle at 0% 100%, var(--glow-a) 0%, color-mix(in srgb, var(--glow-a) 45%, transparent) 40%, transparent 100%),
+    radial-gradient(circle at 100% 0%, var(--glow-b) 0%, color-mix(in srgb, var(--glow-b) 45%, transparent) 40%, transparent 100%),
+    var(--surface-glass-tint);
+}
+/* Couple: blue bottom-left, coral top-right (Home hero). */
+.card[data-glow="couple"] {
+  --glow-a: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  --glow-b: color-mix(in srgb, var(--accent-partner) 25%, transparent);
+}
+/* Warm: peach bottom-left, warm orange top-right (contraction timer). */
+.card[data-glow="warm"] {
+  --glow-a: color-mix(in srgb, var(--semantic-celebrate) 20%, transparent);
+  --glow-b: color-mix(in srgb, var(--warning) 25%, transparent);
+}
 button.card, a.card { display: block; width: 100%; text-align: left; border: 0; color: inherit; text-decoration: none; }
 .card-title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
 .card-sub { color: var(--ink-muted); font-size: 14px; margin-top: 2px; }
