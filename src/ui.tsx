@@ -1,7 +1,20 @@
-import { ChevronLeft } from "lucide-react";
-import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
+import { CalendarDays, ChevronLeft } from "lucide-react";
+import { type ComponentProps, type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { dayLabel } from "./dates";
+
+/**
+ * Native date picker that fits its container: full width, value left-aligned, calendar glyph on the right.
+ * Every native input prop passes through (value/onChange or defaultValue, min/max, required, aria-*, ref).
+ */
+export function DateInput({ className, ...props }: Omit<ComponentProps<"input">, "type">) {
+  return (
+    <span className="date-input">
+      <input {...props} type="date" className={className ? `input ${className}` : "input"} />
+      <CalendarDays className="date-input-icon" size={20} aria-hidden="true" />
+    </span>
+  );
+}
 
 /** Bottom sheet. Stays mounted through its exit so the slide-down can play. */
 export function Sheet({ open, onOpenChange, title, children }: {

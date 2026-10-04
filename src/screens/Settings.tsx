@@ -4,7 +4,7 @@ import { todayISO } from "../dates";
 import { useHousehold } from "../household";
 import { exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
 import { SyncDot } from "./Partner";
-import { Sheet, TopBar } from "../ui";
+import { DateInput, Sheet, TopBar } from "../ui";
 
 export function applyTheme(theme: Prefs["theme"]) {
   const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
@@ -45,7 +45,7 @@ export function Settings() {
           </label>
           <label className="field">
             <span>HPL (hari perkiraan lahir)</span>
-            <input className="input" type="date" value={s.hpl ?? ""} onChange={(e) => e.target.value && saveSettings({ hpl: e.target.value })} />
+            <DateInput value={s.hpl ?? ""} onChange={(e) => e.target.value && saveSettings({ hpl: e.target.value })} />
           </label>
         </section>
 
@@ -68,7 +68,7 @@ export function Settings() {
               </label>
               <label className="field">
                 <span>Tanggal lahir</span>
-                <input className="input" type="date" max={todayISO()} value={s.babyBirth ?? ""} onChange={(e) => e.target.value && saveSettings({ babyBirth: e.target.value })} />
+                <DateInput max={todayISO()} value={s.babyBirth ?? ""} onChange={(e) => e.target.value && saveSettings({ babyBirth: e.target.value })} />
               </label>
             </div>
           )}
@@ -119,7 +119,7 @@ function BornSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: bo
       <p className="muted" style={{ marginBottom: 16 }}>Catatan kehamilan tetap tersimpan. Kamu bisa kembali ke mode hamil kapan saja.</p>
       <div className="stack">
         <label className="field"><span>Nama si kecil (opsional)</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Si kecil" /></label>
-        <label className="field"><span>Tanggal lahir</span><input className="input" type="date" max={todayISO()} value={date} onChange={(e) => setDate(e.target.value)} /></label>
+        <label className="field"><span>Tanggal lahir</span><DateInput max={todayISO()} value={date} onChange={(e) => setDate(e.target.value)} /></label>
         <button
           className="btn btn-coral lg block" disabled={!date}
           onClick={() => { saveSettings({ birthMode: "postpartum", babyBirth: date, babyName: name.trim() || undefined }); onOpenChange(false); location.hash = "#/"; }}

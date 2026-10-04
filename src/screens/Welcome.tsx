@@ -3,6 +3,7 @@ import { useState } from "react";
 import { todayISO } from "../dates";
 import { saveSettings, setPrefs } from "../store";
 import { API_URL } from "../sync";
+import { DateInput } from "../ui";
 
 /** First run: HPL is the one thing the pregnancy tools need. No account required. */
 export function Welcome() {
@@ -37,12 +38,12 @@ export function Welcome() {
         {born ? (
           <label className="field">
             <span>Tanggal lahir si kecil</span>
-            <input className="input" type="date" max={todayISO()} required value={birth} onChange={(e) => setBirth(e.target.value)} />
+            <DateInput max={todayISO()} required value={birth} onChange={(e) => setBirth(e.target.value)} />
           </label>
         ) : (
           <label className="field">
             <span>HPL (hari perkiraan lahir)</span>
-            <input className="input" type="date" required value={hpl} onChange={(e) => setHpl(e.target.value)} />
+            <DateInput required value={hpl} onChange={(e) => setHpl(e.target.value)} />
           </label>
         )}
       </section>
