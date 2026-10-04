@@ -37,6 +37,17 @@
   --semantic-feed: #9bc4b0;
   --semantic-celebrate: #e8c4a8;
 
+  /* Plus blush: one ramp pinned to the coral hue (#E8A0A8 ≈ oklch(0.778 0.086 12)). Dark flips the ends. */
+  --blush-50: oklch(0.975 0.012 12);
+  --blush-100: oklch(0.952 0.026 12);
+  --blush-500: oklch(0.778 0.086 12); /* the existing coral */
+  --blush-900: oklch(0.26 0.03 12);
+  --blush-950: oklch(0.215 0.018 12);
+  --plus-fill-top: var(--blush-50);
+  --plus-fill: var(--blush-100);
+  --plus-pill: var(--blush-500);
+  --plus-pill-ink: oklch(0.32 0.07 12);
+
   --blur-glass: 24px;
   --blur-glass-control: 16px; /* circle buttons */
   /* Glass edge: inner 1px white ring + one soft shadow. */
@@ -76,6 +87,8 @@
   --accent-partner-ink: #f2bfc5;
   --success-ink: #a9d6b3;
   --warning-ink: #f0c09b;
+  --plus-fill-top: var(--blush-950);
+  --plus-fill: var(--blush-900);
   /* Dark: elevation collapses to the 1px white ring only. */
   --elevation-raised: inset 0 0 0 1px var(--ring-glass);
   --elevation-float: inset 0 0 0 1px var(--ring-glass);
@@ -423,7 +436,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 .paywall-panel, .paywall-foot {
   position: absolute; left: 50%;
   width: min(480px, 100%);
-  background: var(--surface); /* opaque, like every sheet */
+  background: var(--plus-fill); /* opaque blush, like every sheet is opaque */
   transform: translate(-50%, 100%);
   transition: transform 260ms var(--ease-out); /* enter */
   will-change: transform;
@@ -433,6 +446,14 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
   transform-origin: 50% 0;
   padding: 10px 20px 0;
   border-radius: 28px;
+  /* Lighter at the top, eased into the solid fill before the head ends, so the pinned footer meets it without a seam. */
+  background: linear-gradient(
+    var(--plus-fill-top) 0,
+    color-mix(in oklch, var(--plus-fill-top) 82%, var(--plus-fill)) 40px,
+    color-mix(in oklch, var(--plus-fill-top) 50%, var(--plus-fill)) 80px,
+    color-mix(in oklch, var(--plus-fill-top) 18%, var(--plus-fill)) 120px,
+    var(--plus-fill) 160px
+  );
   box-shadow: var(--elevation-float);
   overflow: hidden;
   overscroll-behavior: contain;
@@ -454,18 +475,25 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 .paywall-grip { position: relative; display: block; width: 40px; height: 5px; margin: 0 auto 14px; padding: 0; border: 0; border-radius: 3px; background: var(--border-subtle); }
 .paywall-grip::after { content: ""; position: absolute; left: 50%; top: 50%; width: 64px; height: 44px; translate: -50% -50%; }
 
-.plus-points { list-style: none; margin: 8px 0 24px; padding: 0; display: grid; gap: 14px; }
-.plus-points li { display: flex; align-items: center; gap: 10px; font-weight: 500; }
-.plus-points svg { flex: none; color: var(--accent-partner-ink); }
-/* The list staggers in as the sheet grows; leaves faster and all at once. */
-.plus-points li { opacity: 0; transform: translateY(8px); transition: opacity 120ms ease-out, transform 120ms ease-out; }
-.paywall[data-expanded="true"] .plus-points li {
-  opacity: 1; transform: none;
-  transition-duration: 240ms; transition-timing-function: var(--ease-out);
-  transition-delay: calc(60ms + var(--i, 0) * 50ms);
+.paywall-title { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.paywall-title h3 { margin: 0; }
+
+.plus-pill {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--plus-pill); color: var(--plus-pill-ink);
+  font-size: 13px; font-weight: 600;
 }
-.plus-plan { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 16px; margin-bottom: 16px; border-radius: var(--radius-icon); background: var(--surface-sunk); }
-.plus-plan .muted { font-size: 14px; text-align: right; }
+
+/* Blurred teaser chart. The filter sits on a static box; keep it small since the paywall copy rides a moving sheet. */
+.chart-preview { margin-top: 16px; padding: 14px 16px 16px; border-radius: var(--radius-icon); background: var(--surface); box-shadow: var(--elevation-raised); }
+.blur-bars { display: flex; align-items: flex-end; gap: 8px; height: 88px; margin-top: 14px; filter: blur(4px); opacity: 0.85; }
+.blur-bars span { flex: 1; border-radius: 6px 6px 3px 3px; background: var(--plus-pill); }
+
+/* Pale pink Plus card (Profil) and the Insight preview. */
+.plus-card { background: linear-gradient(var(--plus-fill-top), var(--plus-fill)); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.plus-chip { padding: 3px 10px; font-size: 13px; background: var(--surface); color: var(--accent-partner-ink); }
 
 /* ---------- Toast ---------- */
 .toast {

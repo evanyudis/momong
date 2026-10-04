@@ -1,10 +1,11 @@
 import { ChevronRight, Download } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { PlusVariant } from "../content";
 import { todayISO } from "../dates";
 import { useHousehold } from "../household";
 import { exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
 import { SyncDot } from "./Partner";
-import { DateInput, Header, Sheet } from "../ui";
+import { DateInput, Header, PlusSheet, Sheet } from "../ui";
 
 export function applyTheme(theme: Prefs["theme"]) {
   const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
@@ -26,6 +27,8 @@ export function Profil() {
   const h = useHousehold();
   const born = s.birthMode === "postpartum";
   const [bornOpen, setBornOpen] = useState(false);
+  const [backOpen, setBackOpen] = useState(false);
+  const [plus, setPlus] = useState<PlusVariant | null>(null);
 
   function download() {
     const blob = new Blob([exportJSON()], { type: "application/json" });
@@ -51,6 +54,16 @@ export function Profil() {
           </label>
         </section>
 
+        {/* "Gratis 7 hari" is a label only: no timer, no trial entitlement. The button only opens the Plus sheet. */}
+        <section className="card plus-card">
+          <div className="spread" style={{ alignItems: "flex-start" }}>
+            <div className="card-title">Perkiraan, pengingat & grafik</div>
+            <span className="pill plus-chip">Gratis 7 hari</span>
+          </div>
+          <p className="card-sub" style={{ marginTop: 6 }}>Riwayat lebih dari 30 hari, PDF tanpa batas, dan multi bayi.</p>
+          <button className="btn btn-coral block" style={{ marginTop: 16 }} aria-haspopup="dialog" onClick={() => setPlus("insights")}>Coba Plus</button>
+        </section>
+
         <section className="card solid">
           <div className="spread">
             <div>
@@ -59,7 +72,7 @@ export function Profil() {
             </div>
             <button
               className="switch" role="switch" aria-checked={born} aria-label="Sudah lahir"
-              onClick={() => (born ? saveSettings({ birthMode: "pregnant" }) : setBornOpen(true))}
+              onClick={() => (born ? setBackOpen(true) : setBornOpen(true))}
             />
           </div>
           {born && (
@@ -109,7 +122,34 @@ export function Profil() {
       </div>
 
       <BornSheet open={bornOpen} onOpenChange={setBornOpen} />
+      <PregnantSheet open={backOpen} onOpenChange={setBackOpen} />
+      <PlusSheet variant={plus} onClose={() => setPlus(null)} />
     </>
+  );
+}
+
+/** Newborn → hamil: confirm, short loading, then flip birthMode only. Every log stays. */
+function PregnantSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!busy) return;
+    const t = setTimeout(() => {
+      saveSettings({ birthMode: "pregnant" }); // mode flag only; no collection is touched
+      onOpenChange(false); // busy stays on through the exit; Profil unmounts on the hash change
+      location.hash = "#/";
+    }, 700);
+    return () => clearTimeout(t);
+  }, [busy, onOpenChange]);
+  return (
+    <Sheet open={open} onOpenChange={(o) => !busy && onOpenChange(o)} title="Kembali ke mode hamil?">
+      <p className="muted" style={{ marginBottom: 16 }}>Catatan newborn tetap tersimpan. Kamu bisa pindah lagi ke mode newborn kapan saja.</p>
+      <div className="stack">
+        <button className="btn btn-coral lg block" disabled={busy} aria-busy={busy} onClick={() => setBusy(true)}>
+          {busy ? "Memindahkan…" : "Ya, kembali"}
+        </button>
+        <button className="btn btn-soft block" disabled={busy} onClick={() => onOpenChange(false)}>Nanti saja</button>
+      </div>
+    </Sheet>
   );
 }
 

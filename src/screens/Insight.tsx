@@ -1,6 +1,8 @@
+import { useState } from "react";
+import type { PlusVariant } from "../content";
 import { durationLabel, isToday, midnight, timeLabel } from "../dates";
 import { list, settings, useDB } from "../store";
-import { Header } from "../ui";
+import { BlurBars, Header, PlusPill, PlusSheet } from "../ui";
 import { contractionStats, PatternAlert } from "./Log";
 
 const DAY = 86_400_000;
@@ -73,9 +75,22 @@ function NewbornInsight() {
   const start = midnight(new Date());
   const days = Array.from({ length: 7 }, (_, i) => start - i * DAY);
   const inDay = (col: Parameters<typeof list>[0], d: number) => list(col).filter((r) => r.at >= d && r.at < d + DAY);
+  const [preview, setPreview] = useState(true);
+  const [plus, setPlus] = useState<PlusVariant | null>(null);
   return (
     <>
       <Header title="Insight" />
+      {preview && (
+        <section className="card plus-card" style={{ marginBottom: 14 }}>
+          <div className="spread">
+            <div className="card-title">Pola menyusu 7 hari</div>
+            <PlusPill />
+          </div>
+          <BlurBars />
+          <button className="btn btn-coral block" style={{ marginTop: 16 }} aria-haspopup="dialog" onClick={() => setPlus("insights")}>Coba Plus</button>
+          <button className="btn btn-soft block" style={{ marginTop: 10 }} onClick={() => setPreview(false)}>Nanti saja</button>
+        </section>
+      )}
       <section className="card">
         <div className="label">7 hari terakhir</div>
         <div className="list" style={{ marginTop: 4 }}>
@@ -95,6 +110,7 @@ function NewbornInsight() {
           })}
         </div>
       </section>
+      <PlusSheet variant={plus} onClose={() => setPlus(null)} />
     </>
   );
 }

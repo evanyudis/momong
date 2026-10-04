@@ -1,5 +1,5 @@
-import { CalendarDays, Check, ChevronLeft } from "lucide-react";
-import { type ComponentProps, type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { CalendarDays, ChevronLeft, Sparkles } from "lucide-react";
+import { type ComponentProps, type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { PLUS_COPY, type PlusVariant } from "./content";
 import { dayLabel } from "./dates";
@@ -185,20 +185,18 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
           onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
         >
           <button type="button" className="paywall-grip" aria-expanded={expanded} aria-label={expanded ? "Ciutkan" : "Perluas"} />
-          <h3>{c.title}</h3>
+          <div className="paywall-title"><PlusPill /><h3>{c.title}</h3></div>
           <p className="muted">{c.body}</p>
+          {(variant ?? last) === "pdf" && (
+            <div className="chart-preview">
+              <div className="card-title" style={{ fontSize: 16 }}>Laporan 7 hari</div>
+              <div className="card-sub">Menyusu, pompa, popok · PDF</div>
+              <BlurBars />
+            </div>
+          )}
         </div>
-        <ul className="plus-points">
-          {c.bullets.map((b, i) => (
-            <li key={b} style={{ "--i": i } as CSSProperties}><Check size={18} strokeWidth={2.5} aria-hidden="true" />{b}</li>
-          ))}
-        </ul>
       </div>
       <div ref={foot} className="paywall-foot">
-        <div className="plus-plan">
-          <strong>Selamanya</strong>
-          <span className="muted">Detail paket di langkah berikutnya</span>
-        </div>
         {/* ponytail: intentional no-op. Keel wires checkout here; no entitlement, no network, no navigation until then. */}
         <button type="button" className="btn btn-coral lg block" onClick={() => {}}>Coba Plus</button>
         <button type="button" className="btn btn-soft block" style={{ marginTop: 10 }} onClick={onClose}>Nanti saja</button>
@@ -206,6 +204,21 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
       </div>
     </div>,
     document.body,
+  );
+}
+
+/** Small coral "Plus" label: paywall title, Insight preview. */
+export function PlusPill() {
+  return <span className="plus-pill"><Sparkles size={13} strokeWidth={2.5} aria-hidden="true" />Plus</span>;
+}
+
+const BARS = [42, 68, 55, 82, 60, 74, 92]; // ponytail: fixed shape; a teaser, never real data
+/** Static blurred bar chart: hints at what Plus draws without showing data. */
+export function BlurBars() {
+  return (
+    <div className="blur-bars" aria-hidden="true">
+      {BARS.map((h, i) => <span key={i} style={{ height: `${h}%` }} />)}
+    </div>
   );
 }
 
