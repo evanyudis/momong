@@ -1,22 +1,24 @@
-/* Tokens: cool neutral canvas (Evan, 4 Okt). Dark theme flips variables only.
-   Logo blue #7EB8D4 / coral #E8A0A8 belong to couple marks only, never canvas, page wash, or Plus chrome. */
+/* Tokens: liquid glass on a flat neutral canvas (Evan, 4 Okt). Dark theme flips variables only.
+   Neutrals are true gray: chroma 0, hue 0. Logo blue #7EB8D4 / coral #E8A0A8 stay on couple marks only.
+   Glass lives on cards, circle buttons, and the floating nav. Never on the page. */
 :root {
-  --bg: #E6EBEF;
-  --bg-muted: #E6EBEF;
-  --surface: #FFFFFF;
-  --surface-glass: #FFFFFFF2;
-  --surface-glass-tint: #FFFFFFD9; /* tab bar + sheets only */
-  --surface-sunk: rgb(0 0 0 / 0.05);
-  --border-subtle: #E2E6EB;
-  --ink: #1A2128;
-  --ink-muted: #6A7380;
-  --ink-faint: #9AA3AD;
-  --on-ink: #FFFFFF;
+  --bg: oklch(0.985 0 0); /* #FAFAFA, flat canvas */
+  --bg-muted: oklch(0.985 0 0);
+  --surface: oklch(1 0 0); /* opaque: inputs, sheets */
+  --surface-glass: oklch(1 0 0 / 0.72);
+  --surface-sunk: oklch(0.970 0 0); /* #F5F5F5 */
+  --border-subtle: oklch(0.937 0 0); /* #EAEAEA, lists only */
+  --ink: oklch(0.475 0 0); /* #5C5C5C */
+  --ink-muted: oklch(0.556 0 0); /* 4.5:1 on canvas, AA body */
+  --ink-faint: oklch(0.65 0 0); /* captions and placeholders only */
+  --on-ink: oklch(1 0 0);
+  --ring-glass: oklch(1 0 0 / 0.6);
+  --shadow-glass: oklch(0 0 0 / 0.05);
 
-  /* Primary accent and Plus chrome. */
-  --accent-primary: #4A7C9B;
-  --accent-primary-soft: #4A7C9B26;
-  --accent-primary-ink: #4A7C9B;
+  /* Plus accent: unchanged. */
+  --accent-primary: oklch(0.564 0.072 237.2); /* #4A7C9B */
+  --accent-primary-soft: oklch(0.564 0.072 237.2 / 0.15);
+  --accent-primary-ink: oklch(0.564 0.072 237.2);
   --accent-partner: #e8a0a8;
   --accent-partner-soft: #e8a0a833;
   --accent-partner-ink: #a24d59;
@@ -33,10 +35,11 @@
   --semantic-feed: #9bc4b0;
   --semantic-celebrate: #e8c4a8;
 
-  --blur-glass: 20px;
-  --blur-glass-strong: 32px;
-  --elevation-raised: 0 0 0 1px rgb(0 0 0 / 0.05), 0 1px 3px rgb(0 0 0 / 0.04), 0 4px 16px -4px rgb(0 0 0 / 0.08);
-  --elevation-float: 0 0 0 1px rgb(0 0 0 / 0.06), 0 8px 28px rgb(0 0 0 / 0.12);
+  --blur-glass: 24px;
+  --blur-glass-control: 16px; /* circle buttons */
+  /* Glass edge: inner 1px white ring + one soft shadow. */
+  --elevation-raised: inset 0 0 0 1px var(--ring-glass), 0 4px 16px var(--shadow-glass);
+  --elevation-float: inset 0 0 0 1px var(--ring-glass), 0 8px 28px var(--shadow-glass);
   --radius-card: 20px;
   --radius-icon: 16px;
   --radius-pill: 9999px;
@@ -55,23 +58,24 @@
   :root { --border-hairline: 0.5px; }
 }
 :root[data-theme="dark"] {
-  --bg: #12171C;
-  --bg-muted: #12171C;
-  --surface: #1C232A;
-  --surface-glass: #1C232AF2;
-  --surface-glass-tint: #1C232AD9;
-  --surface-sunk: #ffffff0d;
-  --border-subtle: #ffffff1a;
-  --ink: #E8EDF1;
-  --ink-muted: #9AA3AD;
-  --ink-faint: #6A7380;
-  --on-ink: #12171C;
+  --bg: oklch(0.191 0 0); /* #141414 */
+  --bg-muted: oklch(0.191 0 0);
+  --surface: oklch(0.226 0 0); /* opaque card tone: inputs, sheets */
+  --surface-glass: oklch(0.226 0 0 / 0.72); /* rgb(28 28 28 / 0.72) */
+  --surface-sunk: oklch(1 0 0 / 0.05);
+  --border-subtle: oklch(1 0 0 / 0.1);
+  --ink: oklch(0.94 0 0);
+  --ink-muted: oklch(0.72 0 0);
+  --ink-faint: oklch(0.58 0 0);
+  --on-ink: oklch(0.191 0 0);
+  --ring-glass: oklch(1 0 0 / 0.12);
   --accent-primary-ink: #a9d3e7;
   --accent-partner-ink: #f2bfc5;
   --success-ink: #a9d6b3;
   --warning-ink: #f0c09b;
-  --elevation-raised: 0 0 0 1px #ffffff17;
-  --elevation-float: 0 0 0 1px #ffffff1f;
+  /* Dark: elevation collapses to the 1px white ring only. */
+  --elevation-raised: inset 0 0 0 1px var(--ring-glass);
+  --elevation-float: inset 0 0 0 1px var(--ring-glass);
   --page-wash: none;
   color-scheme: dark;
 }
@@ -116,20 +120,25 @@ p { margin: 0; }
 .topbar h2 { text-align: center; font-size: 17px; font-weight: 600; }
 
 /* ---------- Surfaces ---------- */
+/* Liquid glass card: translucent fill, 24px blur, inner white ring + soft shadow. No border, no divider on glass. */
 .card {
-  background: var(--surface); /* glass blur stays on the tab bar and sheets only */
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  backdrop-filter: blur(var(--blur-glass));
   border-radius: var(--radius-card);
   box-shadow: var(--elevation-raised);
   padding: 20px;
 }
-.card.solid { background: var(--surface); }
+/* Opaque card for lists and forms, where dividers are allowed. */
+.card.solid { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
 
 button.card, a.card { display: block; width: 100%; text-align: left; border: 0; color: inherit; text-decoration: none; }
 .card-title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
 .card-sub { color: var(--ink-muted); font-size: 14px; margin-top: 2px; }
 .label { color: var(--ink-muted); font-size: 15px; font-weight: 500; }
-.divider { border: 0; border-top: var(--border-hairline) solid var(--border-subtle); margin: 0; }
-.vsep { border-left: var(--border-hairline) solid var(--border-subtle); padding-left: 14px; }
+/* Dividers belong to lists only; on glass they keep their space but draw nothing. */
+.divider { border: 0; border-top: var(--border-hairline) solid transparent; margin: 0; }
+.vsep { border-left: var(--border-hairline) solid transparent; padding-left: 14px; }
 
 .glyph {
   flex: none;
@@ -194,7 +203,9 @@ button.card, a.card { display: block; width: 100%; text-align: left; border: 0; 
   width: 44px; height: 44px;
   display: grid; place-items: center;
   border: 0; border-radius: 50%;
-  background: var(--surface);
+  background: var(--surface-glass);
+  -webkit-backdrop-filter: blur(var(--blur-glass-control));
+  backdrop-filter: blur(var(--blur-glass-control));
   box-shadow: var(--elevation-raised);
   color: var(--ink);
   transition: scale 150ms ease-out;
@@ -332,7 +343,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
   display: grid; grid-template-columns: repeat(4, 1fr);
   padding: 6px;
   border-radius: 32px;
-  background: var(--surface-glass-tint);
+  background: var(--surface-glass);
   -webkit-backdrop-filter: blur(var(--blur-glass));
   backdrop-filter: blur(var(--blur-glass));
   box-shadow: var(--elevation-float);
@@ -365,9 +376,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
   z-index: var(--z-sheet);
   padding: 10px 20px calc(env(safe-area-inset-bottom) + 24px);
   border-radius: 28px 28px 0 0;
-  background: var(--surface-glass);
-  -webkit-backdrop-filter: blur(var(--blur-glass-strong));
-  backdrop-filter: blur(var(--blur-glass-strong));
+  background: var(--surface); /* sheets are opaque; glass is for cards, circle buttons, nav */
   box-shadow: var(--elevation-float);
   transform: translate(-50%, 100%);
   transition: transform 260ms var(--ease-out);
@@ -462,7 +471,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 .alert-stats {
   display: grid; grid-template-columns: 0.8fr 1fr 1fr;
   margin-top: 14px; padding-top: 14px;
-  border-top: var(--border-hairline) solid var(--border-subtle);
+  border-top: var(--border-hairline) solid transparent; /* no divider on glass */
 }
 .alert-stats .stat { font-size: 22px; }
 @keyframes settle-in { from { opacity: 0; transform: translateY(-6px) scale(0.98); } }

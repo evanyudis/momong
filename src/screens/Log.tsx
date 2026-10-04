@@ -75,7 +75,7 @@ function PregnancyLog() {
       <Header title="Log Kehamilan" aside={<span className="pill" style={{ boxShadow: "var(--elevation-raised)", background: "transparent" }}>Minggu ke-{p.week}</span>} />
       <div className="stack">
         <PatternAlert />
-        <section className="card" data-glow="warm">
+        <section className="card">
           <button className="row" style={{ width: "100%", background: "none", border: 0, padding: 0, textAlign: "left" }} onClick={() => setHistoryOpen(true)}>
             <span className="glyph coral"><Timer size={24} /></span>
             <div style={{ flex: 1 }}>
