@@ -7,7 +7,7 @@ import { Header, Ring } from "../ui";
 import { SyncDot } from "./Partner";
 
 const GearLink = () => (
-  <a className="icon-btn" href="#/pengaturan" data-morph="/pengaturan" aria-label="Pengaturan"><Gear size={20} /></a>
+  <a className="icon-btn" href="#/profil" data-morph="/profil" aria-label="Profil"><Gear size={20} /></a>
 );
 
 export function Home() {
@@ -28,7 +28,7 @@ function PregnancyHome() {
       <Header title={`Halo, ${getPrefs().name || "Bunda"}`} aside={<GearLink />} />
       <div className="stack">
         {p.daysLeft <= 0 && (
-          <a className="card" href="#/pengaturan" data-morph="/pengaturan" style={{ background: "var(--accent-partner-soft)" }}>
+          <a className="card" href="#/profil" data-morph="/profil" style={{ background: "var(--accent-partner-soft)" }}>
             <div className="spread">
               <div>
                 <div className="card-title">Si kecil sudah lahir?</div>
@@ -152,7 +152,7 @@ export function PartnerCard() {
     sub = <SyncDot />;
   }
   return (
-    <a className="card" href="#/pasangan" data-morph="/pasangan">
+    <a className="card" href="#/profil" data-morph="/profil">
       <div className="spread">
         <span className="row" style={{ gap: 8, fontWeight: 600 }}><Users size={20} color="var(--accent-primary-ink)" />Pasangan</span>
         <ChevronRight size={18} className="faint" />
@@ -186,7 +186,7 @@ function NewbornHome() {
             <div>
               <div className="card-title">{s.babyName || "Si kecil"}</div>
               <div className="card-sub num">
-                {age ? `${age.days} hari · ${age.weeks} minggu` : "Atur tanggal lahir di Pengaturan"}
+                {age ? `${age.days} hari · ${age.weeks} minggu` : "Atur tanggal lahir di Profil"}
               </div>
             </div>
           </div>

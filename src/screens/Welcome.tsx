@@ -53,7 +53,7 @@ export function Welcome() {
         {born ? "Masih hamil? Isi HPL" : "Si kecil sudah lahir?"}
       </button>
       {API_URL && (
-        <a className="link-btn muted" href="#/pasangan" style={{ justifySelf: "center", fontWeight: 500, textDecoration: "none" }}>
+        <a className="link-btn muted" href="#/profil" style={{ justifySelf: "center", fontWeight: 500, textDecoration: "none" }}>
           Diundang pasangan? Masuk dulu
         </a>
       )}

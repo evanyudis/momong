@@ -1,10 +1,9 @@
-import { ChevronRight, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { useState } from "react";
 import { todayISO } from "../dates";
-import { useHousehold } from "../household";
 import { exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
-import { SyncDot } from "./Partner";
-import { DateInput, Sheet, TopBar } from "../ui";
+import { PartnerSection } from "./Partner";
+import { DateInput, Header, Sheet } from "../ui";
 
 export function applyTheme(theme: Prefs["theme"]) {
   const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
@@ -18,11 +17,11 @@ export function applyTheme(theme: Prefs["theme"]) {
   requestAnimationFrame(() => requestAnimationFrame(() => style.remove()));
 }
 
-export function Settings() {
+/** Profil tab: account, partner, mode, sync, export. Settings live here; there is no separate settings page. */
+export function Profil() {
   useDB();
   const s = settings();
   const prefs = getPrefs();
-  const h = useHousehold();
   const born = s.birthMode === "postpartum";
   const [bornOpen, setBornOpen] = useState(false);
 
@@ -37,7 +36,7 @@ export function Settings() {
 
   return (
     <>
-      <TopBar title="Pengaturan" />
+      <Header title="Profil" />
       <div className="stack">
         <section className="card solid stack">
           <label className="field">
@@ -84,15 +83,7 @@ export function Settings() {
           </div>
         </section>
 
-        <a className="card solid" href="#/pasangan">
-          <div className="spread">
-            <div>
-              <div className="card-title" style={{ fontSize: 16 }}>Sinkron & pasangan</div>
-              <div style={{ fontSize: 14, marginTop: 2 }}>{h.signedIn ? <SyncDot /> : <span className="muted">Gratis · opsional</span>}</div>
-            </div>
-            <ChevronRight size={20} className="faint" />
-          </div>
-        </a>
+        <PartnerSection />
 
         <button className="card solid" onClick={download}>
           <div className="spread">

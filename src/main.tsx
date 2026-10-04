@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { applyTheme } from "./screens/Settings";
+import { applyTheme } from "./screens/Profil";
 import { getPrefs } from "./store";
 import { startSync } from "./sync";
 import "./styles.css";

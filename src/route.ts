@@ -2,9 +2,16 @@ import { useSyncExternalStore } from "react";
 import { beforeNavigate } from "./motion";
 
 /** Hash routing: works on any static host without rewrites. "#/log?x=1" → { path: "/log", params }. */
+// Old destinations folded into Profil (IA lock, 4 Oct 2026). Rewritten in place: no extra history entry, no transition.
+const ALIASES: Record<string, string> = { "/pengaturan": "/profil", "/pasangan": "/profil" };
+
 function parse() {
   const raw = location.hash.replace(/^#/, "") || "/";
-  const [path, query = ""] = raw.split("?");
+  let [path, query = ""] = raw.split("?");
+  if (ALIASES[path]) {
+    path = ALIASES[path];
+    history.replaceState(history.state, "", `#${path}${query ? `?${query}` : ""}`);
+  }
   return { path, params: new URLSearchParams(query) };
 }
 let current = parse();

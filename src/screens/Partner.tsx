@@ -31,14 +31,10 @@ export function SyncDot() {
   );
 }
 
-export function Partner() {
+/** Account, invite, and partner status. Lives inside Profil; there is no separate partner page. */
+export function PartnerSection() {
   const h = useHousehold();
-  return (
-    <>
-      <TopBar title="Pasangan" />
-      {!API_URL ? <NoServer /> : h.signedIn ? <Household /> : <SignIn />}
-    </>
-  );
+  return !API_URL ? <NoServer /> : h.signedIn ? <Household /> : <SignIn />;
 }
 
 function Hero({ title, body }: { title: string; body: string }) {
@@ -230,7 +226,7 @@ export function MagicLanding({ token }: { token: string | null }) {
           localStorage.removeItem(PENDING_INVITE);
           await joinHousehold(pendingInvite).then(() => toast("Kamu bergabung dengan pasangan")).catch(() => toast("Undangan sudah tidak berlaku"));
         } else toast("Berhasil masuk");
-        go("#/pasangan");
+        go("#/profil");
       } catch {
         setState("error");
       }
@@ -238,7 +234,7 @@ export function MagicLanding({ token }: { token: string | null }) {
   }, [token]);
   return (
     <>
-      <TopBar title="Masuk" back="#/pasangan" />
+      <TopBar title="Masuk" back="#/profil" />
       <div className="card solid empty" role="status">
         {state === "working"
           ? <><strong>Sebentar…</strong>Menyambungkan akun kamu.</>
@@ -263,7 +259,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     try {
       await joinHousehold(invite!);
       toast("Kamu bergabung dengan pasangan");
-      go("#/pasangan");
+      go("#/profil");
     } catch (e) {
       const code = e instanceof ApiError ? e.code : "";
       toast(code === "seats_full" ? "Kursi keluarga sudah penuh" : "Undangan sudah tidak berlaku");
