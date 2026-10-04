@@ -6,7 +6,7 @@ import { Bag } from "./screens/Bag";
 import { Home } from "./screens/Home";
 import { Insight } from "./screens/Insight";
 import { Log } from "./screens/Log";
-import { JoinLanding, MagicLanding } from "./screens/Partner";
+import { JoinLanding, MagicLanding, Partner } from "./screens/Partner";
 import { Profil } from "./screens/Profil";
 import { Report } from "./screens/Report";
 import { Welcome } from "./screens/Welcome";
@@ -28,13 +28,15 @@ export function App() {
   const ready = s.birthMode === "postpartum" ? true : !!s.hpl;
 
   // Account routes work before onboarding so an invited partner can join first.
-  const accountRoute = path === "/masuk" || path === "/gabung" || path === "/profil";
+  // Account routes work before onboarding so an invited partner can join first.
+  const accountRoute = path === "/masuk" || path === "/gabung" || path === "/pasangan" || path === "/profil";
   let screen;
   if (path === "/masuk") screen = <MagicLanding token={params.get("token")} />;
   else if (path === "/gabung") screen = <JoinLanding invite={params.get("invite")} />;
   else if (!ready && !accountRoute) screen = <Welcome />;
   else if (path === "/log") screen = <Log />;
   else if (path === "/insight") screen = <Insight />;
+  else if (path === "/pasangan") screen = <Partner />;
   else if (path === "/profil") screen = <Profil />;
   else if (path === "/tas") screen = <Bag />;
   else if (path === "/laporan") screen = <Report />;

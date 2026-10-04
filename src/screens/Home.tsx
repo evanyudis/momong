@@ -152,7 +152,7 @@ export function PartnerCard() {
     sub = <SyncDot />;
   }
   return (
-    <a className="card" href="#/profil" data-morph="/profil">
+    <a className="card" href="#/pasangan" data-morph="/pasangan">
       <div className="spread">
         <span className="row" style={{ gap: 8, fontWeight: 600 }}><Users size={20} color="var(--accent-primary-ink)" />Pasangan</span>
         <ChevronRight size={18} className="faint" />

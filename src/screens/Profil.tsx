@@ -1,8 +1,9 @@
-import { Download } from "lucide-react";
+import { ChevronRight, Download } from "lucide-react";
 import { useState } from "react";
 import { todayISO } from "../dates";
+import { useHousehold } from "../household";
 import { exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
-import { PartnerSection } from "./Partner";
+import { SyncDot } from "./Partner";
 import { DateInput, Header, Sheet } from "../ui";
 
 export function applyTheme(theme: Prefs["theme"]) {
@@ -17,11 +18,12 @@ export function applyTheme(theme: Prefs["theme"]) {
   requestAnimationFrame(() => requestAnimationFrame(() => style.remove()));
 }
 
-/** Profil tab: account, partner, mode, sync, export. Settings live here; there is no separate settings page. */
+/** Profil tab: mode, theme, export, and the link to Sinkron & pasangan. Settings live here; there is no separate settings page. */
 export function Profil() {
   useDB();
   const s = settings();
   const prefs = getPrefs();
+  const h = useHousehold();
   const born = s.birthMode === "postpartum";
   const [bornOpen, setBornOpen] = useState(false);
 
@@ -83,7 +85,15 @@ export function Profil() {
           </div>
         </section>
 
-        <PartnerSection />
+        <a className="card solid" href="#/pasangan">
+          <div className="spread">
+            <div>
+              <div className="card-title" style={{ fontSize: 16 }}>Sinkron & pasangan</div>
+              <div style={{ fontSize: 14, marginTop: 2 }}>{h.signedIn ? <SyncDot /> : <span className="muted">Gratis · opsional</span>}</div>
+            </div>
+            <ChevronRight size={20} className="faint" />
+          </div>
+        </a>
 
         <button className="card solid" onClick={download}>
           <div className="spread">
