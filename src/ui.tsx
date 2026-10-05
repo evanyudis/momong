@@ -1,7 +1,7 @@
-import { CalendarDays, ChevronLeft, Sparkles } from "lucide-react";
+import { Baby, Bell, CalendarDays, ChartNoAxesColumn, ChevronLeft, FileText, Gift, History, Sparkles, Timer } from "lucide-react";
 import { type ComponentProps, type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { PLUS_COPY, type PlusVariant } from "./content";
+import { PLUS_COPY, PLUS_FEATURES, type PlusVariant } from "./content";
 import { dayLabel } from "./dates";
 import { EASE_OUT, reducedMotion } from "./motion";
 
@@ -24,10 +24,12 @@ function useDialogFocus(open: boolean, root: { current: HTMLDivElement | null },
     const dialog = root.current;
     if (!open || !dialog) return;
     const previous = document.activeElement as HTMLElement | null;
+    const overflow = [document.documentElement, document.body].map((el) => ({ el, value: el.style.overflow }));
+    overflow.forEach(({ el }) => { el.style.overflow = "hidden"; });
     const background = [...document.querySelectorAll<HTMLElement>("main.app, nav.tabbar")].map((el) => ({ el, inert: el.inert }));
     background.forEach(({ el }) => { el.inert = true; });
-    const controls = () => [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter((el) => el.getClientRects().length);
-    (controls()[0] ?? dialog).focus();
+    const controls = () => [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter((el) => el.getClientRects().length && !el.closest('[inert], [aria-hidden="true"]'));
+    (controls()[0] ?? dialog).focus({ preventScroll: true });
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); closeRef.current(); }
       if (e.key !== "Tab") return;
@@ -40,7 +42,8 @@ function useDialogFocus(open: boolean, root: { current: HTMLDivElement | null },
     return () => {
       document.removeEventListener("keydown", key);
       background.forEach(({ el, inert }) => { el.inert = inert; });
-      if (previous?.isConnected) previous.focus();
+      overflow.forEach(({ el, value }) => { el.style.overflow = value; });
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, [open, root]);
 }
@@ -82,9 +85,10 @@ type Motion = "none" | "enter" | "expand" | "collapse" | "exit";
 const SETTLE: Record<Stage, Motion> = { closed: "exit", compact: "collapse", expanded: "expand" };
 const INSET = 12; // compact card's side gap (px); the card grows to full width as it expands
 const EXIT_MS = 200; // matches [data-motion="exit"] in styles.css
+const FEATURE_ICONS = [Timer, Bell, ChartNoAxesColumn, History, FileText, Gift, Baby];
 
 /**
- * Plus soft paywall: one surface, three variants. Checkout lives on the Plus page.
+ * Plus soft paywall. Checkout lives on the Plus page.
  * A compact floating sheet that grows into a full page: tap or drag up expands, swipe down collapses, further down
  * dismisses. Transform + opacity only. Drag writes styles directly (no per-frame renders); on release a CSS
  * transition retargets from the live pose, so grabbing it mid-flight and reversing reverses the motion.
@@ -104,12 +108,13 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
   const stage = useRef<Stage>("closed");
   const drag = useRef<{ y0: number; Y0: number; Y: number; y: number; t: number; v: number; moved: boolean } | null>(null);
   const swallowClick = useRef(false);
+  const keyboard = useRef(false);
 
   // Y = the panel's translateY. Compact parks it so only head + footer show; expanded is Y = 0.
   function geo() {
     const H = panel.current!.offsetHeight, W = panel.current!.offsetWidth;
     const sc = (W - 2 * INSET) / W;
-    const Yc = H - sc * (head.current!.offsetTop + head.current!.offsetHeight + foot.current!.offsetHeight);
+    const Yc = Math.max(1, H - sc * (head.current!.offsetTop + head.current!.offsetHeight + foot.current!.offsetHeight));
     return { H, sc, Yc };
   }
   // One pose drives every layer, so panel, footer and backdrop always move as a unit.
@@ -117,6 +122,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
     const { H, sc, Yc } = geo();
     const s = sc + (1 - sc) * Math.min(Math.max(1 - Y / Yc, 0), 1);
     for (const el of [backdrop.current!, panel.current!, foot.current!]) el.dataset.motion = motion;
+    root.current!.dataset.instant = String(keyboard.current || reducedMotion());
     panel.current!.style.transform = `translate(-50%, ${Y}px) scale(${s})`;
     foot.current!.style.transform = `translate(-50%, ${Math.max(0, Y - Yc)}px) scale(${s})`;
     backdrop.current!.style.opacity = String(Math.min(Math.max((H - Y) / (H - Yc), 0), 1));
@@ -126,10 +132,12 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
     const { H, Yc } = geo();
     place(to === "expanded" ? 0 : to === "compact" ? Yc : H, motion);
     setExpanded(to === "expanded");
+    if (to !== "expanded") panel.current!.scrollTop = 0;
   }
 
   useLayoutEffect(() => {
     if (!mounted) return;
+    keyboard.current = !!document.activeElement?.matches(":focus-visible");
     panel.current!.style.paddingBottom = `${foot.current!.offsetHeight}px`; // expanded list clears the pinned footer
     place(geo().H, "none");
     panel.current!.getBoundingClientRect(); // commit the off-screen pose so the enter transitions from it
@@ -143,7 +151,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
     }
     if (!mounted) return;
     go("closed");
-    const t = setTimeout(() => setMounted(false), EXIT_MS);
+    const t = setTimeout(() => setMounted(false), keyboard.current || reducedMotion() ? 0 : EXIT_MS);
     return () => clearTimeout(t);
   }, [variant, mounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -157,6 +165,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
   function onPointerDown(e: React.PointerEvent) {
     if (e.button !== 0 || stage.current === "closed") return;
     swallowClick.current = false;
+    keyboard.current = false;
     // Grab the sheet where it is right now, even mid-transition.
     const Y = new DOMMatrix(getComputedStyle(panel.current!).transform).f;
     place(Y, "none");
@@ -193,23 +202,38 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
     if (to === "closed") onClose();
     else go(to);
   }
-  function onHeadClick() {
+  function onHeadClick(e: React.MouseEvent) {
+    if (e.detail === 0) { keyboard.current = true; swallowClick.current = false; }
     if (swallowClick.current) { swallowClick.current = false; return; }
     go(stage.current === "expanded" ? "compact" : "expanded");
   }
 
   if (!mounted) return null;
   return createPortal(
-    <div ref={root} tabIndex={-1} className="paywall" role="dialog" aria-modal="true" aria-label={c.title} data-expanded={expanded}>
+    <div ref={root} tabIndex={-1} className="paywall" role="dialog" aria-modal="true" aria-label={c.title} data-expanded={expanded}
+      onKeyDownCapture={() => { keyboard.current = true; root.current!.dataset.instant = "true"; }}
+      onPointerDownCapture={() => { keyboard.current = false; root.current!.dataset.instant = String(reducedMotion()); }}>
       <div ref={backdrop} className="paywall-backdrop" onClick={onClose} />
       <div ref={panel} className="paywall-panel">
         <div
           ref={head} className="paywall-head" onClick={onHeadClick}
-          onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+          onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+          onPointerCancel={() => { drag.current = null; swallowClick.current = true; go(stage.current, "none"); }}
         >
-          <button type="button" className="paywall-grip" aria-expanded={expanded} aria-label={expanded ? "Ciutkan" : "Perluas"} />
+          <button type="button" className="paywall-grip" aria-expanded={expanded} aria-label={expanded ? "Ciutkan manfaat Plus" : "Lihat semua manfaat Plus"}><span /></button>
           <div className="paywall-title"><PlusPill /><h3>{c.title}</h3></div>
           <p className="muted">{c.body}</p>
+        </div>
+        <div className="paywall-benefits" inert={!expanded} aria-hidden={!expanded}>
+          <ul className="paywall-features">
+            {PLUS_FEATURES.map((feature, i) => {
+              const Icon = FEATURE_ICONS[i];
+              return <li key={feature.title} style={{ "--i": i } as React.CSSProperties}>
+                <span className="paywall-feature-icon"><Icon size={21} strokeWidth={1.75} aria-hidden="true" /></span>
+                <div><h4>{feature.title}</h4><p className="muted">{feature.body}</p></div>
+              </li>;
+            })}
+          </ul>
           {(variant ?? last) === "pdf" && (
             <div className="chart-preview">
               <div className="card-title" style={{ fontSize: 16 }}>Laporan 7 hari</div>
@@ -220,9 +244,10 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
         </div>
       </div>
       <div ref={foot} className="paywall-foot">
-        <a className="btn btn-coral lg block" href="#/plus" onClick={onClose}>Coba Plus</a>
+        <p className="paywall-sandbox">Uji pembayaran sandbox</p>
+        <a className="btn btn-coral lg block" href="#/plus" onClick={onClose}>Lanjut ke Plus</a>
         <button type="button" className="btn btn-soft block" style={{ marginTop: 10 }} onClick={onClose}>Nanti saja</button>
-        <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 14 }}>Catatan, bukan saran medis.</p>
+        <p className="paywall-note">Sinkron dan pasangan tetap Free.<br />Catatan, bukan saran medis.</p>
       </div>
     </div>,
     document.body,

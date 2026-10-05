@@ -41,14 +41,23 @@ export function weekNote(week: number): string {
   return "Sudah dekat. Simpan timer kontraksi di layar utama dan pastikan tas RS siap dibawa.";
 }
 
-// Plus soft paywall. Titles are fixed by the brief; bodies reuse copy already in the app.
-// No price anywhere in the Plus UI.
-export type PlusVariant = "insights" | "perkiraan" | "pdf";
+export type PlusVariant = "overview" | "insights" | "perkiraan" | "pdf";
 export const PLUS_COPY: Record<PlusVariant, { title: string; body: string }> = {
-  insights: { title: "Lihat pola minggu ini", body: "Riwayat ASI, pompa, dan popok: 30 hari terakhir. Botol: semua." },
-  perkiraan: { title: "Perkiraan kapan berikutnya", body: "Fitur ini sedang disiapkan. Checkout sandbox hanya untuk pengujian." },
-  pdf: { title: "Simpan laporan lengkap", body: "PDF untuk bidan · 1× gratis per bulan" },
+  overview: { title: "BumpBuddy Plus", body: "Lebih banyak ruang untuk mengikuti tumbuhnya si kecil." },
+  insights: { title: "Lihat pola minggu ini", body: "Grafik dari catatanmu, dengan riwayat lebih dari 30 hari." },
+  perkiraan: { title: "Perkiraan kapan berikutnya", body: "Perkiraan dari pola menyusu yang kamu catat. Bukan jadwal atau saran medis." },
+  pdf: { title: "Simpan laporan lengkap", body: "Unduh PDF tanpa batas, langsung dari perangkatmu." },
 };
+
+export const PLUS_FEATURES = [
+  { title: "Perkiraan menyusu", body: "Dari pola catatanmu, bukan saran medis." },
+  { title: "Pengingat pilihanmu", body: "Atur sendiri; berjalan selama aplikasi terbuka." },
+  { title: "Grafik harian", body: "Lihat pola menyusu, pompa, dan popok." },
+  { title: "Riwayat lengkap", body: "Buka catatan lebih dari 30 hari." },
+  { title: "PDF tanpa batas", body: "Unduh laporan untuk dibawa saat kontrol." },
+  { title: "Wishlist bersama", body: "Bagikan tautan agar keluarga bisa claim hadiah." },
+  { title: "Multi bayi", body: "Profil dan catatan terpisah untuk tiap si kecil." },
+];
 
 export const DIAPER_LABEL: Record<string, string> = { pee: "Pipis", poo: "Pup", both: "Pipis + pup" };
 export const SIDE_LABEL: Record<string, string> = { left: "Kiri", right: "Kanan", both: "Keduanya" };

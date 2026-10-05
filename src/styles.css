@@ -225,6 +225,10 @@ button.card, a.card { display: block; width: 100%; text-align: left; border: 0; 
 .btn-ghost { background: var(--surface); box-shadow: var(--elevation-raised); }
 .btn-soft { background: var(--surface-sunk); }
 .btn-danger { background: var(--danger-soft); color: var(--danger); }
+.btn-danger-soft { background: var(--danger-soft); color: var(--field-danger); }
+.reset-actions { margin-top: 20px; }
+.reset-danger { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border-subtle); }
+.reset-danger .btn-danger { background: var(--field-danger); color: var(--surface); }
 .btn-signin { background: var(--signin-primary); color: var(--signin-primary-ink); }
 .icon-btn {
   position: relative;
@@ -532,8 +536,18 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 .paywall [data-motion="none"] { transition: none; } /* finger-driven */
 .paywall-head { padding-bottom: 16px; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
 .paywall-head h3 { font-size: 22px; letter-spacing: -0.02em; margin-bottom: 4px; }
-.paywall-grip { position: relative; display: block; width: 40px; height: 5px; margin: 0 auto 14px; padding: 0; border: 0; border-radius: 3px; background: var(--border-subtle); }
-.paywall-grip::after { content: ""; position: absolute; left: 50%; top: 50%; width: 64px; height: 44px; translate: -50% -50%; }
+.paywall-grip { position: relative; display: block; width: 64px; height: 44px; margin: 0 auto 4px; padding: 0; border: 0; border-radius: 3px; background: transparent; cursor: pointer; }
+.paywall-grip span { display: block; width: 40px; height: 5px; margin: auto; border-radius: 3px; background: var(--border-subtle); }
+.paywall-benefits { padding-bottom: 24px; }
+.paywall-features { list-style: none; padding: 0; margin: 0; }
+.paywall-features li { display: flex; align-items: flex-start; gap: 14px; padding: 15px 0; border-top: 1px solid var(--border-subtle); opacity: 0; transform: translateY(8px); transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out); }
+.paywall[data-expanded="true"] .paywall-features li { opacity: 1; transform: none; transition-delay: calc(var(--i) * 18ms); }
+.paywall-feature-icon { width: 38px; height: 38px; display: grid; place-items: center; flex: none; border-radius: 12px; background: var(--plus-pill); color: var(--plus-pill-ink); }
+.paywall-features h4 { font-size: 16px; font-weight: 600; margin: 0 0 3px; }
+.paywall-features p { font-size: 14px; line-height: 1.45; margin: 0; text-wrap: pretty; }
+.paywall-sandbox { font-size: 13px; color: var(--ink-muted); text-align: center; margin: 0 0 10px; }
+.paywall-note { font-size: 13px; line-height: 1.4; color: var(--ink-muted); text-align: center; margin: 12px 0 0; }
+.paywall[data-instant="true"] *, .paywall[data-instant="true"] *::before { transition: none !important; animation: none !important; }
 
 .paywall-title { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .paywall-title h3 { margin: 0; }

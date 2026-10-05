@@ -4,7 +4,7 @@ import type { PlusVariant } from "../content";
 import { todayISO } from "../dates";
 import { useHousehold } from "../household";
 import { addBaby, babyProfiles, activeBabyId, isPlus, exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
-import { signOut } from "../sync";
+import { resetGuestData, signOut } from "../sync";
 import { SyncDot } from "./Partner";
 import { DateInput, Header, PlusSheet, Sheet, toast } from "../ui";
 
@@ -30,6 +30,7 @@ export function Profil() {
   const [bornOpen, setBornOpen] = useState(false);
   const [backOpen, setBackOpen] = useState(false);
   const [addingBaby, setAddingBaby] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const [plus, setPlus] = useState<PlusVariant | null>(null);
 
   function download() {
@@ -59,17 +60,18 @@ export function Profil() {
             <span>Nama panggilan</span>
             <input className="input" value={prefs.name ?? ""} placeholder="Bunda" onChange={(e) => setPrefs({ name: e.target.value })} />
           </label>
-          <label className="field">
+          {!born && <label className="field">
             <span>HPL (hari perkiraan lahir)</span>
             <DateInput value={s.hpl ?? ""} onChange={(e) => e.target.value && saveSettings({ hpl: e.target.value })} />
-          </label>
+          </label>}
         </section>
 
         <a className="btn btn-soft block" href="#/pengingat">Pengingat · Plus</a>
         <section className="card plus-card stack">
           <div className="card-title">{h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : "Plus · Selamanya (sandbox)"}</div>
           <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi. Pembayaran masih sandbox.</p>
-          <a className="btn btn-coral block" href="#/plus">{h.me?.entitlement.plan === "plus_lifetime" ? "Lihat status Plus" : "Coba Plus"}</a>
+          {h.me?.entitlement.plan === "plus_lifetime" ? <a className="btn btn-coral block" href="#/plus">Lihat status Plus</a>
+            : <button className="btn btn-coral block" aria-haspopup="dialog" onClick={() => setPlus("overview")}>Coba Plus</button>}
         </section>
 
         <section className="card solid">
@@ -133,6 +135,11 @@ export function Profil() {
             void signOut(); toast("Keluar dari akun. Catatan tetap di HP ini.");
           }}>Keluar akun</button>
         </section>}
+        {!h.acc.token && <section className="card solid stack">
+          <div className="card-title">Data di perangkat</div>
+          <p className="card-sub">Hapus catatan dan mulai kembali dari awal.</p>
+          <button className="btn btn-danger-soft block" aria-haspopup="dialog" onClick={() => setResetOpen(true)}>Hapus semua data di perangkat</button>
+        </section>}
         <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>BumpBuddy · Catatan, bukan saran medis.</p>
       </div>
 
@@ -140,6 +147,18 @@ export function Profil() {
       <BornSheet open={bornOpen} onOpenChange={setBornOpen} />
       <PregnantSheet open={backOpen} onOpenChange={setBackOpen} />
       <PlusSheet variant={plus} onClose={() => setPlus(null)} />
+      <Sheet open={resetOpen} onOpenChange={setResetOpen} title="Hapus semua data di perangkat?">
+        <p className="muted">Semua catatan, profil bayi, setup, pengingat, tema, dan antrean sinkron di perangkat ini akan dihapus permanen. Data yang sudah tersimpan di server tetap ada.</p>
+        <div className="stack reset-actions">
+          <button className="btn btn-ink block" onClick={() => setResetOpen(false)}>Batal</button>
+          <button className="btn btn-soft block" onClick={download}>Ekspor JSON</button>
+        </div>
+        <div className="reset-danger">
+          <button className="btn btn-danger block" onClick={() => {
+            if (resetGuestData()) location.replace(`${location.pathname}#/`);
+          }}>Hapus semua data</button>
+        </div>
+      </Sheet>
     </>
   );
 }

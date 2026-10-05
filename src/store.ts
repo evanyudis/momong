@@ -168,3 +168,14 @@ export function setPrefs(p: Prefs) {
   version++;
   listeners.forEach((l) => l());
 }
+
+/** Device reset only: no tombstones and no upload notification. */
+export function resetDeviceData() {
+  for (const storage of [localStorage, sessionStorage]) {
+    const keys = Array.from({ length: storage.length }, (_, i) => storage.key(i));
+    for (const key of keys) if (key?.startsWith("bb_")) storage.removeItem(key);
+  }
+  db = {}; dirty.clear(); prefs = {}; plusAccess = false;
+  version++;
+  listeners.forEach((l) => l());
+}

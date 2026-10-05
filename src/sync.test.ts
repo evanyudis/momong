@@ -4,7 +4,7 @@ import { createServer } from "vite";
 
 test("login does not upload; opt-in sync merges; logout ignores an in-flight response and preserves pending data", async () => {
   const memory = new Map<string, string>();
-  const storage = { getItem: (k: string) => memory.get(k) ?? null, setItem: (k: string, v: string) => void memory.set(k, v), removeItem: (k: string) => void memory.delete(k) };
+  const storage = { get length() { return memory.size; }, key: (i: number) => [...memory.keys()][i] ?? null, getItem: (k: string) => memory.get(k) ?? null, setItem: (k: string, v: string) => void memory.set(k, v), removeItem: (k: string) => void memory.delete(k) };
   Object.assign(globalThis, { localStorage: storage, sessionStorage: storage });
   Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
   const server = await createServer({ server: { middlewareMode: true }, define: { "import.meta.env.VITE_API_URL": JSON.stringify("http://test.local") } });
@@ -29,6 +29,8 @@ test("login does not upload; opt-in sync merges; logout ignores an in-flight res
     const store = await server.ssrLoadModule("/src/store.ts");
     store.put("kicks", { id: "local", count: 1 });
     await sync.authEmail("masuk", "sari@example.com", "test-password");
+    assert.equal(sync.resetGuestData(), false, "signed-in reset is refused");
+    assert.equal(store.get("kicks", "local").count, 1);
     assert.equal(sync.account().syncEnabled, false);
     await sync.syncNow();
     assert.equal(calls.filter((p) => p === "/sync").length, 0);
@@ -57,5 +59,14 @@ test("login does not upload; opt-in sync merges; logout ignores an in-flight res
     assert.ok(store.pending().some((r: any) => r.id === "pending"));
     assert.equal(memory.has("bb_cursor"), false);
     assert.equal(sync.account().syncEnabled, false);
+    const beforeReset = calls.length;
+    const oldSession = sync.refreshMe();
+    assert.equal(sync.resetGuestData(), true);
+    await assert.rejects(oldSession, /session_changed/);
+    assert.equal(calls.length, beforeReset + 1, "reset itself sends no request");
+    assert.equal(sync.account().me, null);
+    assert.deepEqual(store.pending(), []);
+    assert.deepEqual(JSON.parse(store.exportJSON()).data, {});
+    assert.equal(memory.size, 0);
   } finally { globalThis.fetch = realFetch; await server.close(); }
 });

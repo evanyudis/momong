@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { nameFromEmail, type SignInMode } from "./signin";
-import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending } from "./store";
+import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
  *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
@@ -189,6 +189,13 @@ export async function signOut() {
       method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: "{}",
     }).catch(() => {});
   }
+}
+
+export function resetGuestData() {
+  if (state.token) return false;
+  clearSession();
+  resetDeviceData();
+  return true;
 }
 
 export async function createInvite() {

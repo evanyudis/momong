@@ -3,11 +3,14 @@ import { test } from "node:test";
 
 // Minimal localStorage so the store module can load under node.
 const mem = new Map<string, string>();
-(globalThis as any).localStorage = {
+const storage = {
+  get length() { return mem.size; },
+  key: (i: number) => [...mem.keys()][i] ?? null,
   getItem: (k: string) => mem.get(k) ?? null,
   setItem: (k: string, v: string) => void mem.set(k, v),
   removeItem: (k: string) => void mem.delete(k),
 };
+Object.assign(globalThis, { localStorage: storage, sessionStorage: storage });
 const s = await import("./store.ts");
 
 test("local edits queue for push and clear only when unchanged", () => {
@@ -80,4 +83,19 @@ test("Plus history and baby profiles isolate records, preserve legacy data and s
   assert.equal(s.activeBabyId(), second);
   assert.ok(s.list("pump").some((r) => r.id === "second-pump"));
   assert.ok(s.pending().some((r) => r.id === "second-pump"));
+});
+
+test("device reset clears all BumpBuddy state without tombstones or upload notifications", () => {
+  s.setPrefs({ theme: "dark", guest: true, name: "Sari" });
+  mem.set("bb_payment:user", "order"); mem.set("bb_auth_return", "#/plus"); mem.set("unrelated", "keep");
+  let uploads = 0;
+  const unsubscribe = s.onLocalChange(() => uploads++);
+  s.resetDeviceData(); unsubscribe();
+  assert.deepEqual(s.settings(), {});
+  assert.deepEqual(s.getPrefs(), {});
+  assert.deepEqual(s.pending(), []);
+  assert.deepEqual(JSON.parse(s.exportJSON()).data, {});
+  assert.equal(s.isPlus(), false);
+  assert.equal(uploads, 0);
+  assert.deepEqual([...mem.entries()], [["unrelated", "keep"]]);
 });
