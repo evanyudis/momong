@@ -1,7 +1,8 @@
+import { nextFeed, weeklyTotals } from "../plus";
 import { useState } from "react";
 import type { PlusVariant } from "../content";
 import { durationLabel, isToday, midnight, timeLabel } from "../dates";
-import { list, settings, useDB } from "../store";
+import { isPlus, list, settings, useDB } from "../store";
 import { BlurBars, Header, PlusPill, PlusSheet } from "../ui";
 import { contractionStats, PatternAlert } from "./Log";
 
@@ -80,7 +81,8 @@ function NewbornInsight() {
   return (
     <>
       <Header title="Insight" />
-      {preview && (
+      {isPlus() && <PlusInsights />}
+      {!isPlus() && preview && (
         <section className="card plus-card" style={{ marginBottom: 14 }}>
           <div className="spread">
             <div className="card-title">Pola menyusu 7 hari</div>
@@ -113,4 +115,30 @@ function NewbornInsight() {
       <PlusSheet variant={plus} onClose={() => setPlus(null)} />
     </>
   );
+}
+
+function PlusInsights() {
+  const records = (["bottle", "breast", "pump", "diaper"] as const).flatMap((kind) => list(kind).map((r) => ({ kind, r })));
+  const estimate = nextFeed(records.filter(({ kind }) => kind === "bottle" || kind === "breast").map(({ r }) => r));
+  const days = weeklyTotals(records);
+  return <div className="stack" style={{ marginBottom: 14 }}>
+    <section className="card stack">
+      <h2>Perkiraan menyusu berikutnya</h2>
+      {estimate ? <><p className="stat num">{timeLabel(estimate.at)}</p><p className="muted">Perkiraan dari {estimate.samples} catatan terakhir.{estimate.at < Date.now() ? " Waktu perkiraan sudah lewat." : ""}</p></>
+        : <p className="muted">Catat minimal 3 sesi botol atau ASI dalam 7 hari untuk melihat perkiraan.</p>}
+      <p className="faint">Berdasarkan kebiasaan catatan, bukan jadwal wajib atau saran medis. Ikuti kebutuhan si kecil.</p>
+    </section>
+    {([['feeds', 'Menyusu', 'sesi'], ['pump', 'Pompa', 'ml'], ['diapers', 'Popok', 'kali']] as const).map(([key, label, unit]) => {
+      const max = Math.max(1, ...days.map((d) => d[key]));
+      return <section className="card stack" key={key}>
+        <h2>{label} · 7 hari</h2>
+        {days.every((d) => d[key] === 0) ? <p className="muted">Belum ada catatan. Mulai dari tab Log.</p> : <>
+          <svg viewBox="0 0 280 100" role="img" aria-label={`Grafik ${label.toLowerCase()} 7 hari; angka tersedia di bawah`}>
+            {days.map((d, i) => <rect key={d.at} x={i * 40 + 8} y={95 - d[key] / max * 85} width={24} height={d[key] / max * 85} rx={4} fill="var(--accent-primary)" />)}
+          </svg>
+          <div className="list">{days.map((d) => <div className="spread" key={d.at}><span>{dayName(d.at)}</span><span className="num">{d[key]} {unit}</span></div>)}</div>
+        </>}
+      </section>;
+    })}
+  </div>;
 }

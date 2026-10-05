@@ -4,7 +4,7 @@
   "description": "BumpBuddy PWA (Free): pregnancy tools, thin newborn mode, sync and partner",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && node scripts/offline-assets.mjs",
     "preview": "vite preview",
     "test": "tsx --test src/*.test.ts"
   },
@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/evanyudis/momong#readme",
   "dependencies": {
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.51.0",
     "react": "^19.3.0",
     "react-aria-components": "^1.21.1",

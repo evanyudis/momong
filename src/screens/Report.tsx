@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { DIAPER_LABEL, type PlusVariant } from "../content";
 import { dateLabel, durationLabel, pregnancy, timeLabel } from "../dates";
-import { get, getPrefs, list, put, settings, useDB } from "../store";
-import { PlusSheet, TopBar } from "../ui";
+import { isPlus, get, getPrefs, list, put, settings, useDB } from "../store";
+import { toast, PlusSheet, TopBar } from "../ui";
 import { contractionStats, describe } from "./Log";
 
 const DAY = 86_400_000;
@@ -12,16 +12,14 @@ const monthKey = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}`;
 export function Report() {
   useDB();
   const s = settings();
-  const since = Date.now() - 14 * DAY;
-  const usedThisMonth = get("settings", "report")?.month === monthKey();
+  const [range, setRange] = useState("14");
+  const [busy, setBusy] = useState(false);
+  const since = isPlus() && range === "all" ? 0 : Date.now() - Number(isPlus() ? range : "14") * DAY;
+  const usedThisMonth = !isPlus() && get("settings", "report")?.month === monthKey();
   const born = s.birthMode === "postpartum";
   const p = s.hpl ? pregnancy(s.hpl) : null;
   const [plus, setPlus] = useState<PlusVariant | null>(null);
 
-  function print() {
-    put("settings", { id: "report", month: monthKey() });
-    window.print();
-  }
 
   const contractions = list("contractions").filter((c) => c.at >= since && c.end);
   const cs = contractionStats(contractions);
@@ -30,17 +28,39 @@ export function Report() {
   const feeds = (["bottle", "breast", "pump", "diaper"] as const).flatMap((k) => list(k).filter((r) => r.at >= since).map((r) => ({ k, r })))
     .sort((a, b) => b.r.at - a.r.at);
 
+  async function download() {
+    if (busy || usedThisMonth) return;
+    setBusy(true);
+    try {
+      const { downloadReportPDF } = await import("../pdf");
+      const lines = [
+        `Dibuat ${dateLabel(Date.now())}. Profil: ${s.babyName || "Si kecil"}.`,
+        ...(p ? [`HPL ${dateLabel(s.hpl!)}. Minggu ke-${p.week}.`] : []),
+        ...(born ? feeds.map(({ k, r }) => `${dateLabel(r.at)} ${timeLabel(r.at)} - ${describe(k, r)}`) : [
+          "Kontraksi", ...contractions.map((r) => `${dateLabel(r.at)} ${timeLabel(r.at)} - ${durationLabel(r.end - r.at)}`),
+          "Gerakan", ...kicks.map((r) => `${dateLabel(r.at)} ${timeLabel(r.at)} - ${r.count} gerakan`),
+          "Gejala", ...symptoms.map((r) => `${dateLabel(r.at)} ${timeLabel(r.at)} - ${r.name}${r.note ? `: ${r.note}` : ""}`),
+        ]),
+      ];
+      await downloadReportPDF(`Laporan ${isPlus() && range === "all" ? "semua catatan" : `${isPlus() ? range : "14"} hari`} - ${getPrefs().name || "Bunda"}`, lines, `bumpbuddy-${new Date().toISOString().slice(0, 10)}.pdf`);
+      if (!isPlus()) put("settings", { id: "report", month: monthKey() });
+      toast("PDF siap diunduh");
+    } catch { toast("PDF belum bisa dibuat. Coba lagi; kuota belum terpakai."); }
+    finally { setBusy(false); }
+  }
+
   return (
     <>
       <div className="no-print"><TopBar title="Laporan" back="#/log" /></div>
       <div className="stack">
         <section className="card solid">
-          <div className="card-title">Laporan 14 hari · {getPrefs().name || "Bunda"}</div>
+          <div className="card-title">Laporan {isPlus() && range === "all" ? "semua catatan" : `${isPlus() ? range : "14"} hari`} · {getPrefs().name || "Bunda"}</div>
           <div className="card-sub">
             Dibuat {dateLabel(Date.now())}{p ? ` · HPL ${dateLabel(s.hpl!)} · minggu ke-${p.week}` : ""}
           </div>
         </section>
 
+        {isPlus() && <label className="field no-print"><span>Periode laporan</span><select className="input" value={range} onChange={(e) => setRange(e.target.value)}><option value="7">7 hari</option><option value="14">14 hari</option><option value="30">30 hari</option><option value="all">Semua catatan</option></select></label>}
         {!born && (
           <>
             <section className="card solid">
@@ -78,12 +98,13 @@ export function Report() {
           <button
             className={`btn lg block ${usedThisMonth ? "btn-soft" : "btn-ink"}`}
             aria-haspopup={usedThisMonth ? "dialog" : undefined}
-            onClick={usedThisMonth ? () => setPlus("pdf") : print}
+            disabled={busy}
+            onClick={usedThisMonth ? () => setPlus("pdf") : download}
           >
-            {usedThisMonth ? "PDF bulan ini sudah dibuat" : "Simpan sebagai PDF"}
+            {busy ? "Membuat PDF…" : usedThisMonth ? "PDF bulan ini sudah dibuat" : "Unduh PDF"}
           </button>
           <p className="faint" style={{ fontSize: 14, textAlign: "center" }}>
-            {usedThisMonth ? "Kuota gratis kembali awal bulan depan. Laporan tetap bisa dilihat di sini." : "1× gratis per bulan. Pilih “Simpan sebagai PDF” di jendela cetak."}
+            {usedThisMonth ? "Kuota gratis kembali awal bulan depan. Laporan tetap bisa dilihat di sini." : isPlus() ? "PDF tanpa batas · Plus" : "1× gratis per bulan. PDF dibuat di perangkat ini."}
           </p>
         </div>
       </div>
