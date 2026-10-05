@@ -1,6 +1,6 @@
 // Offline shell: network-first for navigations, stale-while-revalidate for same-origin assets and fonts.
 // API calls (same-origin /api, /sync, /me, /household) are never cached (sync handles offline itself).
-const CACHE = "bb-v4";
+const CACHE = "bb-v5";
 self.addEventListener("install", (e) => {
   e.waitUntil((async () => {
     const res = await fetch('/offline-assets.json', { cache: 'no-store' });

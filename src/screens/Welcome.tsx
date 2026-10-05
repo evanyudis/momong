@@ -24,8 +24,8 @@ export function Welcome({ user }: { user?: { name: string; email: string } }) {
     <div className="onboarding stack">
       <header className="header signin-head">
         {details && <button type="button" className="icon-btn" aria-label="Kembali ke pilihan pendamping" onClick={() => setDetails(false)}><ChevronLeft size={22} /></button>}
-        <span className="signin-brand">BumpBuddy · {details ? "Langkah 2 dari 2" : "Langkah 1 dari 2"}</span>
-        <h1 ref={heading} tabIndex={-1}>{details ? mode === "pregnant" ? "Kenalan dulu, yuk" : "Kenalan dengan si kecil" : "BumpBuddy menemani apa?"}</h1>
+        <span className="signin-brand">Momong · {details ? "Langkah 2 dari 2" : "Langkah 1 dari 2"}</span>
+        <h1 ref={heading} tabIndex={-1}>{details ? mode === "pregnant" ? "Kenalan dulu, yuk" : "Kenalan dengan si kecil" : "Momong menemani apa?"}</h1>
         <p className="muted">{details ? "Isi beberapa detail supaya catatanmu sesuai kebutuhan." : "Pilih yang kamu butuhkan sekarang. Bisa diganti nanti di Profil."}</p>
       </header>
 
@@ -58,7 +58,7 @@ export function Welcome({ user }: { user?: { name: string; email: string } }) {
               <label className="field"><span>Tanggal lahir anak</span><DateInput required max={todayISO()} value={birth} onChange={(e) => setBirth(e.target.value)} /></label>
             </>
           )}
-          <button type="submit" className="btn btn-signin lg block">Mulai pakai BumpBuddy</button>
+          <button type="submit" className="btn btn-signin lg block">Mulai pakai Momong</button>
         </form>
       )}
     </div>

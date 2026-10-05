@@ -126,7 +126,7 @@ export function applyRemote(changes: RemoteChange[]) {
 }
 
 export function exportJSON() {
-  return JSON.stringify({ app: "BumpBuddy", exportedAt: new Date().toISOString(), data: db }, null, 2);
+  return JSON.stringify({ app: "Momong", version: 2, exportedAt: new Date().toISOString(), data: db, preferences: { name: prefs.name, theme: prefs.theme, activeBabyId: prefs.activeBabyId, reminders: prefs.reminders } }, null, 2);
 }
 
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l); };
@@ -178,4 +178,83 @@ export function resetDeviceData() {
   db = {}; dirty.clear(); prefs = {}; plusAccess = false;
   version++;
   listeners.forEach((l) => l());
+}
+
+export type Backup = { data: DB; preferences: Prefs; records: number };
+export const deviceHasData = () => Object.values(db).some((rows) => Object.keys(rows ?? {}).length > 0);
+const collections: Collection[] = ["baby", "settings", "contractions", "kicks", "symptoms", "bag", "bottle", "breast", "pump", "diaper", "wishlist"];
+const object = (v: unknown): v is Record<string, any> => !!v && typeof v === "object" && !Array.isArray(v);
+export function parseBackup(text: string): Backup {
+  if (new Blob([text]).size > 5 * 1024 * 1024) throw new Error("File terlalu besar. Maksimal 5 MiB.");
+  let value: any;
+  try { value = JSON.parse(text); } catch { throw new Error("File bukan JSON yang valid."); }
+  if (!object(value) || !["Momong", "BumpBuddy"].includes(value.app) || !object(value.data) || value.version !== undefined && value.version !== 2)
+    throw new Error("Format cadangan tidak didukung.");
+  let records = 0;
+  for (const [col, rows] of Object.entries(value.data)) {
+    if (!collections.includes(col as Collection) || !object(rows)) throw new Error("Koleksi cadangan tidak valid.");
+    for (const [id, row] of Object.entries(rows)) {
+      if (!object(row) || row.id !== id || !id || id.includes("/") || !Number.isFinite(row.updatedAt) || row.updatedAt < 0 ||
+        row.deleted !== undefined && typeof row.deleted !== "boolean" ||
+        row.babyId !== undefined && typeof row.babyId !== "string" ||
+        row.at !== undefined && !Number.isFinite(row.at))
+        throw new Error("Catatan cadangan tidak valid.");
+      for (const [key, field] of Object.entries(row)) {
+        if (["__proto__", "constructor", "prototype"].includes(key) || field !== null && !["string", "number", "boolean"].includes(typeof field) ||
+          typeof field === "number" && !Number.isFinite(field) || typeof field === "string" && field.length > 10000)
+          throw new Error("Isi catatan cadangan tidak valid.");
+      }
+      if (["settings", "baby"].includes(col)) {
+        for (const date of [row.hpl, row.babyBirth]) if (date !== undefined && (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(midnight(date)) || todayISO(new Date(midnight(date))) !== date))
+          throw new Error("Tanggal profil cadangan tidak valid.");
+        if (row.birthMode !== undefined && !["pregnant", "postpartum"].includes(row.birthMode)) throw new Error("Mode profil cadangan tidak valid.");
+      }
+      for (const key of ["babyName", "name", "note", "label", "type", "side", "milk"]) if (row[key] !== undefined && typeof row[key] !== "string")
+        throw new Error("Isi catatan cadangan tidak valid.");
+      for (const key of ["checked", "custom", "have", "done"]) if (row[key] !== undefined && typeof row[key] !== "boolean") throw new Error("Status catatan cadangan tidak valid.");
+      for (const key of ["count", "minutes", "ml", "end", "last", "interval"]) if (row[key] !== undefined && (!Number.isFinite(row[key]) || row[key] < 0))
+        throw new Error("Angka catatan cadangan tidak valid.");
+      records++;
+    }
+  }
+  const preferences: Prefs = {};
+  if (value.version === 2) {
+    const p = value.preferences;
+    if (!object(p)) throw new Error("Preferensi cadangan tidak valid.");
+    if (p.name !== undefined) {
+      if (typeof p.name !== "string" || p.name.length > 120) throw new Error("Nama cadangan tidak valid.");
+      preferences.name = p.name;
+    }
+    if (p.theme !== undefined) {
+      if (!["light", "dark", "system"].includes(p.theme)) throw new Error("Tema cadangan tidak valid.");
+      preferences.theme = p.theme;
+    }
+    if (p.activeBabyId !== undefined) {
+      if (typeof p.activeBabyId !== "string" || p.activeBabyId !== "default" && !value.data.baby?.[p.activeBabyId]) throw new Error("Profil bayi cadangan tidak ditemukan.");
+      preferences.activeBabyId = p.activeBabyId;
+    }
+    if (p.reminders !== undefined) {
+      if (!Array.isArray(p.reminders) || p.reminders.some((r: any) => !object(r) || typeof r.id !== "string" ||
+        typeof r.babyId !== "string" || typeof r.label !== "string" || r.label.length > 120 ||
+        !Number.isFinite(r.at) || r.firedAt !== undefined && !Number.isFinite(r.firedAt))) throw new Error("Pengingat cadangan tidak valid.");
+      preferences.reminders = p.reminders.map((r: Reminder) => ({ id: r.id, babyId: r.babyId, label: r.label, at: r.at, ...(r.firedAt === undefined ? {} : { firedAt: r.firedAt }) }));
+    }
+  }
+  return { data: value.data, preferences, records };
+}
+export function restoreBackup(backup: Backup) {
+  if (localStorage.getItem("bb_token")) throw new Error("Keluar akun sebelum memulihkan cadangan.");
+  if (deviceHasData()) throw new Error("Perangkat sudah berisi data. Pemulihan tidak boleh menimpa catatan.");
+  const valid = parseBackup(JSON.stringify({ app: "Momong", version: 2, data: backup.data, preferences: backup.preferences }));
+  const nextDirty = Object.entries(valid.data).flatMap(([col, rows]) => Object.keys(rows ?? {}).map((id) => `${col}/${id}`));
+  const nextPrefs = { ...valid.preferences, guest: true };
+  const writes = [[DB_KEY, JSON.stringify(valid.data)], [DIRTY_KEY, JSON.stringify(nextDirty)], [PREFS_KEY, JSON.stringify(nextPrefs)]];
+  const previous = writes.map(([key]) => [key!, localStorage.getItem(key!)] as const);
+  try { for (const [key, value] of writes) localStorage.setItem(key!, value!); }
+  catch {
+    for (const [key, value] of previous) { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); }
+    throw new Error("Penyimpanan perangkat penuh. Cadangan belum dipulihkan.");
+  }
+  db = valid.data; dirty = new Set(nextDirty); prefs = nextPrefs;
+  version++; listeners.forEach((l) => l());
 }

@@ -345,7 +345,11 @@ function NewbornLog() {
   const [open, setOpen] = useState<Kind | null>(null);
   const [plus, setPlus] = useState<PlusVariant | null>(null);
   const [limit, setLimit] = useState(30);
-  const entries = KINDS.flatMap(({ kind }) => list(kind).map((r) => ({ kind, r })))
+  const [filter, setFilter] = useState("all");
+  const [period, setPeriod] = useState("all");
+  const matching = KINDS.filter(({ kind }) => filter === "all" || filter === kind).flatMap(({ kind }) =>
+    list(kind).filter((r) => period === "all" || r.at >= Date.now() - Number(period) * 86400000).map((r) => ({ kind, r }))).sort((a, b) => b.r.at - a.r.at);
+  const entries = matching
     .sort((a, b) => b.r.at - a.r.at)
     .slice(0, limit);
   return (
@@ -363,7 +367,15 @@ function NewbornLog() {
         </div>
 
         <section className="card">
-          <div className="label">Catatan terbaru</div>
+          <div className="label">Riwayat catatan</div>
+          <div className="grid2" style={{ marginTop: 12 }}>
+            <label className="field"><span>Jenis</span><select className="input" value={filter} onChange={(e) => { setFilter(e.target.value); setLimit(30); }}>
+              <option value="all">Semua jenis</option>{KINDS.map(({ kind, label }) => <option key={kind} value={kind}>{label}</option>)}
+            </select></label>
+            <label className="field"><span>Periode</span><select className="input" value={period} onChange={(e) => { setPeriod(e.target.value); setLimit(30); }}>
+              <option value="7">7 hari</option><option value="30">30 hari</option><option value="all">Semua tersedia</option>
+            </select></label>
+          </div>
           {entries.length === 0 ? (
             <div className="empty"><strong>Belum ada catatan</strong>Ketuk Botol, ASI, Pompa, atau Popok di atas untuk mulai.</div>
           ) : (
@@ -379,11 +391,11 @@ function NewbornLog() {
               ))}
             </div>
           )}
-          {entries.length === limit && <button className="btn btn-soft block" onClick={() => setLimit((n) => n + 30)}>Lihat catatan sebelumnya</button>}
+          {matching.length > limit && <button className="btn btn-soft block" onClick={() => setLimit((n) => n + 30)}>Lihat catatan sebelumnya</button>}
           <p className="faint" style={{ fontSize: 13, marginTop: 12 }}>{isPlus() ? "Semua riwayat tersimpan · Plus" : "Riwayat ASI, pompa, dan popok: 30 hari terakhir. Botol: semua."}</p>
           {/* Only when the 30-day Free window is actually hiding entries. */}
           {hasHidden() && (
-            <button className="chip" style={{ marginTop: 12 }} aria-haspopup="dialog" onClick={() => setPlus("insights")}>Buka tren lengkap di Plus</button>
+            <button className="chip" style={{ marginTop: 12 }} aria-haspopup="dialog" onClick={() => setPlus("insights")}>Buka riwayat lengkap di Plus</button>
           )}
         </section>
       </div>

@@ -45,6 +45,7 @@
   --blush-950: oklch(0.215 0.018 12);
   --plus-fill-top: var(--blush-50);
   --plus-fill: var(--blush-100);
+  --plus-muted: oklch(0.50 0 0);
   --plus-pill: var(--blush-500);
   --plus-pill-ink: oklch(0.32 0.07 12);
 
@@ -99,6 +100,7 @@
   --warning-ink: #f0c09b;
   --plus-fill-top: var(--blush-950);
   --plus-fill: var(--blush-900);
+  --plus-muted: oklch(0.72 0 0);
   --field-danger: var(--alert-red-300);
   /* Dark: elevation collapses to the 1px white ring only. */
   --elevation-raised: inset 0 0 0 1px var(--ring-glass);
@@ -267,7 +269,7 @@ button.card:active, a.card:active { scale: 0.96; }
 /* Sign-in screen */
 .field > .signin-error { font-size: 14px; color: var(--field-danger); font-weight: 500; }
 .signin-failure { font-size: 14px; color: var(--field-danger); font-weight: 500; text-align: center; }
-/* Full page, no card (Bloom frame): back, BumpBuddy, title, sub, Google, atau, Email, Kata sandi, Masuk, Nanti saja.
+/* Full page, no card (Bloom frame): back, Momong, title, sub, Google, atau, Email, Kata sandi, Masuk, Nanti saja.
    Each control is its own glass pill on the canvas; resting blur is the existing control blur. */
 .signin-head { display: grid; justify-items: start; gap: 6px; margin-bottom: 28px; }
 .signin-head .icon-btn { margin-bottom: 18px; }
@@ -718,3 +720,41 @@ html[data-moving] main.app :is(.card:not(.solid, .alert), .icon-btn),
   .app { padding: 0; max-width: none; }
   .card { box-shadow: none; background: #fff; border: 1px solid #ddd; break-inside: avoid; -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
+
+/* Plus uses the existing coral family; account actions retain blue. */
+.plus-plans { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 8px; }
+.plus-plans legend { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.plus-plan { display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 12px; border-radius: 16px; border: 1px solid var(--border-subtle); cursor: pointer; background: var(--surface); }
+.plus-plan[data-selected="true"] { background: var(--plus-fill); border-color: var(--blush-500); }
+.plus-plan input { accent-color: var(--ink); width: 18px; height: 18px; flex-shrink: 0; }
+.plus-plan span { flex: 1; }
+.plus-plan small { display: block; font-size: 12px; margin-top: 3px; }
+.plus-plan:focus-within { outline: 2px solid var(--ink); outline-offset: 3px; }
+.plus-hero { background: var(--plus-fill); position: relative; overflow: hidden; }
+.plus-hero h1 { font-size: 36px; line-height: 1.08; letter-spacing: -.035em; max-width: 11ch; }
+.plus-membership { font-weight: 600; }
+.plus-preview { border-radius: 16px; padding: 18px; background: var(--surface); border: 1px solid var(--border-subtle); display: grid; gap: 12px; }
+.plus-preview small { font-size: 12px; }
+.plus-preview .num { font-size: 26px; font-weight: 600; }
+.plus-preview-bars { height: 80px; display: flex; align-items: flex-end; gap: 8px; }
+.plus-preview-bars i { flex: 1; background: var(--blush-500); border-radius: 4px 4px 0 0; }
+.plus-consent { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; min-height: 44px; font-size: 14px; }
+.plus-consent input { margin-top: 4px; min-width: 18px; height: 18px; accent-color: var(--ink); }
+.plus-page-features { list-style: none; padding: 0; margin: 0; }
+.plus-page-features li { display: flex; gap: 14px; padding: 18px 0; border-top: 1px solid var(--border-subtle); }
+.plus-page-features h3 { font-size: 16px; }
+.plus-page-features p { font-size: 14px; margin-top: 4px; }
+.plus-feature-number { color: var(--ink-muted); font-size: 12px; padding-top: 4px; font-variant-numeric: tabular-nums; }
+@media (max-height: 650px) { .paywall-head .plus-plan { min-height: 52px; padding: 8px 12px; } }
+
+.profile-identity { display: flex; align-items: center; gap: 14px; padding: 12px 0 20px; }
+.profile-identity h2 { font-size: 20px; }
+.profile-identity p { font-size: 14px; margin-top: 3px; }
+
+.plus-activation { position: fixed; z-index: 60; top: max(16px, env(safe-area-inset-top)); left: 50%; padding: 14px 20px; border-radius: 24px; color: var(--plus-pill-ink); background: var(--plus-pill); box-shadow: var(--elevation-raised); white-space: nowrap; animation: plus-welcome 1000ms both; }
+@keyframes plus-welcome { 0% { opacity: 0; transform: translate(-50%, -12px) scale(.96); } 20%, 80% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -4px); } }
+@media (prefers-reduced-motion: reduce) { .plus-activation { animation: none; } }
+
+.paywall .muted, .paywall-note, .paywall-sandbox, .plus-card .card-sub, .plus-hero > p { color: var(--plus-muted); }
+
+.sheet[data-instant="true"], .sheet-backdrop[data-instant="true"] { transition: none; }

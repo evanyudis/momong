@@ -1,5 +1,5 @@
 import { Baby, ChartNoAxesColumn, House, UserRound } from "lucide-react";
-import { type CSSProperties, useLayoutEffect } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect } from "react";
 import { afterNavigate } from "./motion";
 import { onboardingStep } from "./onboarding";
 import { useRoute } from "./route";
@@ -34,12 +34,17 @@ export function App() {
   const step = onboardingStep(s, acc, getPrefs().guest);
   const ready = step === "ready";
 
+  useEffect(() => {
+    if (path === "/plus" && !acc.token) sessionStorage.setItem("bb_auth_return", "#/plus");
+  }, [path, acc.token]);
   let screen;
   if (path === "/masuk") screen = <MagicLanding token={params.get("token")} />;
   else if (path === "/gabung") screen = <JoinLanding invite={params.get("invite")} />;
   else if (path === "/kado-bersama") screen = <SharedWishlist token={params.get("token")} />;
   else if (path === "/pasangan") screen = <Partner />;
-  else if (path === "/plus") screen = <Plus />;
+  else if (path === "/plus") {
+    screen = acc.checking ? <p role="status">Memeriksa sesi…</p> : acc.token ? <Plus /> : <SignIn plus />;
+  }
   else if (path === "/masuk-akun") screen = <SignIn />;
   else if (step === "signin") screen = <SignIn onboarding />;
   else if (step === "setup") screen = <Welcome key={getPrefs().activeBabyId ?? "default"} user={acc.me?.user} />;
@@ -47,7 +52,7 @@ export function App() {
   else if (path === "/insight") screen = <Insight />;
   else if (path === "/profil") screen = <Profil />;
   else if (path === "/tas") screen = <Bag />;
-  else if (path === "/pengingat") screen = <Reminders />;
+  else if (path === "/pengingat") screen = <Reminders key={getPrefs().activeBabyId ?? "default"} />;
   else if (path === "/laporan") screen = <Report />;
   else if (path === "/kado") screen = <Wishlist />;
   else screen = <Home />;

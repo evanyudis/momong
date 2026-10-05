@@ -14,7 +14,7 @@ export type Me = {
   household: { id: string; seats: number; members: Member[] };
 };
 export type SyncStatus = "local" | "offline" | "syncing" | "synced" | "error";
-type State = { token: string | null; me: Me | null; status: SyncStatus; lastSyncAt: number | null; hasSynced: boolean; syncEnabled: boolean; error?: string };
+type State = { checking?: boolean; verifiedAt?: number; token: string | null; me: Me | null; status: SyncStatus; lastSyncAt: number | null; hasSynced: boolean; syncEnabled: boolean; error?: string };
 
 const load = <T,>(k: string, d: T): T => {
   try { return JSON.parse(localStorage.getItem(k) ?? "") ?? d; } catch { return d; }
@@ -174,7 +174,7 @@ export async function refreshMe() {
   const { data } = await api<Me>("/me");
   if (!data?.user?.id || typeof data.user.email !== "string" || typeof data.user.name !== "string" || !data.household?.id ||
     !Array.isArray(data.household.members) || !data.entitlement || !["free", "trial", "monthly", "plus_lifetime"].includes(data.entitlement.plan)) throw new ApiError(502, "invalid_account");
-  set({ me: data });
+  set({ me: data, verifiedAt: Date.now() });
   return data;
 }
 
@@ -259,13 +259,24 @@ export function syncNow(): Promise<void> {
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 export function startSync() {
+  const revalidate = () => {
+    if (state.token) void refreshMe().catch(() => {});
+    void syncNow();
+  };
+  setInterval(() => {
+    if (!!state.token && entitled(state.me) !== isPlus()) { set({}); void refreshMe().catch(() => {}); }
+  }, 1000);
+
   onLocalChange(() => { clearTimeout(timer); if (state.syncEnabled) timer = setTimeout(syncNow, 1500); });
-  window.addEventListener("online", () => void syncNow());
+  window.addEventListener("online", revalidate);
   window.addEventListener("offline", () => state.syncEnabled && set({ status: "offline" }));
-  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && void syncNow());
+  document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && revalidate());
   setInterval(() => document.visibilityState === "visible" && void syncNow(), 60_000);
-  if (state.token) void refreshMe().then(() => {
+  if (state.token) {
+    set({ checking: navigator.onLine });
+    void refreshMe().then(() => {
     set({ syncEnabled: load<boolean>(`bb_sync_enabled:${state.me!.user.id}`, false) });
     if (state.syncEnabled) void syncNow();
-  }).catch(() => {});
+  }).catch(() => {}).finally(() => set({ checking: false }));
+  }
 }

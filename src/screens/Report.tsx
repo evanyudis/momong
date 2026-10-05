@@ -17,7 +17,7 @@ export function Report() {
   const since = isPlus() && range === "all" ? 0 : Date.now() - Number(isPlus() ? range : "14") * DAY;
   const usedThisMonth = !isPlus() && get("settings", "report")?.month === monthKey();
   const born = s.birthMode === "postpartum";
-  const p = s.hpl ? pregnancy(s.hpl) : null;
+  const p = !born && s.hpl ? pregnancy(s.hpl) : null;
   const [plus, setPlus] = useState<PlusVariant | null>(null);
 
 
@@ -42,7 +42,7 @@ export function Report() {
           "Gejala", ...symptoms.map((r) => `${dateLabel(r.at)} ${timeLabel(r.at)} - ${r.name}${r.note ? `: ${r.note}` : ""}`),
         ]),
       ];
-      await downloadReportPDF(`Laporan ${isPlus() && range === "all" ? "semua catatan" : `${isPlus() ? range : "14"} hari`} - ${getPrefs().name || "Bunda"}`, lines, `bumpbuddy-${new Date().toISOString().slice(0, 10)}.pdf`);
+      await downloadReportPDF(`Laporan ${isPlus() && range === "all" ? "semua catatan" : `${isPlus() ? range : "14"} hari`} - ${getPrefs().name || "Bunda"}`, lines, `momong-${new Date().toISOString().slice(0, 10)}.pdf`);
       if (!isPlus()) put("settings", { id: "report", month: monthKey() });
       toast("PDF siap diunduh");
     } catch { toast("PDF belum bisa dibuat. Coba lagi; kuota belum terpakai."); }

@@ -4,11 +4,11 @@ export async function createReportPDF(title: string, lines: string[], fontBase64
   doc.addFileToVFS("NotoSans.ttf", fontBase64);
   doc.addFont("NotoSans.ttf", "NotoSans", "normal");
   doc.setFont("NotoSans");
-  doc.setProperties({ title: "BumpBuddy - Laporan", creator: "BumpBuddy" });
+  doc.setProperties({ title: "Momong - Laporan", creator: "Momong" });
   let y = 22;
   function header() {
     doc.setFontSize(18); doc.setTextColor(45);
-    doc.text("BumpBuddy", 18, 20);
+    doc.text("Momong", 18, 20);
     doc.setFontSize(10); doc.setTextColor(100);
     doc.text("Catatan, bukan saran medis.", 18, 28);
     y = 40;

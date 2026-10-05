@@ -129,13 +129,13 @@ function Household() {
 
   const name = getPrefs().name || "Bunda";
   const message = invite
-    ? `Yuk catat kehamilan & si kecil bareng di BumpBuddy. Gabung lewat tautan ini (berlaku 7 hari): ${invite.url}`
+    ? `Yuk catat kehamilan & si kecil bareng di Momong. Gabung lewat tautan ini (berlaku 7 hari): ${invite.url}`
     : "";
 
   async function share() {
     if (!invite) return;
     try {
-      if (navigator.share) await navigator.share({ title: "BumpBuddy", text: message });
+      if (navigator.share) await navigator.share({ title: "Momong", text: message });
       else { await navigator.clipboard.writeText(invite.url); toast("Tautan disalin"); }
     } catch { /* user cancelled */ }
   }

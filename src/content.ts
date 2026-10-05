@@ -43,7 +43,7 @@ export function weekNote(week: number): string {
 
 export type PlusVariant = "overview" | "insights" | "perkiraan" | "pdf";
 export const PLUS_COPY: Record<PlusVariant, { title: string; body: string }> = {
-  overview: { title: "BumpBuddy Plus", body: "Lebih banyak ruang untuk mengikuti tumbuhnya si kecil." },
+  overview: { title: "Momong Plus", body: "Lebih banyak ruang untuk mengikuti tumbuhnya si kecil." },
   insights: { title: "Lihat pola minggu ini", body: "Grafik dari catatanmu, dengan riwayat lebih dari 30 hari." },
   perkiraan: { title: "Perkiraan kapan berikutnya", body: "Perkiraan dari pola menyusu yang kamu catat. Bukan jadwal atau saran medis." },
   pdf: { title: "Simpan laporan lengkap", body: "Unduh PDF tanpa batas, langsung dari perangkatmu." },

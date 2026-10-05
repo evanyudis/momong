@@ -85,7 +85,7 @@ test("Plus history and baby profiles isolate records, preserve legacy data and s
   assert.ok(s.pending().some((r) => r.id === "second-pump"));
 });
 
-test("device reset clears all BumpBuddy state without tombstones or upload notifications", () => {
+test("device reset clears all Momong state without tombstones or upload notifications", () => {
   s.setPrefs({ theme: "dark", guest: true, name: "Sari" });
   mem.set("bb_payment:user", "order"); mem.set("bb_auth_return", "#/plus"); mem.set("unrelated", "keep");
   let uploads = 0;
@@ -98,4 +98,42 @@ test("device reset clears all BumpBuddy state without tombstones or upload notif
   assert.equal(s.isPlus(), false);
   assert.equal(uploads, 0);
   assert.deepEqual([...mem.entries()], [["unrelated", "keep"]]);
+});
+
+test("backup restores legacy and Momong data without account state or uploads", () => {
+  s.resetDeviceData();
+  const legacy = s.parseBackup(JSON.stringify({ app: "BumpBuddy", data: { settings: { main: { id: "main", updatedAt: 1, hpl: "2027-01-01" } } } }));
+  assert.deepEqual(legacy.preferences, {});
+  s.restoreBackup(legacy);
+  assert.equal(s.settings().hpl, "2027-01-01");
+  assert.equal(s.getPrefs().guest, true);
+  assert.equal(s.pending().length, 1);
+  assert.throws(() => s.restoreBackup(legacy), /sudah berisi/);
+  s.resetDeviceData();
+  mem.set("bb_token", "session");
+  assert.throws(() => s.restoreBackup(legacy), /Keluar akun/);
+  mem.delete("bb_token");
+  const backup = s.parseBackup(JSON.stringify({ app: "Momong", version: 2, data: legacy.data,
+    preferences: { theme: "dark", token: "secret", notifyReminders: true, reminders: [{ id: "r", babyId: "default", label: "Pompa", at: 1, firedAt: 2 }] } }));
+  assert.equal((backup.preferences as any).token, undefined);
+  assert.equal(backup.preferences.notifyReminders, undefined);
+  let uploads = 0; const off = s.onLocalChange(() => uploads++);
+  s.restoreBackup(backup); off();
+  assert.equal(uploads, 0);
+  assert.equal(s.getPrefs().reminders?.[0].firedAt, 2);
+  assert.equal(s.isPlus(), false);
+});
+test("backup rejects invalid payloads and rolls back quota failure", () => {
+  s.resetDeviceData();
+  assert.throws(() => s.parseBackup("{"), /JSON/);
+  assert.throws(() => s.parseBackup(JSON.stringify({ app: "Momong", data: { unknown: {} } })), /Koleksi/);
+  assert.throws(() => s.parseBackup(JSON.stringify({ app: "Momong", data: { kicks: { a: { id: "b", updatedAt: 1 } } } })), /Catatan/);
+  assert.throws(() => s.parseBackup(" ".repeat(5 * 1024 * 1024 + 1)), /besar/);
+  const backup = s.parseBackup(JSON.stringify({ app: "Momong", data: { kicks: { a: { id: "a", updatedAt: 1, count: 1 } } } }));
+  const original = storage.setItem; let writes = 0;
+  storage.setItem = (k, v) => { if (++writes === 2) throw new Error("quota"); original(k, v); };
+  try { assert.throws(() => s.restoreBackup(backup), /penuh/); } finally { storage.setItem = original; }
+  assert.equal(s.deviceHasData(), false);
+  assert.equal(mem.has("bb_db_v1"), false);
+  assert.deepEqual(s.getPrefs(), {});
 });

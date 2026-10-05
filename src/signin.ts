@@ -38,7 +38,7 @@ export function failureFor(mode: SignInMode, status: number): Pick<SignInState, 
 }
 
 /** Better Auth sign-up requires a name; the email's local part is enough until Profil lets them change it. */
-export const nameFromEmail = (email: string) => email.trim().split("@")[0] || "BumpBuddy";
+export const nameFromEmail = (email: string) => email.trim().split("@")[0] || "Momong";
 
 export function signIn(s: SignInState, a: SignInAction): SignInState {
   switch (a.type) {

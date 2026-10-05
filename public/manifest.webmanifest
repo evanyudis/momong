@@ -1,6 +1,6 @@
 {
-  "name": "BumpBuddy",
-  "short_name": "BumpBuddy",
+  "name": "Momong",
+  "short_name": "Momong",
   "description": "Catat kehamilan dan si kecil berdua pasangan. Jalan offline.",
   "lang": "id",
   "start_url": "/",
@@ -9,8 +9,22 @@
   "background_color": "#f7f2eb",
   "theme_color": "#f7f2eb",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" },
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
-  ]
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "/"
 }

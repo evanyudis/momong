@@ -14,7 +14,7 @@ export function startReminders() {
     for (const reminder of due) {
       toast(`Pengingat: ${reminder.label}`);
       if (prefs.notifyReminders && "Notification" in window && Notification.permission === "granted") {
-        try { new Notification("BumpBuddy · Pengingat", { body: reminder.label, tag: reminder.id }); } catch { /* in-app reminder remains available */ }
+        try { new Notification("Momong · Pengingat", { body: reminder.label, tag: reminder.id }); } catch { /* in-app reminder remains available */ }
       }
     }
   }

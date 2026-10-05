@@ -1,3 +1,4 @@
+import { PlanPicker, selectedPlan } from "./billing";
 import { Baby, Bell, CalendarDays, ChartNoAxesColumn, ChevronLeft, FileText, Gift, History, Sparkles, Timer } from "lucide-react";
 import { type ComponentProps, type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
@@ -53,6 +54,9 @@ export function Sheet({ open, onOpenChange, title, children }: {
   open: boolean; onOpenChange: (open: boolean) => void; title: string; children: ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const instant = useRef(false), previousOpen = useRef(false);
+  if (open && !previousOpen.current) instant.current = !!document.activeElement?.matches(":focus-visible") || reducedMotion();
+  previousOpen.current = open;
   const [mounted, setMounted] = useState(open);
   useDialogFocus(open && mounted, root, () => onOpenChange(false));
   const [shown, setShown] = useState(false);
@@ -63,14 +67,16 @@ export function Sheet({ open, onOpenChange, title, children }: {
       return () => cancelAnimationFrame(raf);
     }
     setShown(false);
-    const t = setTimeout(() => setMounted(false), 200);
+    const t = setTimeout(() => setMounted(false), instant.current || reducedMotion() ? 0 : 200);
     return () => clearTimeout(t);
   }, [open]);
   if (!mounted) return null;
   return createPortal(
     <>
-      <div className="sheet-backdrop" data-open={shown} onClick={() => onOpenChange(false)} />
-      <div ref={root} tabIndex={-1} className="sheet" data-open={shown} role="dialog" aria-modal="true" aria-label={title}>
+      <div className="sheet-backdrop" data-open={shown} data-instant={instant.current || reducedMotion()} onClick={() => onOpenChange(false)} />
+      <div ref={root} tabIndex={-1} className="sheet" inert={!open} aria-hidden={!open} data-open={shown} data-instant={instant.current || reducedMotion()}
+        onKeyDownCapture={() => { instant.current = true; root.current!.dataset.instant = "true"; }}
+        role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-grip" />
         <h3>{title}</h3>
         {children}
@@ -94,6 +100,7 @@ const FEATURE_ICONS = [Timer, Bell, ChartNoAxesColumn, History, FileText, Gift, 
  * transition retargets from the live pose, so grabbing it mid-flight and reversing reverses the motion.
  */
 export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; onClose: () => void }) {
+  const [plan, setPlan] = useState(selectedPlan);
   const [last, setLast] = useState<PlusVariant>("insights");
   useEffect(() => { if (variant) setLast(variant); }, [variant]);
   const c = PLUS_COPY[variant ?? last]; // keep the copy through the exit
@@ -157,9 +164,18 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
 
   useEffect(() => {
     if (!mounted) return;
-    const onResize = () => go(stage.current, "none");
+    const onResize = () => {
+      panel.current!.style.paddingBottom = `${foot.current!.offsetHeight}px`;
+      if (!drag.current) go(stage.current, "none");
+    };
+    let size = `${head.current!.offsetHeight}:${foot.current!.offsetHeight}`;
+    const observer = new ResizeObserver(() => {
+      const next = `${head.current!.offsetHeight}:${foot.current!.offsetHeight}`;
+      if (next !== size) { size = next; onResize(); }
+    });
+    observer.observe(head.current!); observer.observe(foot.current!);
     addEventListener("resize", onResize);
-    return () => { removeEventListener("resize", onResize); };
+    return () => { observer.disconnect(); removeEventListener("resize", onResize); };
   }, [mounted, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function onPointerDown(e: React.PointerEvent) {
@@ -210,7 +226,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
 
   if (!mounted) return null;
   return createPortal(
-    <div ref={root} tabIndex={-1} className="paywall" role="dialog" aria-modal="true" aria-label={c.title} data-expanded={expanded}
+    <div ref={root} tabIndex={-1} className="paywall" inert={!variant} aria-hidden={!variant} role="dialog" aria-modal="true" aria-label={c.title} data-expanded={expanded}
       onKeyDownCapture={() => { keyboard.current = true; root.current!.dataset.instant = "true"; }}
       onPointerDownCapture={() => { keyboard.current = false; root.current!.dataset.instant = String(reducedMotion()); }}>
       <div ref={backdrop} className="paywall-backdrop" onClick={onClose} />
@@ -223,6 +239,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
           <button type="button" className="paywall-grip" aria-expanded={expanded} aria-label={expanded ? "Ciutkan manfaat Plus" : "Lihat semua manfaat Plus"}><span /></button>
           <div className="paywall-title"><PlusPill /><h3>{c.title}</h3></div>
           <p className="muted">{c.body}</p>
+          <PlanPicker value={plan} onChange={setPlan} />
         </div>
         <div className="paywall-benefits" inert={!expanded} aria-hidden={!expanded}>
           <ul className="paywall-features">

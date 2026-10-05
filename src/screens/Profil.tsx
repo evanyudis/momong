@@ -1,3 +1,4 @@
+import { InstallSheet } from "./Install";
 import { ChevronRight, Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { PlusVariant } from "../content";
@@ -27,6 +28,8 @@ export function Profil() {
   const prefs = getPrefs();
   const h = useHousehold();
   const born = s.birthMode === "postpartum";
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [installOpen, setInstallOpen] = useState(false);
   const [bornOpen, setBornOpen] = useState(false);
   const [backOpen, setBackOpen] = useState(false);
   const [addingBaby, setAddingBaby] = useState(false);
@@ -37,7 +40,7 @@ export function Profil() {
     const blob = new Blob([exportJSON()], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `bumpbuddy-${todayISO()}.json`;
+    a.download = `momong-${todayISO()}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   }
@@ -46,6 +49,13 @@ export function Profil() {
     <>
       <Header title="Profil" aside={h.signedIn ? undefined : <a className="btn sm btn-signin" href="#/masuk-akun">Masuk</a>} />
       <div className="stack">
+        <section className="profile-identity"><span className="avatar blue" aria-hidden="true">{(prefs.name || h.me?.user.email || "M").slice(0, 1).toUpperCase()}</span><div><h2>{prefs.name || "Teman Momong"}</h2><p className="muted">{h.me?.user.email || "Catatan lokal · tanpa akun"}</p></div></section>
+        <section className="card plus-card stack">
+          <div className="card-title">{isPlus() ? h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : "Plus · Bulanan" : "Momong Plus"}</div>
+          <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi. Pembayaran masih sandbox.</p>
+          {isPlus() ? <a className="btn btn-coral block" href="#/plus">Lihat status Plus</a>
+            : <button className="btn btn-coral block" aria-haspopup="dialog" onClick={() => setPlus("overview")}>Coba Plus</button>}
+        </section>
         <section className="card solid stack">
           <label className="field"><span>Profil si kecil</span>
             <select className="input" value={activeBabyId()} onChange={(e) => setPrefs({ activeBabyId: e.target.value })}>
@@ -55,24 +65,12 @@ export function Profil() {
           <button className="btn btn-soft block" onClick={() => isPlus() ? setAddingBaby(true) : setPlus("insights")}>Tambah profil bayi · Plus</button>
           {!isPlus() && babyProfiles().length > 1 && <p className="muted">Profil tambahan tetap tersimpan dan dapat dibuka saat Plus aktif.</p>}
         </section>
-        <section className="card solid stack">
-          <label className="field">
-            <span>Nama panggilan</span>
-            <input className="input" value={prefs.name ?? ""} placeholder="Bunda" onChange={(e) => setPrefs({ name: e.target.value })} />
-          </label>
-          {!born && <label className="field">
-            <span>HPL (hari perkiraan lahir)</span>
-            <DateInput value={s.hpl ?? ""} onChange={(e) => e.target.value && saveSettings({ hpl: e.target.value })} />
-          </label>}
-        </section>
+        <button className="card solid" aria-haspopup="dialog" onClick={() => setEditingProfile(true)}>
+          <div className="spread"><div><div className="card-title">Detail profil</div><p className="card-sub">{prefs.name || "Nama panggilan"} · {s.babyName || "Si kecil"}</p></div><ChevronRight size={20} /></div>
+        </button>
 
         <a className="btn btn-soft block" href="#/pengingat">Pengingat · Plus</a>
-        <section className="card plus-card stack">
-          <div className="card-title">{h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : "Plus · Selamanya (sandbox)"}</div>
-          <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi. Pembayaran masih sandbox.</p>
-          {h.me?.entitlement.plan === "plus_lifetime" ? <a className="btn btn-coral block" href="#/plus">Lihat status Plus</a>
-            : <button className="btn btn-coral block" aria-haspopup="dialog" onClick={() => setPlus("overview")}>Coba Plus</button>}
-        </section>
+
 
         <section className="card solid">
           <div className="spread">
@@ -85,18 +83,7 @@ export function Profil() {
               onClick={() => (born ? setBackOpen(true) : setBornOpen(true))}
             />
           </div>
-          {born && (
-            <div className="stack" style={{ marginTop: 16 }}>
-              <label className="field">
-                <span>Nama si kecil</span>
-                <input className="input" value={s.babyName ?? ""} placeholder="Si kecil" onChange={(e) => saveSettings({ babyName: e.target.value })} />
-              </label>
-              <label className="field">
-                <span>Tanggal lahir</span>
-                <DateInput max={todayISO()} value={s.babyBirth ?? ""} onChange={(e) => e.target.value && saveSettings({ babyBirth: e.target.value })} />
-              </label>
-            </div>
-          )}
+
         </section>
 
         <section className="card solid">
@@ -128,6 +115,7 @@ export function Profil() {
           </div>
         </button>
 
+        <button className="card solid" aria-haspopup="dialog" onClick={() => setInstallOpen(true)}><div className="spread"><span className="card-title">Tambahkan ke layar utama</span><ChevronRight size={20} /></div></button>
         {h.signedIn && <section className="card solid stack">
           <div className="card-title">Akun</div>
           <p className="muted">{h.me?.user.email}</p>
@@ -140,9 +128,31 @@ export function Profil() {
           <p className="card-sub">Hapus catatan dan mulai kembali dari awal.</p>
           <button className="btn btn-danger-soft block" aria-haspopup="dialog" onClick={() => setResetOpen(true)}>Hapus semua data di perangkat</button>
         </section>}
-        <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>BumpBuddy · Catatan, bukan saran medis.</p>
+        <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>Momong · Catatan, bukan saran medis.</p>
       </div>
 
+      <Sheet open={editingProfile} onOpenChange={setEditingProfile} title="Detail profil">        <div className="stack">
+          <label className="field">
+            <span>Nama panggilan</span>
+            <input className="input" maxLength={120} value={prefs.name ?? ""} placeholder="Bunda" onChange={(e) => setPrefs({ name: e.target.value })} />
+          </label>
+          {!born && <label className="field">
+            <span>HPL (hari perkiraan lahir)</span>
+            <DateInput value={s.hpl ?? ""} onChange={(e) => e.target.value && saveSettings({ hpl: e.target.value })} />
+          </label>}
+        </div>          {born && (
+            <div className="stack" style={{ marginTop: 16 }}>
+              <label className="field">
+                <span>Nama si kecil</span>
+                <input className="input" maxLength={120} value={s.babyName ?? ""} placeholder="Si kecil" onChange={(e) => saveSettings({ babyName: e.target.value })} />
+              </label>
+              <label className="field">
+                <span>Tanggal lahir</span>
+                <DateInput max={todayISO()} value={s.babyBirth ?? ""} onChange={(e) => e.target.value && e.target.validity.valid && saveSettings({ babyBirth: e.target.value })} />
+              </label>
+            </div>
+          )}<button className="btn btn-ink block" style={{ marginTop: 16 }} onClick={() => setEditingProfile(false)}>Selesai</button></Sheet>
+      <InstallSheet open={installOpen} onOpenChange={setInstallOpen} />
       <AddBabySheet open={addingBaby} onOpenChange={setAddingBaby} />
       <BornSheet open={bornOpen} onOpenChange={setBornOpen} />
       <PregnantSheet open={backOpen} onOpenChange={setBackOpen} />

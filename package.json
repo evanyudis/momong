@@ -1,7 +1,7 @@
 {
-  "name": "bumpbuddy-pwa",
+  "name": "momong-pwa",
   "version": "1.0.0",
-  "description": "BumpBuddy PWA (Free): pregnancy tools, thin newborn mode, sync and partner",
+  "description": "Momong PWA (Free): pregnancy tools, thin newborn mode, sync and partner",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && node scripts/offline-assets.mjs",

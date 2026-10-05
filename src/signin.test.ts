@@ -66,5 +66,5 @@ test("daftar and masuk swap modes in place; state never holds a token or signed-
 
 test("sign-up name comes from the email, with a fallback", () => {
   assert.equal(nameFromEmail(" bunda.sari@gmail.com "), "bunda.sari");
-  assert.equal(nameFromEmail("@x.co"), "BumpBuddy");
+  assert.equal(nameFromEmail("@x.co"), "Momong");
 });

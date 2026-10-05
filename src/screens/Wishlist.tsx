@@ -2,13 +2,16 @@ import { Check, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { activeBabyId, isPlus, list, put, remove, useDB } from "../store";
 import { api, useAccount } from "../sync";
-import { toast, TopBar } from "../ui";
+import { toast, PlusSheet, TopBar } from "../ui";
 
 /** Free: make the list. Claim + share with family is Plus (not in the Free MVP). */
 export function Wishlist() {
   useDB();
   const acc = useAccount();
   const key = `bb_wishlist_share:${acc.me?.household.id}:${activeBabyId()}`;
+  const [plus, setPlus] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+  const [shareError, setShareError] = useState("");
   const [share, setShare] = useState<string | null>(() => localStorage.getItem(key));
   const [claims, setClaims] = useState<SharedItem[]>([]);
   const [busy, setBusy] = useState(false);
@@ -20,19 +23,18 @@ export function Wishlist() {
   useEffect(() => {
     if (!share) return;
     let cancelled = false;
-    api<{ items: SharedItem[] }>(`/wishlist/shared/${encodeURIComponent(share)}`).then(({ data }) => { if (!cancelled && Array.isArray(data.items)) setClaims(data.items); }).catch(() => {});
+    api<{ items: SharedItem[] }>(`/wishlist/shared/${encodeURIComponent(share)}`).then(({ data }) => { if (!cancelled && Array.isArray(data.items)) { setClaims(data.items); setShareError(""); } }).catch(() => { if (!cancelled) setShareError("Tautan belum tersedia atau sudah kedaluwarsa. Publikasikan lagi untuk memperbarui."); });
     return () => { cancelled = true; };
-  }, [share]);
+  }, [share, refresh]);
 
   async function publish() {
     if (busy) return;
-    if (!isPlus()) { location.hash = "#/plus"; return; }
+    if (!isPlus()) { setPlus(true); return; }
     setBusy(true);
     try {
       const { data } = await api<{ token: string; url: string }>("/wishlist/shares", { method: "POST", body: JSON.stringify({ babyId: activeBabyId(), items: items.filter((i) => !i.have).map((i) => ({ id: i.id, label: i.label })) }) });
       localStorage.setItem(key, data.token); setShare(data.token);
-      if (navigator.share) await navigator.share({ title: "Daftar kado BumpBuddy", url: data.url });
-      else { await navigator.clipboard.writeText(data.url); toast("Tautan daftar kado disalin"); }
+      setRefresh((n) => n + 1); toast("Daftar dipublikasikan. Pilih cara berbagi di bawah.");
     } catch { toast("Daftar belum dibagikan. Cek koneksi atau izin berbagi, lalu coba lagi."); }
     finally { setBusy(false); }
   }
@@ -78,9 +80,21 @@ export function Wishlist() {
         <section className="card solid stack">
           <h2>Bagikan daftar kado · Plus</h2>
           <p className="muted">Hanya barang yang belum tersedia dan nama pemberi kado yang dibagikan lewat tautan. Catatan kesehatan tetap pribadi. Tautan berlaku 7 hari; bagikan lagi untuk memperbarui daftar.</p>
-          <button className="btn btn-soft block" disabled={busy || items.length > 100} onClick={publish}>{busy ? "Membagikan…" : "Bagikan lewat tautan"}</button>
+          <button className="btn btn-soft block" disabled={busy || items.length > 100} onClick={publish}>{busy ? "Membagikan…" : "Publikasikan daftar"}</button>
           {items.length > 100 && <p className="muted">Maksimal 100 barang per daftar yang dibagikan.</p>}
+          {shareError && <p role="status">{shareError}</p>}
           {share && <>
+            <a className="btn btn-coral block" target="_blank" rel="noopener noreferrer" href={`https://wa.me/?text=${encodeURIComponent("Daftar kado Momong: " + location.origin + "/#/kado-bersama?token=" + encodeURIComponent(share))}`}>Bagikan ke WhatsApp</a>
+            <button className="btn btn-soft block" onClick={async () => {
+              const url = location.origin + "/#/kado-bersama?token=" + encodeURIComponent(share);
+              try { if (navigator.share) await navigator.share({ title: "Daftar kado Momong", url }); else { await navigator.clipboard.writeText(url); toast("Tautan disalin"); } }
+              catch { toast("Berbagi dibatalkan atau belum tersedia."); }
+            }}>Bagikan</button>
+            <button className="btn btn-soft block" onClick={async () => {
+              try { await navigator.clipboard.writeText(location.origin + "/#/kado-bersama?token=" + encodeURIComponent(share)); toast("Tautan disalin"); }
+              catch { toast("Salin tautan belum diizinkan browser."); }
+            }}>Salin tautan</button>
+            <button className="btn btn-soft block" onClick={() => setRefresh((n) => n + 1)}>Perbarui claim</button>
             <a className="link-btn" href={`#/kado-bersama?token=${encodeURIComponent(share)}`}>Lihat daftar yang dibagikan</a>
             <button className="btn btn-soft block" disabled={busy} onClick={async () => {
               setBusy(true);
@@ -92,6 +106,7 @@ export function Wishlist() {
         </section>
         <p className="faint" style={{ fontSize: 13, textAlign: "center" }}>Tersinkron dengan pasangan kalau kalian sudah terhubung.</p>
       </div>
+      <PlusSheet variant={plus ? "overview" : null} onClose={() => setPlus(false)} />
     </>
   );
 }

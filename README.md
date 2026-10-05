@@ -1,4 +1,4 @@
-# BumpBuddy PWA
+# Momong PWA
 
 Free MVP: pregnancy tools, thin newborn mode, local-first records in localStorage. The initial sign-in screen offers “Lanjut tanpa akun”; completed setup opens directly offline. Login is required for Plus checkout and optional cloud/partner sync. Signing in does not enable sync: opt in on Sinkron & pasangan. Logout keeps device records and pending changes.
 
