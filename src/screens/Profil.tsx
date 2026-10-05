@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { PlusVariant } from "../content";
 import { todayISO } from "../dates";
 import { useHousehold } from "../household";
-import { exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
+import { addBaby, babyProfiles, activeBabyId, isPlus, exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
 import { signOut } from "../sync";
 import { SyncDot } from "./Partner";
 import { DateInput, Header, PlusSheet, Sheet, toast } from "../ui";
@@ -29,6 +29,7 @@ export function Profil() {
   const born = s.birthMode === "postpartum";
   const [bornOpen, setBornOpen] = useState(false);
   const [backOpen, setBackOpen] = useState(false);
+  const [addingBaby, setAddingBaby] = useState(false);
   const [plus, setPlus] = useState<PlusVariant | null>(null);
 
   function download() {
@@ -45,6 +46,15 @@ export function Profil() {
       <Header title="Profil" aside={h.signedIn ? undefined : <a className="btn sm btn-signin" href="#/masuk-akun">Masuk</a>} />
       <div className="stack">
         <section className="card solid stack">
+          <label className="field"><span>Profil si kecil</span>
+            <select className="input" value={activeBabyId()} onChange={(e) => setPrefs({ activeBabyId: e.target.value })}>
+              {babyProfiles().filter((b) => isPlus() || b.id === "default").map((b) => <option key={b.id} value={b.id}>{b.babyName || "Si kecil"}</option>)}
+            </select>
+          </label>
+          <button className="btn btn-soft block" onClick={() => isPlus() ? setAddingBaby(true) : setPlus("insights")}>Tambah profil bayi · Plus</button>
+          {!isPlus() && babyProfiles().length > 1 && <p className="muted">Profil tambahan tetap tersimpan dan dapat dibuka saat Plus aktif.</p>}
+        </section>
+        <section className="card solid stack">
           <label className="field">
             <span>Nama panggilan</span>
             <input className="input" value={prefs.name ?? ""} placeholder="Bunda" onChange={(e) => setPrefs({ name: e.target.value })} />
@@ -55,9 +65,10 @@ export function Profil() {
           </label>
         </section>
 
+        <a className="btn btn-soft block" href="#/pengingat">Pengingat · Plus</a>
         <section className="card plus-card stack">
           <div className="card-title">{h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : "Plus · Selamanya (sandbox)"}</div>
-          <p className="card-sub">Uji pembayaran sandbox. Fitur Plus sedang disiapkan; tidak ada pembayaran uang nyata.</p>
+          <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi. Pembayaran masih sandbox.</p>
           <a className="btn btn-coral block" href="#/plus">{h.me?.entitlement.plan === "plus_lifetime" ? "Lihat status Plus" : "Coba Plus"}</a>
         </section>
 
@@ -125,6 +136,7 @@ export function Profil() {
         <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>BumpBuddy · Catatan, bukan saran medis.</p>
       </div>
 
+      <AddBabySheet open={addingBaby} onOpenChange={setAddingBaby} />
       <BornSheet open={bornOpen} onOpenChange={setBornOpen} />
       <PregnantSheet open={backOpen} onOpenChange={setBackOpen} />
       <PlusSheet variant={plus} onClose={() => setPlus(null)} />
@@ -175,4 +187,23 @@ function BornSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: bo
       </div>
     </Sheet>
   );
+}
+
+function AddBabySheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const [name, setName] = useState("");
+  const [mode, setMode] = useState<"pregnant" | "postpartum">("postpartum");
+  const [date, setDate] = useState(todayISO());
+  return <Sheet open={open} onOpenChange={onOpenChange} title="Tambah profil si kecil">
+    <form className="stack" onSubmit={(e) => {
+      e.preventDefault();
+      if (addBaby({ babyName: name.trim(), birthMode: mode, ...(mode === "pregnant" ? { hpl: date } : { babyBirth: date }) })) {
+        onOpenChange(false); setName(""); location.hash = "#/";
+      }
+    }}>
+      <label className="field"><span>Nama si kecil</span><input className="input" required maxLength={120} pattern={String.raw`.*\S.*`} value={name} onChange={(e) => setName(e.target.value)} /></label>
+      <label className="field"><span>Mode</span><select className="input" value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}><option value="postpartum">Newborn</option><option value="pregnant">Kehamilan</option></select></label>
+      <label className="field"><span>{mode === "pregnant" ? "HPL" : "Tanggal lahir"}</span><DateInput required max={mode === "postpartum" ? todayISO() : undefined} value={date} onChange={(e) => setDate(e.target.value)} /></label>
+      <button className="btn btn-ink block">Simpan profil</button>
+    </form>
+  </Sheet>;
 }

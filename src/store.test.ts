@@ -48,3 +48,36 @@ test("hasHidden is true only while the Free window hides a thin entry", () => {
   s.remove("diaper", d.id);
   assert.equal(s.hasHidden(), false, "tombstones do not count");
 });
+
+test("Plus history and baby profiles isolate records, preserve legacy data and survive downgrade", () => {
+  const old = Date.now() - s.FREE_WINDOW_MS - 1000;
+  s.put("pump", { id: "plus-old", at: old, ml: 40 });
+  assert.ok(!s.list("pump").some((r) => r.id === "plus-old"));
+  s.setPlusAccess(true);
+  assert.ok(s.list("pump").some((r) => r.id === "plus-old"));
+  s.saveSettings({ birthMode: "postpartum", babyName: "Nara", babyBirth: "2026-10-01" });
+  s.put("bag", { id: "diapers", checked: true });
+  assert.equal(s.addBaby({ babyName: "Dara", babyBirth: "2026-10-02", birthMode: "postpartum" }), true);
+  assert.equal(s.settings().babyName, "Dara");
+  assert.equal(s.list("pump").length, 0);
+  assert.equal(s.get("bag", "diapers"), undefined);
+  s.put("bag", { id: "diapers", checked: false });
+  const custom = s.put("bag", { custom: true, label: "Selimut", checked: false });
+  s.put("bag", { id: custom.id, checked: true });
+  assert.equal(s.list("bag").filter((r) => r.custom).length, 1);
+  assert.equal(s.get("bag", custom.id)?.checked, true);
+  s.put("pump", { id: "second-pump", at: Date.now(), ml: 60 });
+  const second = s.activeBabyId();
+  s.setPrefs({ activeBabyId: "default" });
+  assert.equal(s.get("bag", "diapers")?.checked, true);
+  assert.ok(!s.list("pump").some((r) => r.id === "second-pump"));
+  s.setPrefs({ activeBabyId: second });
+  s.setPlusAccess(false);
+  assert.equal(s.activeBabyId(), "default");
+  assert.equal(s.settings().babyName, "Nara");
+  assert.ok(!s.pending().some((r) => r.id === "second-pump" || r.collection === "baby"));
+  s.setPlusAccess(true);
+  assert.equal(s.activeBabyId(), second);
+  assert.ok(s.list("pump").some((r) => r.id === "second-pump"));
+  assert.ok(s.pending().some((r) => r.id === "second-pump"));
+});

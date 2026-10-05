@@ -12,10 +12,12 @@ test("login does not upload; opt-in sync merges; logout ignores an in-flight res
   let release: ((r: Response) => void) | undefined;
   let delayed = false;
   const calls: string[] = [];
+  const syncBodies: any[] = [];
   const me = { user: { id: "u1", email: "sari@example.com", name: "Sari" }, entitlement: { plan: "free", expiresAt: null }, household: { id: "h1", seats: 2, members: [] } };
-  globalThis.fetch = (async (url: string) => {
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
     const path = new URL(url).pathname;
     calls.push(path);
+    if (path === "/sync") syncBodies.push(JSON.parse(String(init?.body)));
     if (path === "/api/auth/sign-in/email") return Response.json({ token: "test-session" });
     if (path === "/me") return Response.json(me);
     if (path === "/sync" && delayed) return new Promise<Response>((resolve) => { release = resolve; });
@@ -34,6 +36,12 @@ test("login does not upload; opt-in sync merges; logout ignores an in-flight res
     await sync.syncNow();
     assert.equal(store.get("kicks", "remote").count, 2);
     assert.equal(store.pending().length, 0);
+    assert.equal(memory.get("bb_cursor"), "1");
+    me.entitlement.plan = "plus_lifetime";
+    await sync.refreshMe();
+    assert.equal(memory.has("bb_cursor"), false, "upgrade forces full pull of previously hidden history");
+    await sync.syncNow();
+    assert.equal(syncBodies.at(-1).since, 0);
     store.put("kicks", { id: "pending", count: 3 });
     delayed = true;
     const work = sync.syncNow();

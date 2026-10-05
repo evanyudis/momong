@@ -1,11 +1,25 @@
+import { midnight, todayISO } from "./dates";
+import type { Reminder } from "./reminders";
 import { useSyncExternalStore } from "react";
 
 /** Local-first data. Every record syncs by id with last-write-wins on updatedAt; deletes are tombstones. */
 export type Collection =
-  | "settings" | "contractions" | "kicks" | "symptoms" | "bag"
+  | "baby" | "settings" | "contractions" | "kicks" | "symptoms" | "bag"
   | "bottle" | "breast" | "pump" | "diaper" | "wishlist";
 export type Rec = { id: string; updatedAt: number; deleted?: boolean; updatedBy?: string; [k: string]: any };
 type DB = Partial<Record<Collection, Record<string, Rec>>>;
+
+const SCOPED: Collection[] = ["contractions", "kicks", "symptoms", "bag", "bottle", "breast", "pump", "diaper", "wishlist"];
+let plusAccess = false;
+export const isPlus = () => plusAccess;
+export function setPlusAccess(value: boolean) {
+  if (plusAccess === value) return;
+  plusAccess = value;
+  version++;
+  listeners.forEach((l) => l());
+}
+export const activeBabyId = () => plusAccess ? prefs.activeBabyId ?? "default" : "default";
+const recordId = (col: Collection, id: string) => col === "bag" && activeBabyId() !== "default" && !id.startsWith(`${activeBabyId()}:`) ? `${activeBabyId()}:${id}` : id;
 
 const DB_KEY = "bb_db_v1";
 const DIRTY_KEY = "bb_dirty_v1";
@@ -34,9 +48,10 @@ export const onLocalChange = (fn: () => void) => { onChangeHooks.add(fn); return
 export const uid = () => crypto.randomUUID();
 
 export function put(col: Collection, rec: Omit<Rec, "updatedAt"> & { id?: string }) {
-  const id = rec.id ?? uid();
+  const id = recordId(col, rec.id ?? uid());
+  const babyId = SCOPED.includes(col) ? { babyId: activeBabyId() } : {};
   const prev = db[col]?.[id];
-  const next = { ...prev, ...rec, id, updatedAt: Math.max(Date.now(), (prev?.updatedAt ?? 0) + 1), deleted: false };
+  const next = { ...babyId, ...prev, ...rec, id, updatedAt: Math.max(Date.now(), (prev?.updatedAt ?? 0) + 1), deleted: false };
   db = { ...db, [col]: { ...db[col], [id]: next } };
   dirty.add(`${col}/${id}`);
   commit(true);
@@ -44,34 +59,36 @@ export function put(col: Collection, rec: Omit<Rec, "updatedAt"> & { id?: string
 }
 
 export function remove(col: Collection, id: string) {
+  id = recordId(col, id);
   const prev = db[col]?.[id];
   if (!prev) return;
-  db = { ...db, [col]: { ...db[col], [id]: { id, updatedAt: Math.max(Date.now(), prev.updatedAt + 1), deleted: true } } };
+  db = { ...db, [col]: { ...db[col], [id]: { id, updatedAt: Math.max(Date.now(), prev.updatedAt + 1), deleted: true, ...(prev.babyId ? { babyId: prev.babyId } : {}) } } };
   dirty.add(`${col}/${id}`);
   commit(true);
 }
 
 export function get(col: Collection, id: string): Rec | undefined {
+  id = recordId(col, id);
   const r = db[col]?.[id];
   return r && !r.deleted ? r : undefined;
 }
 
 export function list(col: Collection, now = Date.now()): Rec[] {
-  const all = Object.values(db[col] ?? {}).filter((r) => !r.deleted);
-  const visible = THIN.includes(col) ? all.filter((r) => typeof r.at !== "number" || r.at >= now - FREE_WINDOW_MS) : all;
+  const all = Object.values(db[col] ?? {}).filter((r) => !r.deleted && (!SCOPED.includes(col) || (r.babyId ?? "default") === activeBabyId()));
+  const visible = !plusAccess && THIN.includes(col) ? all.filter((r) => typeof r.at !== "number" || r.at >= now - FREE_WINDOW_MS) : all;
   return visible.sort((a, b) => (b.at ?? b.updatedAt) - (a.at ?? a.updatedAt));
 }
 
 /** True when the Free window is hiding older ASI / pump / diaper entries (history is truncated). */
 export const hasHidden = (now = Date.now()) =>
-  THIN.some((col) => Object.values(db[col] ?? {}).some((r) => !r.deleted && typeof r.at === "number" && r.at < now - FREE_WINDOW_MS));
+  !plusAccess && THIN.some((col) => Object.values(db[col] ?? {}).some((r) => !r.deleted && (r.babyId ?? "default") === activeBabyId() && typeof r.at === "number" && r.at < now - FREE_WINDOW_MS));
 
 /** Changes waiting to be pushed. */
 export function pending() {
   return [...dirty].flatMap((key) => {
     const [collection, id] = key.split("/") as [Collection, string];
     const r = db[collection]?.[id];
-    if (!r) return [];
+    if (!r || !plusAccess && (collection === "baby" || SCOPED.includes(collection) && (r.babyId ?? "default") !== "default")) return [];
     const { id: _id, updatedAt, deleted, updatedBy: _by, ...data } = r;
     return [{ collection, id, updatedAt, deleted: !!deleted, data: deleted ? null : data }];
   });
@@ -118,13 +135,25 @@ export const useDB = () => useSyncExternalStore(subscribe, () => version);
 
 // Synced settings live in one record so birthMode/HPL resolve by LWW as a unit.
 export type Settings = { hpl?: string; birthMode?: "pregnant" | "postpartum"; babyName?: string; babyBirth?: string };
-export const settings = (): Settings => (get("settings", "main") ?? {}) as Settings;
-export const saveSettings = (s: Settings) => put("settings", { ...settings(), ...s, id: "main" });
+export const settings = (): Settings => ((activeBabyId() === "default" ? get("settings", "main") : get("baby", activeBabyId())) ?? {}) as Settings;
+export const saveSettings = (s: Settings) => activeBabyId() === "default" ? put("settings", { ...settings(), ...s, id: "main" }) : put("baby", { ...settings(), ...s, id: activeBabyId() });
+export const babyProfiles = () => [{ ...get("settings", "main"), id: "default", babyName: get("settings", "main")?.babyName || "Si kecil" }, ...list("baby")];
+export function addBaby(s: Settings) {
+  const date = s.birthMode === "pregnant" ? s.hpl : s.babyBirth;
+  if (!plusAccess || !s.babyName?.trim() || s.babyName.length > 120 || (s.birthMode !== "pregnant" && s.birthMode !== "postpartum") ||
+    !date || todayISO(new Date(midnight(date))) !== date || s.birthMode === "postpartum" && date > todayISO()) return false;
+  const r = put("baby", s);
+  setPrefs({ activeBabyId: r.id });
+  return true;
+}
 
 // Device-only preferences (not synced).
 export type Prefs = {
   name?: string;
   guest?: boolean;
+  activeBabyId?: string;
+  reminders?: Reminder[];
+  notifyReminders?: boolean;
   theme?: "light" | "dark" | "system";
   // Contraction pattern alert dismissals (device only).
   criticalDismissedAt?: number;

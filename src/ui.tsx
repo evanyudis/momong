@@ -18,11 +18,40 @@ export function DateInput({ className, ...props }: Omit<ComponentProps<"input">,
   );
 }
 
+function useDialogFocus(open: boolean, root: { current: HTMLDivElement | null }, close: () => void) {
+  const closeRef = useRef(close); closeRef.current = close;
+  useEffect(() => {
+    const dialog = root.current;
+    if (!open || !dialog) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const background = [...document.querySelectorAll<HTMLElement>("main.app, nav.tabbar")].map((el) => ({ el, inert: el.inert }));
+    background.forEach(({ el }) => { el.inert = true; });
+    const controls = () => [...dialog.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter((el) => el.getClientRects().length);
+    (controls()[0] ?? dialog).focus();
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); closeRef.current(); }
+      if (e.key !== "Tab") return;
+      const items = controls(), first = items[0], last = items[items.length - 1];
+      if (!first) { e.preventDefault(); dialog.focus(); }
+      else if (e.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("keydown", key);
+      background.forEach(({ el, inert }) => { el.inert = inert; });
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [open, root]);
+}
+
 /** Bottom sheet. Stays mounted through its exit so the slide-down can play. */
 export function Sheet({ open, onOpenChange, title, children }: {
   open: boolean; onOpenChange: (open: boolean) => void; title: string; children: ReactNode;
 }) {
+  const root = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(open);
+  useDialogFocus(open && mounted, root, () => onOpenChange(false));
   const [shown, setShown] = useState(false);
   useEffect(() => {
     if (open) {
@@ -34,17 +63,11 @@ export function Sheet({ open, onOpenChange, title, children }: {
     const t = setTimeout(() => setMounted(false), 200);
     return () => clearTimeout(t);
   }, [open]);
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onOpenChange(false);
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onOpenChange]);
   if (!mounted) return null;
   return createPortal(
     <>
       <div className="sheet-backdrop" data-open={shown} onClick={() => onOpenChange(false)} />
-      <div className="sheet" data-open={shown} role="dialog" aria-modal="true" aria-label={title}>
+      <div ref={root} tabIndex={-1} className="sheet" data-open={shown} role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-grip" />
         <h3>{title}</h3>
         {children}
@@ -70,7 +93,9 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
   const [last, setLast] = useState<PlusVariant>("insights");
   useEffect(() => { if (variant) setLast(variant); }, [variant]);
   const c = PLUS_COPY[variant ?? last]; // keep the copy through the exit
+  const root = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(!!variant);
+  useDialogFocus(!!variant && mounted, root, onClose);
   const [expanded, setExpanded] = useState(false);
   const backdrop = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -125,10 +150,8 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
   useEffect(() => {
     if (!mounted) return;
     const onResize = () => go(stage.current, "none");
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("resize", onResize);
-    addEventListener("keydown", onKey);
-    return () => { removeEventListener("resize", onResize); removeEventListener("keydown", onKey); };
+    return () => { removeEventListener("resize", onResize); };
   }, [mounted, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function onPointerDown(e: React.PointerEvent) {
@@ -177,7 +200,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
 
   if (!mounted) return null;
   return createPortal(
-    <div className="paywall" role="dialog" aria-modal="true" aria-label={c.title} data-expanded={expanded}>
+    <div ref={root} tabIndex={-1} className="paywall" role="dialog" aria-modal="true" aria-label={c.title} data-expanded={expanded}>
       <div ref={backdrop} className="paywall-backdrop" onClick={onClose} />
       <div ref={panel} className="paywall-panel">
         <div

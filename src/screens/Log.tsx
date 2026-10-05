@@ -4,7 +4,7 @@ import { DIAPER_LABEL, type PlusVariant, SIDE_LABEL, SYMPTOMS } from "../content
 import { alertVisible, analyzePattern, clock, distanceTier, durLabel, finished, gapLabel, intervalFor } from "../contractions";
 import { durationLabel, isToday, pregnancy, timeLabel } from "../dates";
 import { fillIn, reducedMotion } from "../motion";
-import { getPrefs, hasHidden, list, put, remove, type Rec, setPrefs, settings, useDB } from "../store";
+import { isPlus, getPrefs, hasHidden, list, put, remove, type Rec, setPrefs, settings, useDB } from "../store";
 import { Header, PlusSheet, Sheet, toast } from "../ui";
 
 export function Log() {
@@ -344,9 +344,10 @@ export function describe(kind: Kind, r: Rec) {
 function NewbornLog() {
   const [open, setOpen] = useState<Kind | null>(null);
   const [plus, setPlus] = useState<PlusVariant | null>(null);
+  const [limit, setLimit] = useState(30);
   const entries = KINDS.flatMap(({ kind }) => list(kind).map((r) => ({ kind, r })))
     .sort((a, b) => b.r.at - a.r.at)
-    .slice(0, 30);
+    .slice(0, limit);
   return (
     <>
       <Header title="Log Bayi" />
@@ -378,7 +379,8 @@ function NewbornLog() {
               ))}
             </div>
           )}
-          <p className="faint" style={{ fontSize: 13, marginTop: 12 }}>Riwayat ASI, pompa, dan popok: 30 hari terakhir. Botol: semua.</p>
+          {entries.length === limit && <button className="btn btn-soft block" onClick={() => setLimit((n) => n + 30)}>Lihat catatan sebelumnya</button>}
+          <p className="faint" style={{ fontSize: 13, marginTop: 12 }}>{isPlus() ? "Semua riwayat tersimpan · Plus" : "Riwayat ASI, pompa, dan popok: 30 hari terakhir. Botol: semua."}</p>
           {/* Only when the 30-day Free window is actually hiding entries. */}
           {hasHidden() && (
             <button className="chip" style={{ marginTop: 12 }} aria-haspopup="dialog" onClick={() => setPlus("insights")}>Buka tren lengkap di Plus</button>
