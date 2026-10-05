@@ -61,7 +61,7 @@ const INSET = 12; // compact card's side gap (px); the card grows to full width 
 const EXIT_MS = 200; // matches [data-motion="exit"] in styles.css
 
 /**
- * Plus soft paywall: one surface, three variants. UI only. Nothing here grants Plus, charges, or calls the network.
+ * Plus soft paywall: one surface, three variants. Checkout lives on the Plus page.
  * A compact floating sheet that grows into a full page: tap or drag up expands, swipe down collapses, further down
  * dismisses. Transform + opacity only. Drag writes styles directly (no per-frame renders); on release a CSS
  * transition retargets from the live pose, so grabbing it mid-flight and reversing reverses the motion.
@@ -197,8 +197,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
         </div>
       </div>
       <div ref={foot} className="paywall-foot">
-        {/* ponytail: intentional no-op. Keel wires checkout here; no entitlement, no network, no navigation until then. */}
-        <button type="button" className="btn btn-coral lg block" onClick={() => {}}>Coba Plus</button>
+        <a className="btn btn-coral lg block" href="#/plus" onClick={onClose}>Coba Plus</a>
         <button type="button" className="btn btn-soft block" style={{ marginTop: 10 }} onClick={onClose}>Nanti saja</button>
         <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 14 }}>Catatan, bukan saran medis.</p>
       </div>

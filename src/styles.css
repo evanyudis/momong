@@ -287,6 +287,21 @@ button.card:active, a.card:active { scale: 0.96; }
 .signin-or { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; font-size: 14px; color: var(--ink-faint); }
 .signin-or::before, .signin-or::after { content: ""; height: var(--border-hairline); background: var(--border-subtle); }
 .signin-later { justify-self: center; font-weight: 500; }
+.onboarding { padding-top: 24px; }
+.onboarding .signin-head { margin-bottom: 8px; }
+.onboarding-choice { position: relative; }
+.onboarding-choice::before { content: ""; position: absolute; inset: 0; border-radius: inherit; border: 2px solid var(--ink); opacity: 0; pointer-events: none; transition: opacity 150ms var(--ease-out); }
+.onboarding-choice[aria-pressed="true"]::before { opacity: 1; }
+.onboarding-choice .grow { display: block; margin-top: 8px; }
+.onboarding-choice .card-title, .onboarding-choice .card-sub { display: block; }
+.onboarding-selected { position: absolute; top: 20px; right: 20px; display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--ink-faint); border-radius: 50%; }
+.onboarding-selected svg { opacity: 0; scale: 0.8; transition: opacity 150ms var(--ease-out), scale 150ms var(--ease-out); }
+.onboarding-choice[aria-pressed="true"] .onboarding-selected { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.onboarding-choice[aria-pressed="true"] .onboarding-selected svg { opacity: 1; scale: 1; }
+.onboarding-choice:focus-visible, .onboarding-choice:focus-visible::before, .onboarding-choice:focus-visible .onboarding-selected svg { transition: none; }
+.onboarding-choice:focus-visible:active { scale: 1; }
+.onboarding-continue { transition: scale 150ms ease-out; }
+.onboarding-continue:disabled { opacity: 1; background: var(--surface-sunk); color: var(--ink-muted); box-shadow: none; }
 /* State messages: enter with the shared settle-in (200ms, --ease-out); leave with the alert's quiet exit (150ms).
    Press on every control here comes from the existing .btn / .link-btn rules. Keyboard-driven changes don't move. */
 .signin-msg { animation: settle-in 200ms var(--ease-out); }

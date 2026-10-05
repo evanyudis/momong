@@ -5,12 +5,14 @@
     { "source": "/api/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
     { "source": "/sync", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
     { "source": "/me", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
-    { "source": "/household/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] }
+    { "source": "/household/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
+    { "source": "/billing/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] }
   ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "http://43.157.248.192/api/:path*" },
     { "source": "/sync", "destination": "http://43.157.248.192/sync" },
     { "source": "/me", "destination": "http://43.157.248.192/me" },
-    { "source": "/household/:path*", "destination": "http://43.157.248.192/household/:path*" }
+    { "source": "/household/:path*", "destination": "http://43.157.248.192/household/:path*" },
+    { "source": "/billing/:path*", "destination": "http://43.157.248.192/billing/:path*" }
   ]
 }

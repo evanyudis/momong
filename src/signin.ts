@@ -43,7 +43,7 @@ export const nameFromEmail = (email: string) => email.trim().split("@")[0] || "B
 export function signIn(s: SignInState, a: SignInAction): SignInState {
   switch (a.type) {
     case "email": return { ...s, email: a.value, emailError: false, failure: null };
-    case "password": return { ...s, password: a.value, failure: null };
+    case "password": return { ...s, password: a.value, emailError: false, failure: null };
     case "mode": return { ...s, mode: a.mode, emailError: false, googleCancelled: false, failure: null };
     // Google: pending while the app asks for the Google URL; the browser then leaves. Back without a session = cancelled.
     case "google": return { ...s, pending: true, emailError: false, googleCancelled: false, failure: null };

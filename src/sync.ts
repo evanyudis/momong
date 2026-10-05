@@ -4,17 +4,17 @@ import { applyRemote, markAllDirty, markPushed, onLocalChange, pending } from ".
 
 /** Public API base URL only. Secrets never live in this client.
  *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
-export const API_URL = import.meta.env.PROD ? "" : (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
-export const HAS_API = import.meta.env.PROD || !!API_URL;
+export const API_URL = import.meta.env?.PROD ? "" : (import.meta.env?.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+export const HAS_API = import.meta.env?.PROD || !!API_URL;
 
 export type Member = { id: string; email: string; name: string; role: "owner" | "member" };
 export type Me = {
   user: { id: string; email: string; name: string };
-  entitlement: { plan: "free" | "trial" | "monthly" | "lifetime"; expiresAt: string | null };
+  entitlement: { plan: "free" | "trial" | "monthly" | "plus_lifetime"; expiresAt: string | null };
   household: { id: string; seats: number; members: Member[] };
 };
 export type SyncStatus = "local" | "offline" | "syncing" | "synced" | "error";
-type State = { token: string | null; me: Me | null; status: SyncStatus; lastSyncAt: number | null; error?: string };
+type State = { token: string | null; me: Me | null; status: SyncStatus; lastSyncAt: number | null; hasSynced: boolean; syncEnabled: boolean; error?: string };
 
 const load = <T,>(k: string, d: T): T => {
   try { return JSON.parse(localStorage.getItem(k) ?? "") ?? d; } catch { return d; }
@@ -24,7 +24,11 @@ let state: State = {
   me: load<Me | null>("bb_me", null),
   status: "local",
   lastSyncAt: load<number | null>("bb_last_sync", null),
+  hasSynced: false,
+  syncEnabled: false,
 };
+let sessionVersion = 0;
+let syncVersion = 0;
 const listeners = new Set<() => void>();
 function set(patch: Partial<State>) {
   state = { ...state, ...patch };
@@ -41,20 +45,44 @@ export class ApiError extends Error {
   constructor(public status: number, public code: string) { super(code); }
 }
 
-async function api<T>(path: string, init: RequestInit = {}): Promise<{ data: T; res: Response }> {
+export async function api<T>(path: string, init: RequestInit = {}): Promise<{ data: T; res: Response }> {
   if (!HAS_API) throw new ApiError(0, "no_api");
+  const version = sessionVersion;
   const res = await fetch(API_URL + path, {
     ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
-      ...init.headers,
-    },
+    headers: { "content-type": "application/json", ...(state.token ? { authorization: `Bearer ${state.token}` } : {}), ...init.headers },
   });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && state.token) set({ token: null, me: null, status: "local" });
+  if (version !== sessionVersion) throw new ApiError(0, "session_changed");
+  if (res.status === 401 && state.token) clearSession();
   if (!res.ok) throw new ApiError(res.status, data?.error ?? data?.code ?? "request_failed");
   return { data, res };
+}
+
+export function authDestination(fallback = "#/profil") {
+  const target = sessionStorage.getItem("bb_auth_return");
+  sessionStorage.removeItem("bb_auth_return");
+  return target === "#/plus" || target === "#/pasangan" ? target : fallback;
+}
+
+function clearSession() {
+  sessionVersion++;
+  syncVersion++;
+  clearTimeout(timer);
+  localStorage.removeItem("bb_cursor");
+  set({ token: null, me: null, status: "local", lastSyncAt: null, hasSynced: false, syncEnabled: false, error: undefined });
+}
+
+export function setSyncEnabled(enabled: boolean) {
+  if (!state.me || !state.token) return;
+  syncVersion++;
+  localStorage.setItem(`bb_sync_enabled:${state.me.user.id}`, JSON.stringify(enabled));
+  set({ syncEnabled: enabled, status: "local", hasSynced: false });
+  if (enabled) {
+    localStorage.removeItem("bb_cursor");
+    markAllDirty();
+    void syncNow();
+  }
 }
 
 export async function requestMagicLink(email: string) {
@@ -63,11 +91,8 @@ export async function requestMagicLink(email: string) {
 
 export async function verifyMagicLink(token: string) {
   const { data, res } = await api<{ token: string }>(`/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`);
-  set({ token: res.headers.get("set-auth-token") ?? data.token });
-  await refreshMe();
-  localStorage.removeItem("bb_cursor");
-  markAllDirty();
-  void syncNow();
+  set({ token: res.headers.get("set-auth-token") ?? data.token, hasSynced: false });
+  await signedIn();
 }
 
 /** Better Auth email + password. Sign-up signs in at once; both hand the bearer back on set-auth-token. */
@@ -75,16 +100,16 @@ export async function authEmail(mode: SignInMode, email: string, password: strin
   const path = mode === "daftar" ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email";
   const body = mode === "daftar" ? { name: nameFromEmail(email), email, password } : { email, password };
   const { data, res } = await api<{ token?: string }>(path, { method: "POST", body: JSON.stringify(body) });
-  set({ token: res.headers.get("set-auth-token") ?? data.token ?? null });
+  set({ token: res.headers.get("set-auth-token") ?? data.token ?? null, hasSynced: false });
   await signedIn();
 }
 
-/** Signed in means token and /me. No /me, no session: drop the token rather than half sign in. Then a full sync. */
+/** Signed in means token and /me. No /me, no session: drop the token rather than half sign in. Sync stays opt-in. */
 async function signedIn() {
-  await refreshMe().catch((e) => { set({ token: null, me: null }); throw e; });
+  await refreshMe().catch((e) => { clearSession(); throw e; });
   localStorage.removeItem("bb_cursor");
-  markAllDirty();
-  void syncNow();
+  set({ syncEnabled: load<boolean>(`bb_sync_enabled:${state.me!.user.id}`, false), status: "local" });
+  if (state.syncEnabled) { markAllDirty(); void syncNow(); }
 }
 
 // Set while the browser is away at Google. Success returns to #/profil, cancel/deny to #/masuk-akun (errorCallbackURL).
@@ -108,7 +133,7 @@ export async function startGoogle() {
 /** True once per Google round trip that came back without signing in; clears the marker. SignIn shows "Masuk Google dibatalkan". */
 export function takeGoogleReturn() {
   const away = sessionStorage.getItem(GOOGLE_AWAY) === "away";
-  sessionStorage.removeItem(GOOGLE_AWAY);
+  if (away) sessionStorage.removeItem(GOOGLE_AWAY);
   return away;
 }
 
@@ -118,15 +143,17 @@ export async function finishGoogle() {
   if (sessionStorage.getItem(GOOGLE_AWAY) !== "away") return;
   if (state.token) return sessionStorage.removeItem(GOOGLE_AWAY);
   if (location.hash.startsWith("#/masuk-akun")) return; // error landing: SignIn takes the marker itself
+  sessionStorage.setItem(GOOGLE_AWAY, "finishing");
   try {
     const { data, res } = await api<{ session?: { token?: string } } | null>("/api/auth/get-session");
     const token = res.headers.get("set-auth-token") ?? data?.session?.token;
     if (!token) throw new ApiError(401, "no_session");
-    set({ token });
+    set({ token, hasSynced: false });
     await signedIn();
     sessionStorage.removeItem(GOOGLE_AWAY);
-    location.hash = "#/profil";
+    location.hash = authDestination();
   } catch {
+    sessionStorage.setItem(GOOGLE_AWAY, "away");
     location.hash = "#/masuk-akun";
   }
 }
@@ -138,9 +165,13 @@ export async function refreshMe() {
 }
 
 export async function signOut() {
-  await api("/api/auth/sign-out", { method: "POST", body: "{}" }).catch(() => {});
-  localStorage.removeItem("bb_cursor");
-  set({ token: null, me: null, status: "local", lastSyncAt: null });
+  const token = state.token;
+  clearSession();
+  if (token && HAS_API && navigator.onLine) {
+    await fetch(API_URL + "/api/auth/sign-out", {
+      method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: "{}",
+    }).catch(() => {});
+  }
 }
 
 export async function createInvite() {
@@ -149,7 +180,10 @@ export async function createInvite() {
 }
 
 export async function joinHousehold(token: string) {
+  if (!state.syncEnabled) throw new ApiError(409, "sync_disabled");
+  syncVersion++;
   await api("/household/join", { method: "POST", body: JSON.stringify({ token }) });
+  set({ hasSynced: false });
   localStorage.removeItem("bb_cursor");
   markAllDirty();
   await refreshMe();
@@ -164,9 +198,12 @@ export async function removeMember(id: string) {
 
 let inFlight: Promise<void> | null = null;
 export function syncNow(): Promise<void> {
-  if (!state.token || !HAS_API) return Promise.resolve();
+  if (!state.token || !state.syncEnabled || !HAS_API) return Promise.resolve();
   if (!navigator.onLine) { set({ status: "offline" }); return Promise.resolve(); }
-  inFlight ??= (async () => {
+  if (inFlight) return inFlight;
+  const version = sessionVersion, syncing = syncVersion;
+  const current = () => version === sessionVersion && syncing === syncVersion && state.syncEnabled;
+  inFlight = (async () => {
     set({ status: "syncing" });
     try {
       const changes = pending();
@@ -175,16 +212,20 @@ export function syncNow(): Promise<void> {
         method: "POST",
         body: JSON.stringify({ since, changes }),
       });
+      if (!current()) return;
       markPushed(changes);
       applyRemote(data.changes);
       // ponytail: second request per sync so partner joins/leaves show up; fold into /sync if traffic matters.
       await refreshMe().catch(() => {});
+      if (!current()) return;
       localStorage.setItem("bb_cursor", String(data.cursor));
-      set({ status: "synced", lastSyncAt: Date.now(), error: undefined });
+      set({ status: "synced", lastSyncAt: Date.now(), hasSynced: true, error: undefined });
     } catch (e) {
+      if (!current()) return;
       set({ status: navigator.onLine ? "error" : "offline", error: (e as Error).message });
     } finally {
       inFlight = null;
+      if (!current() && state.syncEnabled && state.token) void syncNow();
     }
   })();
   return inFlight;
@@ -192,10 +233,13 @@ export function syncNow(): Promise<void> {
 
 let timer: ReturnType<typeof setTimeout> | undefined;
 export function startSync() {
-  onLocalChange(() => { clearTimeout(timer); timer = setTimeout(syncNow, 1500); });
+  onLocalChange(() => { clearTimeout(timer); if (state.syncEnabled) timer = setTimeout(syncNow, 1500); });
   window.addEventListener("online", () => void syncNow());
-  window.addEventListener("offline", () => state.token && set({ status: "offline" }));
+  window.addEventListener("offline", () => state.syncEnabled && set({ status: "offline" }));
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && void syncNow());
   setInterval(() => document.visibilityState === "visible" && void syncNow(), 60_000);
-  if (state.token) { void refreshMe().catch(() => {}); void syncNow(); }
+  if (state.token) void refreshMe().then(() => {
+    set({ syncEnabled: load<boolean>(`bb_sync_enabled:${state.me!.user.id}`, false) });
+    if (state.syncEnabled) void syncNow();
+  }).catch(() => {});
 }

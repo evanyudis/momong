@@ -1,0 +1,53 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { createServer } from "vite";
+
+test("login does not upload; opt-in sync merges; logout ignores an in-flight response and preserves pending data", async () => {
+  const memory = new Map<string, string>();
+  const storage = { getItem: (k: string) => memory.get(k) ?? null, setItem: (k: string, v: string) => void memory.set(k, v), removeItem: (k: string) => void memory.delete(k) };
+  Object.assign(globalThis, { localStorage: storage, sessionStorage: storage });
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+  const server = await createServer({ server: { middlewareMode: true }, define: { "import.meta.env.VITE_API_URL": JSON.stringify("http://test.local") } });
+  const realFetch = globalThis.fetch;
+  let release: ((r: Response) => void) | undefined;
+  let delayed = false;
+  const calls: string[] = [];
+  const me = { user: { id: "u1", email: "sari@example.com", name: "Sari" }, entitlement: { plan: "free", expiresAt: null }, household: { id: "h1", seats: 2, members: [] } };
+  globalThis.fetch = (async (url: string) => {
+    const path = new URL(url).pathname;
+    calls.push(path);
+    if (path === "/api/auth/sign-in/email") return Response.json({ token: "test-session" });
+    if (path === "/me") return Response.json(me);
+    if (path === "/sync" && delayed) return new Promise<Response>((resolve) => { release = resolve; });
+    if (path === "/sync") return Response.json({ cursor: 1, changes: [{ collection: "kicks", id: "remote", data: { count: 2 }, updatedAt: Date.now() + 1000, deleted: false }] });
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  try {
+    const sync = await server.ssrLoadModule("/src/sync.ts");
+    const store = await server.ssrLoadModule("/src/store.ts");
+    store.put("kicks", { id: "local", count: 1 });
+    await sync.authEmail("masuk", "sari@example.com", "test-password");
+    assert.equal(sync.account().syncEnabled, false);
+    await sync.syncNow();
+    assert.equal(calls.filter((p) => p === "/sync").length, 0);
+    sync.setSyncEnabled(true);
+    await sync.syncNow();
+    assert.equal(store.get("kicks", "remote").count, 2);
+    assert.equal(store.pending().length, 0);
+    store.put("kicks", { id: "pending", count: 3 });
+    delayed = true;
+    const work = sync.syncNow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(release);
+    await sync.signOut();
+    assert.equal(sync.account().token, null);
+    assert.equal(sync.account().me, null);
+    release!(Response.json({ cursor: 99, changes: [{ collection: "kicks", id: "late", data: { count: 9 }, updatedAt: Date.now() + 2000 }] }));
+    await work;
+    assert.equal(store.get("kicks", "late"), undefined);
+    assert.equal(store.get("kicks", "local").count, 1);
+    assert.ok(store.pending().some((r: any) => r.id === "pending"));
+    assert.equal(memory.has("bb_cursor"), false);
+    assert.equal(sync.account().syncEnabled, false);
+  } finally { globalThis.fetch = realFetch; await server.close(); }
+});

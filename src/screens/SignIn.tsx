@@ -1,9 +1,10 @@
 import { ChevronLeft } from "lucide-react";
 import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
-import { Button, Form, Input, Label, TextField } from "react-aria-components";
+import { Button, FieldError, Form, Input, Label, TextField } from "react-aria-components";
+import { setPrefs } from "../store";
 import { reducedMotion } from "../motion";
 import { FAILURE_TEXT, SIGNIN_EMPTY, signIn } from "../signin";
-import { ApiError, authEmail, startGoogle, takeGoogleReturn } from "../sync";
+import { ApiError, authEmail, startGoogle, takeGoogleReturn, authDestination } from "../sync";
 
 const EXIT_MS = 150; // matches the quiet exit in styles.css; enter (settle-in) is 200ms
 
@@ -35,9 +36,9 @@ function GoogleMark() {
   );
 }
 
-/** Masuk / Daftar from Profil, signed out only. Real Better Auth email + password and Google OAuth. Leaving keeps local data.
+/** Account entry for onboarding and Profil. Email + password and Google OAuth.
  *  Controls are react-aria-components (unstyled), dressed only by the app's .btn / .input / .field rules. */
-export function SignIn() {
+export function SignIn({ onboarding = false }: { onboarding?: boolean }) {
   const [s, dispatch] = useReducer(signIn, SIGNIN_EMPTY);
   // Last input was a key: messages appear and leave without motion (emil-animations: keyboard actions never animate).
   const [still, setStill] = useState(false);
@@ -59,7 +60,7 @@ export function SignIn() {
     dispatch({ type: "submit" });
     try {
       await authEmail(s.mode, email, s.password);
-      location.hash = "#/profil";
+      location.hash = authDestination(onboarding ? "#/" : "#/profil");
     } catch (err) {
       // Status 0 covers fetch rejecting (offline, firewall, CORS, mixed content): never shown as success.
       dispatch({ type: "fail", status: err instanceof ApiError ? err.status : 0 });
@@ -90,42 +91,53 @@ export function SignIn() {
   return (
     <>
       <header className="header signin-head">
-        <a className="icon-btn" href="#/profil" aria-label="Kembali"><ChevronLeft size={22} /></a>
+        {!onboarding && <a className="icon-btn" href="#/profil" aria-label="Kembali"><ChevronLeft size={22} /></a>}
         <span className="signin-brand">BumpBuddy</span>
-        <h1>{daftar ? "Daftar" : "Masuk"}</h1>
-        <p className="muted">Supaya data tersimpan online. Sync dan pasangan tetap gratis.</p>
+        <h1>{onboarding ? "Selamat datang di BumpBuddy" : daftar ? "Buat akun BumpBuddy" : "Masuk ke BumpBuddy"}</h1>
+        <p className="muted">{onboarding ? "Catat tanpa akun. Masuk untuk Plus atau sinkron dengan pasangan." : "Supaya data tersimpan online. Sync dan pasangan tetap gratis."}</p>
       </header>
       <div className="signin" onKeyDownCapture={() => setStill(true)} onPointerDownCapture={() => setStill(false)}>
-        <Form className="stack" onSubmit={submit} validationBehavior="aria" aria-busy={s.pending}>
+        <Form className="stack" onSubmit={submit} validationBehavior="native" aria-busy={s.pending}>
           <Button className="btn btn-glass block" isDisabled={s.pending} onPress={google}><GoogleMark />Lanjut dengan Google</Button>
           {(s.googleCancelled || googleLeaving) && (
             <p className="muted signin-msg" role="status" {...msg(googleLeaving)}>Masuk Google dibatalkan.</p>
           )}
           <p className="signin-or" aria-hidden="true">atau</p>
           <TextField
-            className="field" type="email" inputMode="email" autoComplete="email"
+            className="field" type="email" inputMode="email" autoComplete="email" isRequired
             value={s.email} isInvalid={s.emailError} aria-describedby={s.emailError ? "signin-email-error" : undefined}
             onChange={(value) => dispatch({ type: "email", value })}
           >
             <Label>Email</Label>
             <Input ref={emailRef} className="input" placeholder="nama@email.com" autoCapitalize="none" spellCheck={false} />
+            {!s.emailError && <FieldError className="signin-error" />}
             {(s.emailError || errLeaving) && (
               <span id="signin-email-error" className="signin-error signin-msg" role="alert" {...msg(errLeaving)}>Email tidak cocok.</span>
             )}
           </TextField>
           <TextField
-            className="field" type="password" autoComplete={daftar ? "new-password" : "current-password"}
+            className="field" type="password" autoComplete={daftar ? "new-password" : "current-password"} isRequired minLength={daftar ? 8 : undefined}
             value={s.password} onChange={(value) => dispatch({ type: "password", value })}
           >
             <Label>Kata sandi</Label>
             <Input ref={passwordRef} className="input" />
+            <FieldError className="signin-error" />
+            {daftar && <small className="muted">Minimal 8 karakter.</small>}
           </TextField>
-          <Button type="submit" className="btn btn-signin block" isDisabled={s.pending}>{daftar ? "Buat akun" : "Masuk"}</Button>
+          <Button type="submit" className="btn btn-signin block" isDisabled={s.pending}>{s.pending ? "Menyambungkan…" : daftar ? "Buat akun" : "Masuk"}</Button>
           {(s.failure || failLeaving) && lastFailure.current && (
             <p className="signin-failure signin-msg" role="alert" {...msg(failLeaving)}>{FAILURE_TEXT[lastFailure.current]}</p>
           )}
-          <a className="link-btn muted signin-later" href="#/profil">Nanti saja</a>
+          <Button type="button" className="link-btn signin-later" isDisabled={s.pending} onPress={() => dispatch({ type: "mode", mode: daftar ? "masuk" : "daftar" })}>
+            {daftar ? "Sudah punya akun? Masuk" : "Belum punya akun? Daftar"}
+          </Button>
+
         </Form>
+        <button type="button" className="btn btn-soft block" style={{ marginTop: 20 }} onClick={() => {
+          setPrefs({ guest: true });
+          sessionStorage.removeItem("bb_auth_return");
+          location.hash = "#/";
+        }}>Lanjut tanpa akun</button>
       </div>
     </>
   );

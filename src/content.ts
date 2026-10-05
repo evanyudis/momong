@@ -46,7 +46,7 @@ export function weekNote(week: number): string {
 export type PlusVariant = "insights" | "perkiraan" | "pdf";
 export const PLUS_COPY: Record<PlusVariant, { title: string; body: string }> = {
   insights: { title: "Lihat pola minggu ini", body: "Riwayat ASI, pompa, dan popok: 30 hari terakhir. Botol: semua." },
-  perkiraan: { title: "Perkiraan kapan berikutnya", body: "Catat dari tab Log; ringkasannya muncul di sini." },
+  perkiraan: { title: "Perkiraan kapan berikutnya", body: "Fitur ini sedang disiapkan. Checkout sandbox hanya untuk pengujian." },
   pdf: { title: "Simpan laporan lengkap", body: "PDF untuk bidan · 1× gratis per bulan" },
 };
 

@@ -124,6 +124,7 @@ export const saveSettings = (s: Settings) => put("settings", { ...settings(), ..
 // Device-only preferences (not synced).
 export type Prefs = {
   name?: string;
+  guest?: boolean;
   theme?: "light" | "dark" | "system";
   // Contraction pattern alert dismissals (device only).
   criticalDismissedAt?: number;

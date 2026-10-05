@@ -35,6 +35,7 @@ test("Daftar rejections and server errors get their own message", () => {
 test("typing after a failure clears it", () => {
   const err = signIn(signIn(filled(), { type: "submit" }), { type: "fail", status: 401 });
   assert.equal(signIn(err, { type: "email", value: "a@b.c" }).emailError, false);
+  assert.equal(signIn(err, { type: "password", value: "corrected" }).emailError, false);
   const net = signIn(filled(), { type: "fail", status: 0 });
   assert.equal(signIn(net, { type: "password", value: "x" }).failure, null);
 });

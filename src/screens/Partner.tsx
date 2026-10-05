@@ -5,7 +5,7 @@ import { initial, useHousehold } from "../household";
 import { go } from "../route";
 import { getPrefs } from "../store";
 import {
-  HAS_API, ApiError, createInvite, joinHousehold, removeMember, requestMagicLink, signOut, syncNow, useAccount, verifyMagicLink,
+  HAS_API, setSyncEnabled, ApiError, createInvite, joinHousehold, removeMember, requestMagicLink, signOut, syncNow, useAccount, verifyMagicLink,
 } from "../sync";
 import { toast, TopBar } from "../ui";
 
@@ -22,7 +22,7 @@ export function SyncDot() {
     synced: ["var(--success)", `Tersinkron · ${acc.lastSyncAt ? agoLabel(acc.lastSyncAt) : ""}`],
     error: ["var(--warning)", "Belum tersinkron · coba lagi"],
   } as const;
-  const status = acc.status === "local" && acc.token && acc.lastSyncAt ? "synced" : acc.status;
+  const status = !acc.syncEnabled ? "local" : acc.status;
   const [color, text] = map[status];
   return (
     <span className="row" style={{ gap: 6, color: status === "synced" ? "var(--success-ink)" : "var(--ink-muted)", fontWeight: 500 }}>
@@ -36,9 +36,18 @@ export function Partner() {
   return (
     <>
       <TopBar title="Pasangan" />
-      {!HAS_API ? <NoServer /> : h.signedIn ? <Household /> : <SignIn />}
+      {!HAS_API ? <NoServer /> : h.signedIn ? h.acc.syncEnabled ? <Household /> : <SyncConsent /> : <SignIn />}
     </>
   );
+}
+
+function SyncConsent() {
+  return <section className="card solid stack">
+    <h1>Aktifkan sinkron?</h1>
+    <p className="muted">Catatan di HP ini akan diunggah dan digabung dengan catatan keluarga di akunmu. Sinkron dan pasangan gratis untuk 2 orang.</p>
+    <button className="btn btn-ink block" onClick={() => setSyncEnabled(true)}>Aktifkan sinkron</button>
+    <a className="btn btn-soft block" href="#/profil">Nanti saja</a>
+  </section>;
 }
 
 function Hero({ title, body }: { title: string; body: string }) {
@@ -84,7 +93,7 @@ function SignIn({ invite }: { invite?: boolean }) {
       <Hero
         title={invite ? "Kamu diundang mencatat bersama" : "Ajak pasangan mencatat bersama"}
         body={invite
-          ? "Masuk dengan email dulu. Setelah itu kamu langsung bergabung dan catatan kalian tersinkron."
+          ? "Masuk dengan email dulu. Setelah itu aktifkan sinkron dan konfirmasi untuk bergabung."
           : "Berdua lebih ringan. Masuk dengan email untuk sinkron dan undang pasangan. Gratis untuk 2 orang."}
       />
       {state === "sent" ? (
@@ -186,6 +195,7 @@ function Household() {
               <div className="card-title" style={{ fontSize: 16 }}>Sinkron</div>
               <div style={{ fontSize: 14, marginTop: 2 }}><SyncDot /></div>
             </div>
+            <button className="btn btn-soft sm" onClick={() => setSyncEnabled(false)}>Matikan sinkron</button>
             <button className="icon-btn" aria-label="Sinkron sekarang" onClick={() => void syncNow()}><RefreshCw size={18} /></button>
           </div>
         </section>
@@ -227,10 +237,10 @@ export function MagicLanding({ token }: { token: string | null }) {
         await verifying.get(token);
         const pendingInvite = localStorage.getItem(PENDING_INVITE);
         if (pendingInvite) {
-          localStorage.removeItem(PENDING_INVITE);
-          await joinHousehold(pendingInvite).then(() => toast("Kamu bergabung dengan pasangan")).catch(() => toast("Undangan sudah tidak berlaku"));
+          go(`#/gabung?invite=${encodeURIComponent(pendingInvite)}`);
+          return;
         } else toast("Berhasil masuk");
-        go("#/pasangan");
+        go(pendingInvite ? "#/pasangan" : "#/");
       } catch {
         setState("error");
       }
@@ -257,11 +267,13 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   if (!HAS_API) return <><TopBar title="Gabung" /><NoServer /></>;
   if (!invite) return <><TopBar title="Gabung" /><div className="card solid empty"><strong>Tautan tidak lengkap</strong>Minta pasangan kirim ulang undangan.</div></>;
   if (!h.signedIn) return <><TopBar title="Gabung" /><SignIn invite /></>;
+  if (!h.acc.syncEnabled) return <><TopBar title="Gabung" /><SyncConsent /></>;
 
   async function join() {
     setBusy(true);
     try {
       await joinHousehold(invite!);
+      localStorage.removeItem(PENDING_INVITE);
       toast("Kamu bergabung dengan pasangan");
       go("#/pasangan");
     } catch (e) {

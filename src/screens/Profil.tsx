@@ -4,8 +4,9 @@ import type { PlusVariant } from "../content";
 import { todayISO } from "../dates";
 import { useHousehold } from "../household";
 import { exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
+import { signOut } from "../sync";
 import { SyncDot } from "./Partner";
-import { DateInput, Header, PlusSheet, Sheet } from "../ui";
+import { DateInput, Header, PlusSheet, Sheet, toast } from "../ui";
 
 export function applyTheme(theme: Prefs["theme"]) {
   const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
@@ -54,14 +55,10 @@ export function Profil() {
           </label>
         </section>
 
-        {/* "Gratis 7 hari" is a label only: no timer, no trial entitlement. The button only opens the Plus sheet. */}
-        <section className="card plus-card">
-          <div className="spread" style={{ alignItems: "flex-start" }}>
-            <div className="card-title">Perkiraan, pengingat & grafik</div>
-            <span className="pill plus-chip">Gratis 7 hari</span>
-          </div>
-          <p className="card-sub" style={{ marginTop: 6 }}>Riwayat lebih dari 30 hari, PDF tanpa batas, dan multi bayi.</p>
-          <button className="btn btn-coral block" style={{ marginTop: 16 }} aria-haspopup="dialog" onClick={() => setPlus("insights")}>Coba Plus</button>
+        <section className="card plus-card stack">
+          <div className="card-title">{h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : "Plus · Selamanya (sandbox)"}</div>
+          <p className="card-sub">Uji pembayaran sandbox. Fitur Plus sedang disiapkan; tidak ada pembayaran uang nyata.</p>
+          <a className="btn btn-coral block" href="#/plus">{h.me?.entitlement.plan === "plus_lifetime" ? "Lihat status Plus" : "Coba Plus"}</a>
         </section>
 
         <section className="card solid">
@@ -98,7 +95,7 @@ export function Profil() {
           </div>
         </section>
 
-        <a className="card solid" href={h.signedIn ? "#/pasangan" : "#/masuk-akun"}>
+        <a className="card solid" href="#/pasangan">
           <div className="spread">
             <div>
               <div className="card-title" style={{ fontSize: 16 }}>Sinkron & pasangan</div>
@@ -118,6 +115,13 @@ export function Profil() {
           </div>
         </button>
 
+        {h.signedIn && <section className="card solid stack">
+          <div className="card-title">Akun</div>
+          <p className="muted">{h.me?.user.email}</p>
+          <button className="btn btn-soft block" onClick={() => {
+            void signOut(); toast("Keluar dari akun. Catatan tetap di HP ini.");
+          }}>Keluar akun</button>
+        </section>}
         <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>BumpBuddy · Catatan, bukan saran medis.</p>
       </div>
 

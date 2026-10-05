@@ -13,7 +13,7 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  if (url.origin === location.origin && /^\/(api|sync|me|household)(\/|$)/.test(url.pathname)) return;
+  if (url.origin === location.origin && /^\/(api|sync|me|household|billing)(\/|$)/.test(url.pathname)) return;
   const cacheable = url.origin === location.origin || url.hostname.endsWith("fonts.googleapis.com") || url.hostname.endsWith("fonts.gstatic.com");
   if (!cacheable) return;
   if (req.mode === "navigate") {
