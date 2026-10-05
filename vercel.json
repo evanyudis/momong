@@ -6,6 +6,7 @@
     { "source": "/sync", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
     { "source": "/me", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
     { "source": "/household/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
+    { "source": "/wishlist/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] },
     { "source": "/billing/:path*", "headers": [{ "key": "x-vercel-enable-rewrite-caching", "value": "0" }] }
   ],
   "rewrites": [
@@ -13,6 +14,7 @@
     { "source": "/sync", "destination": "http://43.157.248.192/sync" },
     { "source": "/me", "destination": "http://43.157.248.192/me" },
     { "source": "/household/:path*", "destination": "http://43.157.248.192/household/:path*" },
+    { "source": "/wishlist/:path*", "destination": "http://43.157.248.192/wishlist/:path*" },
     { "source": "/billing/:path*", "destination": "http://43.157.248.192/billing/:path*" }
   ]
 }

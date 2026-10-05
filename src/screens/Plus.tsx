@@ -73,7 +73,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
       <span className="pill plus-chip">Uji pembayaran sandbox</span>
       <h1>{active ? "Plus · Selamanya" : "Plus Selamanya"}</h1>
       <p className="muted">{active ? "Pembayaran sandbox sudah dikonfirmasi server." : "Uji alur pembayaran sekali untuk Selamanya. Tidak ada pembayaran uang nyata."}</p>
-      <p className="muted">Fitur Plus sedang disiapkan. Catatan offline, sinkron, dan pasangan tetap Free.</p>
+      <p className="muted">Plus membuka perkiraan menyusu, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi. Sinkron dan pasangan tetap Free.</p>
       {error && <p role="alert" className="signin-error">{error}</p>}
       {order && <p role="status">{paymentLabel(order)}</p>}
       {!userId ? <a className="btn btn-ink block" href="#/masuk-akun" onClick={() => sessionStorage.setItem("bb_auth_return", "#/plus")}>Masuk atau daftar untuk lanjut</a>
