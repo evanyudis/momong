@@ -12,7 +12,7 @@ Feature planning preceded implementation in PLUS-IMPLEMENTATION.md. All planned 
 
 ## Required before production payment wiring
 
-1. Deploy API code, apply additive wishlist schema migration, verify database health and backup/restore procedure. The running VPS currently serves an older build. Obtain the SSH destination and app directory from Evan; reuse existing server secrets without printing them.
+1. API 8001eac is deployed through SSH to /opt/momong-api on ubuntu@43.157.248.192; additive wishlist migration and database health passed. Pre-update application data and code snapshots remain on the VPS. Establish and test a full database restore procedure before live payments.
 2. Verify sandbox merchant configuration, hosted redirect/return, actual successful and pending transactions, cancel/expiry/failure, signed duplicate webhook delivery and delayed webhook recovery. Never expose server keys to the client.
 3. Confirm public HTTPS webhook reachability and authenticated API forwarding. Current Vercel-to-VPS hop is HTTP; plan TLS on the API origin before production.
 4. Define payment support/refund/reconciliation procedures, privacy copy and entitlement revocation policy. Device-cached entitlement allows offline use until the next online session validation; define a different validity policy only if required.
@@ -20,4 +20,4 @@ Feature planning preceded implementation in PLUS-IMPLEMENTATION.md. All planned 
 6. Decide monthly/recurring and trial behavior separately, including renewals, cancellation and expiry. Neither is offered by this checkout.
 7. Request Evan's explicit approval only after the above is verified. Then plan the smallest live Midtrans wiring change, production configuration, monitoring and rollback. Keep sandbox and live credentials isolated.
 
-Frontend push/deployment is available through the existing Vercel integration. End-to-end sandbox verification remains blocked by the old API deployment and unverified merchant configuration; green mocked tests do not resolve those blockers.
+Frontend cedb93c deployed successfully through Vercel. Deployed API checks passed for signup/session, Free entitlement, private order lookup, wishlist entitlement gating and forged webhook rejection; the synthetic account was removed afterward. End-to-end sandbox verification remains blocked because MIDTRANS_SERVER_KEY is absent on the VPS (authenticated checkout returns billing_unconfigured). APP_URL is correct and production mode is off. Set only the sandbox server key in the server environment and configure https://momong.vercel.app/billing/midtrans/notify as the notification URL before an actual hosted test transaction. Do not paste keys in chat or commit them.
