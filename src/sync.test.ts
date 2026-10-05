@@ -27,6 +27,11 @@ test("login does not upload; opt-in sync merges; logout ignores an in-flight res
   try {
     const sync = await server.ssrLoadModule("/src/sync.ts");
     const store = await server.ssrLoadModule("/src/store.ts");
+    sessionStorage.setItem("bb_auth_return", "#/plus");
+    assert.equal(sync.authDestination("#/"), "#/plus", "all authentication callbacks preserve Plus intent");
+    assert.equal(sync.authDestination("#/"), "#/", "payment intent is consumed once");
+    sessionStorage.setItem("bb_auth_return", "https://attacker.example/");
+    assert.equal(sync.authDestination("#/"), "#/", "only app destinations are accepted");
     store.put("kicks", { id: "local", count: 1 });
     await sync.authEmail("masuk", "sari@example.com", "test-password");
     assert.equal(sync.resetGuestData(), false, "signed-in reset is refused");

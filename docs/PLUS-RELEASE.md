@@ -12,7 +12,9 @@ Lifetime sandbox order bb-lt-cebb80636749410f8d7ff0a01fe05f58-muvjh152 reached c
 
 - Confirm merchant Card One Click/Recurring and GoPay Tokenization/Recurring/No PIN activation before enabling each monthly method. Both readiness flags remain disabled.
 - Complete actual monthly linking, initial payment, renewal, failed-renewal retries, cancellation and lifetime upgrade against Midtrans, including calendar boundaries and ambiguous provisioning recovery.
-- Complete card 3DS challenge and signed-in visual checks for monthly, lifetime, shared partner and recovery states.
+- Secure lifetime card checkout is deployed (API c53839e); a real sandbox 3DS 2.0 challenge appeared on order bb-lt-ff6f9956adf1414b9547a7e65e4c3740-muvsfw77. OTP was entered, but the browser control could not submit the simulator iframe; transaction remains pending and entitlement was not granted. Complete the challenge before claiming 3DS E2E.
+- Local account fixtures verified non-member, monthly active and lifetime active pages, including expiry, cancellation control, feature links and absence of repeat lifetime checkout. Shared partner and recovery visual checks remain.
+- Magic-link callback now consumes the same allowed authentication destination as password/Google callbacks, preserving return-to-Plus intent.
 - Review hosted merchant display name Gainz; do not change another product merchant account without an explicit decision.
 - On real iPhone/iPad: browser data → backup → homescreen installation → restore → reload/offline, and separately opt-in sync recovery. Browser and homescreen storage can be separate; installation does not copy localStorage.
 

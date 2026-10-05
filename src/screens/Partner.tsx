@@ -5,7 +5,7 @@ import { initial, useHousehold } from "../household";
 import { go } from "../route";
 import { getPrefs } from "../store";
 import {
-  HAS_API, setSyncEnabled, ApiError, createInvite, joinHousehold, removeMember, requestMagicLink, signOut, syncNow, useAccount, verifyMagicLink,
+  HAS_API, setSyncEnabled, ApiError, createInvite, joinHousehold, removeMember, requestMagicLink, signOut, syncNow, useAccount, authDestination, verifyMagicLink,
 } from "../sync";
 import { toast, TopBar } from "../ui";
 
@@ -240,7 +240,7 @@ export function MagicLanding({ token }: { token: string | null }) {
           go(`#/gabung?invite=${encodeURIComponent(pendingInvite)}`);
           return;
         } else toast("Berhasil masuk");
-        go(pendingInvite ? "#/pasangan" : "#/");
+        go(authDestination("#/"));
       } catch {
         setState("error");
       }
