@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { activeBabyId, settings, getPrefs, isPlus, setPrefs, uid, useDB } from "../store";
 import { TopBar } from "../ui";
 
@@ -8,6 +8,7 @@ export function Reminders() {
   const [label, setLabel] = useState("");
   const [date, setDate] = useState("");
   const [error, setError] = useState("");
+  const labelInput = useRef<HTMLInputElement>(null);
   const prefs = getPrefs();
   const all = prefs.reminders ?? [];
   const items = all.filter((r) => r.babyId === activeBabyId()).sort((a, b) => a.at - b.at);
@@ -27,7 +28,7 @@ export function Reminders() {
           setEditing(null);
           setLabel(""); setDate(""); setError("");
         }}>
-          <label className="field"><span>Nama pengingat</span><input className="input" name="label" required maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Misal: pompa atau vitamin" /></label>
+          <label className="field"><span>Nama pengingat</span><input ref={labelInput} className="input" name="label" required maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Misal: pompa atau vitamin" /></label>
           <label className="field"><span>Waktu</span><input className="input" name="at" type="datetime-local" required value={date} onChange={(e) => setDate(e.target.value)} /></label>
           <button className="btn btn-ink block">{editing ? "Simpan perubahan" : "Simpan pengingat"}</button>
           {editing && <button type="button" className="btn btn-soft block" onClick={() => { setEditing(null); setLabel(""); setDate(""); }}>Batal edit</button>}
@@ -49,7 +50,10 @@ export function Reminders() {
           {items.map((r) => <div className="spread" key={r.id}><div><div className="title">{r.label}</div><div className="sub">{new Date(r.at).toLocaleString("id-ID")}{r.firedAt ? " · Sudah ditampilkan" : ""}</div></div><button className="btn btn-soft sm" aria-label={`Edit pengingat ${r.label}`} onClick={() => {
             setEditing(r.id); setLabel(r.label);
             const local = new Date(r.at - new Date(r.at).getTimezoneOffset() * 60000);
-            setDate(local.toISOString().slice(0, 16)); window.scrollTo({ top: 0 });
+            setDate(local.toISOString().slice(0, 16));
+            setError("");
+            labelInput.current?.focus({ preventScroll: true });
+            window.scrollTo({ top: 0, behavior: "instant" });
           }}>Edit</button><button className="btn btn-soft sm" aria-label={`Hapus pengingat ${r.label}`} onClick={() => setPrefs({ reminders: all.filter((item) => item.id !== r.id) })}>Hapus</button></div>)}
         </section>
       </>}

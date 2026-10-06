@@ -136,16 +136,16 @@ export function Profil() {
             <span>Nama panggilan</span>
             <input className="input" maxLength={120} value={prefs.name ?? ""} placeholder="Bunda" onChange={(e) => setPrefs({ name: e.target.value })} />
           </label>
+          <label className="field">
+            <span>Nama si kecil</span>
+            <input className="input" maxLength={120} value={s.babyName ?? ""} placeholder="Si kecil" onChange={(e) => saveSettings({ babyName: e.target.value })} />
+          </label>
           {!born && <label className="field">
             <span>HPL (hari perkiraan lahir)</span>
             <DateInput value={s.hpl ?? ""} onChange={(e) => e.target.value && saveSettings({ hpl: e.target.value })} />
           </label>}
         </div>          {born && (
             <div className="stack" style={{ marginTop: 16 }}>
-              <label className="field">
-                <span>Nama si kecil</span>
-                <input className="input" maxLength={120} value={s.babyName ?? ""} placeholder="Si kecil" onChange={(e) => saveSettings({ babyName: e.target.value })} />
-              </label>
               <label className="field">
                 <span>Tanggal lahir</span>
                 <DateInput max={todayISO()} value={s.babyBirth ?? ""} onChange={(e) => e.target.value && e.target.validity.valid && saveSettings({ babyBirth: e.target.value })} />
