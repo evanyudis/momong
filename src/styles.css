@@ -552,6 +552,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 .paywall-checklist span { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--paywall-top); color: var(--paywall-accent-ink); flex: none; }
 .paywall-checklist strong { font: inherit; }
 .paywall[data-expanded="true"] .paywall-checklist { display: none; }
+.paywall [data-plus-morph] { transform-origin: 0 0; }
 .paywall-benefits { padding: 18px 0 24px; }
 .paywall-benefits[aria-hidden="true"] { display: none; }
 .paywall-context { margin: 0 0 16px; font-size: 14px; line-height: 1.45; }
