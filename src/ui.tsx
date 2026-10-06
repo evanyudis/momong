@@ -1,5 +1,5 @@
 import { PlanPicker, selectedPlan } from "./billing";
-import { Baby, Bell, CalendarDays, ChartNoAxesColumn, ChevronLeft, FileText, Gift, History, Sparkles, Timer } from "lucide-react";
+import { Baby, Bell, CalendarDays, ChartNoAxesColumn, Check, ChevronLeft, FileText, Gift, History, Sparkles, Timer } from "lucide-react";
 import { type ComponentProps, type ReactNode, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { PLUS_COPY, PLUS_FEATURES, type PlusVariant } from "./content";
@@ -89,13 +89,12 @@ export function Sheet({ open, onOpenChange, title, children }: {
 type Stage = "closed" | "compact" | "expanded";
 type Motion = "none" | "enter" | "expand" | "collapse" | "exit";
 const SETTLE: Record<Stage, Motion> = { closed: "exit", compact: "collapse", expanded: "expand" };
-const INSET = 12; // compact card's side gap (px); the card grows to full width as it expands
 const EXIT_MS = 200; // matches [data-motion="exit"] in styles.css
 const FEATURE_ICONS = [Timer, Bell, ChartNoAxesColumn, History, FileText, Gift, Baby];
 
 /**
  * Plus soft paywall. Checkout lives on the Plus page.
- * A compact floating sheet that grows into a full page: tap or drag up expands, swipe down collapses, further down
+ * A bottom sheet with a pinned purchase footer: tap or drag up expands, swipe down collapses, further down
  * dismisses. Transform + opacity only. Drag writes styles directly (no per-frame renders); on release a CSS
  * transition retargets from the live pose, so grabbing it mid-flight and reversing reverses the motion.
  */
@@ -110,45 +109,105 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
   const [expanded, setExpanded] = useState(false);
   const backdrop = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const scroll = useRef<HTMLDivElement>(null);
+  const grip = useRef<HTMLButtonElement>(null);
   const head = useRef<HTMLDivElement>(null);
   const foot = useRef<HTMLDivElement>(null);
   const stage = useRef<Stage>("closed");
   const drag = useRef<{ y0: number; Y0: number; Y: number; y: number; t: number; v: number; moved: boolean } | null>(null);
   const swallowClick = useRef(false);
   const keyboard = useRef(false);
+  const compactHeight = useRef(0);
+  const view = useRef(false);
+  const morphFrom = useRef(new Map<string, DOMRect>());
+  const morphs = useRef<Animation[]>([]);
+
+  function measureCompact() {
+    const el = root.current!, previous = el.dataset.expanded;
+    el.dataset.expanded = "false";
+    compactHeight.current = 54 + head.current!.offsetHeight + foot.current!.offsetHeight;
+    el.dataset.expanded = previous;
+  }
+
+  function showDetails(next: boolean) {
+    if (view.current === next) return;
+    const list = root.current!.querySelector(next ? ".paywall-checklist" : ".paywall-features")!;
+    morphFrom.current = new Map([...list.querySelectorAll<HTMLElement>("[data-plus-morph]")].map(el => [el.dataset.plusMorph!, el.getBoundingClientRect()]));
+    foot.current!.querySelectorAll<HTMLElement>(".plus-plan").forEach((el, i) => morphFrom.current.set(`plan-${i}`, el.getBoundingClientRect()));
+    morphs.current.forEach(animation => animation.cancel());
+    view.current = next;
+    setExpanded(next);
+  }
 
   // Y = the panel's translateY. Compact parks it so only head + footer show; expanded is Y = 0.
   function geo() {
-    const H = panel.current!.offsetHeight, W = panel.current!.offsetWidth;
-    const sc = (W - 2 * INSET) / W;
-    const Yc = Math.max(1, H - sc * (head.current!.offsetTop + head.current!.offsetHeight + foot.current!.offsetHeight));
-    return { H, sc, Yc };
+    const H = panel.current!.offsetHeight;
+    const Yc = Math.max(1, H - compactHeight.current);
+    return { H, Yc };
   }
   // One pose drives every layer, so panel, footer and backdrop always move as a unit.
   function place(Y: number, motion: Motion) {
-    const { H, sc, Yc } = geo();
-    const s = sc + (1 - sc) * Math.min(Math.max(1 - Y / Yc, 0), 1);
+    const { H, Yc } = geo();
     for (const el of [backdrop.current!, panel.current!, foot.current!]) el.dataset.motion = motion;
     root.current!.dataset.instant = String(keyboard.current || reducedMotion());
-    panel.current!.style.transform = `translate(-50%, ${Y}px) scale(${s})`;
-    foot.current!.style.transform = `translate(-50%, ${Math.max(0, Y - Yc)}px) scale(${s})`;
+    panel.current!.style.transform = `translate(-50%, ${Y}px)`;
+    foot.current!.style.transform = `translate(-50%, ${Math.max(0, Y - Yc)}px)`;
     backdrop.current!.style.opacity = String(Math.min(Math.max((H - Y) / (H - Yc), 0), 1));
   }
   function go(to: Stage, motion = SETTLE[to]) {
     stage.current = to;
     const { H, Yc } = geo();
     place(to === "expanded" ? 0 : to === "compact" ? Yc : H, motion);
-    setExpanded(to === "expanded");
-    if (to !== "expanded") panel.current!.scrollTop = 0;
+    showDetails(to === "expanded");
+    scroll.current!.style.maxHeight = `${Math.max(0, H - (to === "expanded" ? 0 : Yc) - foot.current!.offsetHeight - 54)}px`;
+    if (to !== "expanded") scroll.current!.scrollTop = 0;
   }
 
   useLayoutEffect(() => {
     if (!mounted) return;
     keyboard.current = !!document.activeElement?.matches(":focus-visible");
-    panel.current!.style.paddingBottom = `${foot.current!.offsetHeight}px`; // expanded list clears the pinned footer
+    measureCompact();
     place(geo().H, "none");
     panel.current!.getBoundingClientRect(); // commit the off-screen pose so the enter transitions from it
   }, [mounted]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useLayoutEffect(() => {
+    if (!mounted || stage.current === "closed") return;
+    const { H, Yc } = geo();
+    scroll.current!.style.maxHeight = `${Math.max(0, H - (expanded ? 0 : Yc) - foot.current!.offsetHeight - 54)}px`;
+    const from = morphFrom.current;
+    morphFrom.current = new Map();
+    if (keyboard.current || reducedMotion() || !from.size) return;
+    const duration = expanded ? 280 : 210;
+    const list = root.current!.querySelector(expanded ? ".paywall-features" : ".paywall-checklist")!;
+    const animations = [...list.querySelectorAll<HTMLElement>("[data-plus-morph]")].map(el => {
+      const before = from.get(el.dataset.plusMorph!), after = el.getBoundingClientRect();
+      return el.animate(before ? [
+        { transform: `translate(${before.x - after.x}px, ${before.y - after.y}px) scale(${before.height / after.height})`, opacity: 1 },
+        { transform: "none", opacity: 1 },
+      ] : [{ transform: "translateY(8px)", opacity: 0 }, { transform: "none", opacity: 1 }],
+      { duration, easing: "cubic-bezier(0.645, 0.045, 0.355, 1)" });
+    });
+    if (expanded) list.querySelectorAll("p").forEach(el => animations.push(el.animate(
+      [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }],
+      { duration: 180, delay: 60, easing: EASE_OUT, fill: "backwards" },
+    )));
+    foot.current!.querySelectorAll<HTMLElement>(".plus-plan").forEach((el, i) => {
+      const before = from.get(`plan-${i}`)!, after = el.getBoundingClientRect();
+      animations.push(el.animate(
+        [{ transform: `translate(${before.x - after.x}px, ${before.y - after.y}px)`, opacity: .6 }, { transform: "none", opacity: 1 }],
+        { duration, easing: EASE_OUT },
+      ));
+    });
+    morphs.current = animations;
+  }, [expanded, mounted]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const media = matchMedia("(prefers-reduced-motion: reduce)");
+    const stop = () => { morphs.current.forEach(animation => animation.cancel()); };
+    media.addEventListener("change", stop);
+    return () => { stop(); media.removeEventListener("change", stop); };
+  }, []);
 
   useEffect(() => {
     if (variant) {
@@ -165,17 +224,19 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
   useEffect(() => {
     if (!mounted) return;
     const onResize = () => {
-      panel.current!.style.paddingBottom = `${foot.current!.offsetHeight}px`;
+      morphs.current.forEach(animation => animation.cancel());
+      measureCompact();
       if (!drag.current) go(stage.current, "none");
     };
-    let size = `${head.current!.offsetHeight}:${foot.current!.offsetHeight}`;
+    let size = `${panel.current!.offsetWidth}:${panel.current!.offsetHeight}`;
     const observer = new ResizeObserver(() => {
-      const next = `${head.current!.offsetHeight}:${foot.current!.offsetHeight}`;
+      const next = `${panel.current!.offsetWidth}:${panel.current!.offsetHeight}`;
       if (next !== size) { size = next; onResize(); }
     });
-    observer.observe(head.current!); observer.observe(foot.current!);
+    observer.observe(panel.current!);
     addEventListener("resize", onResize);
-    return () => { observer.disconnect(); removeEventListener("resize", onResize); };
+    document.fonts.addEventListener("loadingdone", onResize);
+    return () => { observer.disconnect(); removeEventListener("resize", onResize); document.fonts.removeEventListener("loadingdone", onResize); };
   }, [mounted, onClose]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function onPointerDown(e: React.PointerEvent) {
@@ -185,7 +246,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
     // Grab the sheet where it is right now, even mid-transition.
     const Y = new DOMMatrix(getComputedStyle(panel.current!).transform).f;
     place(Y, "none");
-    head.current!.setPointerCapture(e.pointerId);
+    grip.current!.setPointerCapture(e.pointerId);
     drag.current = { y0: e.clientY, Y0: Y, Y, y: e.clientY, t: e.timeStamp, v: 0, moved: false };
   }
   function onPointerMove(e: React.PointerEvent) {
@@ -200,7 +261,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
     if (e.timeStamp > d.t) d.v = (e.clientY - d.y) / (e.timeStamp - d.t);
     d.y = e.clientY;
     d.t = e.timeStamp;
-    setExpanded(d.Y < Yc / 2); // the list staggers in or out as the sheet crosses halfway
+    showDetails(d.Y < Yc / 2);
   }
   function onPointerUp(e: React.PointerEvent) {
     const d = drag.current;
@@ -213,8 +274,8 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
     const v = e.timeStamp - d.t > 80 ? 0 : d.v; // a finger that stopped has no fling
     let to: Stage;
     if (v < -0.3) to = "expanded";
-    else if (v > 0.3) to = from === "expanded" && d.Y < Yc ? "compact" : "closed";
-    else to = d.Y < Yc / 2 ? "expanded" : d.Y > Yc + 60 ? "closed" : "compact";
+    else if (v > 0.3) to = from === "expanded" ? "compact" : "closed";
+    else to = d.Y < Yc / 2 ? "expanded" : from === "expanded" || d.Y <= Yc + 60 ? "compact" : "closed";
     if (to === "closed") onClose();
     else go(to);
   }
@@ -226,45 +287,50 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
 
   if (!mounted) return null;
   return createPortal(
-    <div ref={root} tabIndex={-1} className="paywall" inert={!variant} aria-hidden={!variant} role="dialog" aria-modal="true" aria-label={c.title} data-expanded={expanded}
-      onKeyDownCapture={() => { keyboard.current = true; root.current!.dataset.instant = "true"; }}
+    <div ref={root} tabIndex={-1} className="paywall" inert={!variant} aria-hidden={!variant} role="dialog" aria-modal="true" aria-label="Pilih paket Plus" data-expanded={expanded}
+      onKeyDownCapture={() => { keyboard.current = true; root.current!.dataset.instant = "true"; morphs.current.forEach(animation => animation.cancel()); }}
       onPointerDownCapture={() => { keyboard.current = false; root.current!.dataset.instant = String(reducedMotion()); }}>
       <div ref={backdrop} className="paywall-backdrop" onClick={onClose} />
       <div ref={panel} className="paywall-panel">
-        <div
-          ref={head} className="paywall-head" onClick={onHeadClick}
+        <button type="button" ref={grip} className="paywall-grip" onClick={onHeadClick}
           onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
           onPointerCancel={() => { drag.current = null; swallowClick.current = true; go(stage.current, "none"); }}
-        >
-          <button type="button" className="paywall-grip" aria-expanded={expanded} aria-label={expanded ? "Ciutkan manfaat Plus" : "Lihat semua manfaat Plus"}><span /></button>
-          <div className="paywall-title"><PlusPill /><h3>{c.title}</h3></div>
-          <p className="muted">{c.body}</p>
-          <PlanPicker value={plan} onChange={setPlan} />
-        </div>
-        <div className="paywall-benefits" inert={!expanded} aria-hidden={!expanded}>
-          <ul className="paywall-features">
-            {PLUS_FEATURES.map((feature, i) => {
-              const Icon = FEATURE_ICONS[i];
-              return <li key={feature.title} style={{ "--i": i } as React.CSSProperties}>
-                <span className="paywall-feature-icon"><Icon size={21} strokeWidth={1.75} aria-hidden="true" /></span>
-                <div><h4>{feature.title}</h4><p className="muted">{feature.body}</p></div>
-              </li>;
-            })}
-          </ul>
-          {(variant ?? last) === "pdf" && (
-            <div className="chart-preview">
-              <div className="card-title" style={{ fontSize: 16 }}>Laporan 7 hari</div>
-              <div className="card-sub">Menyusu, pompa, popok · PDF</div>
-              <BlurBars />
-            </div>
-          )}
+          aria-expanded={expanded} aria-label={expanded ? "Ciutkan manfaat Plus" : "Lihat semua manfaat Plus"}><span /></button>
+        <div ref={scroll} className="paywall-scroll">
+          <div ref={head} className="paywall-head">
+            <span className="paywall-seal"><img src="/plus-seal.png" width="157" height="100" alt="Plus" /></span>
+            <h3>Pilih paket Plus</h3>
+            <p className="muted">Untuk malam-malam panjang: perkiraan, pengingat, dan grafik. Sinkron &amp; pasangan tetap gratis.</p>
+            <ul className="paywall-checklist" aria-hidden={expanded}>
+              {["Perkiraan menyusu", "Pengingat", "Grafik tren", "Riwayat > 30 hari", "PDF tanpa batas", "Wishlist & multi bayi"].map((label, i) => <li key={label}><span data-plus-morph={`icon-${i}`}><Check size={11} aria-hidden="true" /></span><strong data-plus-morph={`title-${i}`}>{label}</strong></li>)}
+            </ul>
+          </div>
+          <div className="paywall-benefits" inert={!expanded} aria-hidden={!expanded}>
+            {(variant ?? last) !== "overview" && <p className="paywall-context muted">{c.body}</p>}
+            <ul className="paywall-features">
+              {PLUS_FEATURES.map((feature, i) => {
+                const Icon = FEATURE_ICONS[i];
+                return <li key={feature.title}>
+                  <span className="paywall-feature-icon" data-plus-morph={`icon-${i}`}><Icon size={21} strokeWidth={1.75} aria-hidden="true" /></span>
+                  <div><h4 data-plus-morph={`title-${i}`}>{feature.title}</h4><p className="muted">{feature.body}</p></div>
+                </li>;
+              })}
+            </ul>
+            {(variant ?? last) === "pdf" && (
+              <div className="chart-preview">
+                <div className="card-title" style={{ fontSize: 16 }}>Laporan 7 hari</div>
+                <div className="card-sub">Menyusu, pompa, popok · PDF</div>
+                <BlurBars />
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <div ref={foot} className="paywall-foot">
-        <p className="paywall-sandbox">Uji pembayaran sandbox</p>
-        <a className="btn btn-coral lg block" href="#/plus" onClick={onClose}>Lanjut ke Plus</a>
-        <button type="button" className="btn btn-soft block" style={{ marginTop: 10 }} onClick={onClose}>Nanti saja</button>
-        <p className="paywall-note">Sinkron dan pasangan tetap Free.<br />Catatan, bukan saran medis.</p>
+        <PlanPicker sheet value={plan} onChange={setPlan} />
+        <a className="btn btn-coral lg block paywall-cta" href="#/plus" onClick={onClose}>Lanjut bayar · {plan === "plus_lifetime" ? "Selamanya" : "Bulanan"}</a>
+        <p className="paywall-note">Pembayaran lewat Midtrans · Sandbox.<br />Tidak ada uang nyata yang ditagih. Kamu bisa cek dulu sebelum bayar.</p>
+        <button type="button" className="paywall-later" onClick={onClose}>Nanti saja</button>
       </div>
     </div>,
     document.body,
