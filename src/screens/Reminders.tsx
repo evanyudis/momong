@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { activeBabyId, getPrefs, isPlus, setPrefs, uid, useDB } from "../store";
+import { activeBabyId, settings, getPrefs, isPlus, setPrefs, uid, useDB } from "../store";
 import { TopBar } from "../ui";
 
 export function Reminders() {
@@ -14,24 +14,31 @@ export function Reminders() {
   return <>
     <TopBar title="Pengingat" back="#/profil" />
     <div className="stack">
+      <p className="muted">Profil: {settings().babyName || "Si kecil"}.</p>
       <p className="muted">Pengingat di perangkat ini berjalan saat aplikasi terbuka. Saat kembali ke aplikasi, pengingat yang terlewat akan ditampilkan.</p>
       {!isPlus() ? <a className="btn btn-coral block" href="#/plus">Buka pengingat dengan Plus</a> : <>
         <form className="card solid stack" onSubmit={(e) => {
-          e.preventDefault(); const at = new Date(date).getTime();
-          if (!label.trim() || !Number.isFinite(at) || at <= Date.now()) return setError("Isi nama dan pilih waktu setelah sekarang.");
-          setPrefs({ reminders: [...all.filter((r) => r.id !== editing), { id: editing ?? uid(), babyId: activeBabyId(), label: label.trim().slice(0, 120), at }] });
+          e.preventDefault();
+          const form = new FormData(e.currentTarget);
+          const title = String(form.get("label") ?? "").trim();
+          const at = new Date(String(form.get("at") ?? "")).getTime();
+          if (!title || !Number.isFinite(at) || at <= Date.now()) return setError("Isi nama dan pilih waktu setelah sekarang.");
+          setPrefs({ reminders: [...all.filter((r) => r.id !== editing), { id: editing ?? uid(), babyId: activeBabyId(), label: title.slice(0, 120), at }] });
           setEditing(null);
           setLabel(""); setDate(""); setError("");
         }}>
-          <label className="field"><span>Nama pengingat</span><input className="input" required maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Misal: pompa atau vitamin" /></label>
-          <label className="field"><span>Waktu</span><input className="input" type="datetime-local" required value={date} onChange={(e) => setDate(e.target.value)} /></label>
+          <label className="field"><span>Nama pengingat</span><input className="input" name="label" required maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Misal: pompa atau vitamin" /></label>
+          <label className="field"><span>Waktu</span><input className="input" name="at" type="datetime-local" required value={date} onChange={(e) => setDate(e.target.value)} /></label>
           <button className="btn btn-ink block">{editing ? "Simpan perubahan" : "Simpan pengingat"}</button>
           {editing && <button type="button" className="btn btn-soft block" onClick={() => { setEditing(null); setLabel(""); setDate(""); }}>Batal edit</button>}
         </form>
         <button className="btn btn-soft block" onClick={async () => {
+          setError("");
           if (prefs.notifyReminders) return setPrefs({ notifyReminders: false });
           if (!("Notification" in window)) return setError("Browser ini belum mendukung notifikasi. Pengingat di aplikasi tetap tersedia.");
-          const permission = await Notification.requestPermission();
+          let permission: NotificationPermission;
+          try { permission = await Notification.requestPermission(); }
+          catch { return setError("Izin notifikasi belum bisa diminta. Pengingat di aplikasi tetap tersedia."); }
           setPrefs({ notifyReminders: permission === "granted" });
           if (permission !== "granted") setError("Notifikasi belum diizinkan. Pengingat di aplikasi tetap tersedia.");
         }}>{prefs.notifyReminders ? "Matikan notifikasi perangkat" : "Izinkan notifikasi perangkat"}</button>

@@ -23,3 +23,22 @@ Lifetime sandbox order bb-lt-cebb80636749410f8d7ff0a01fe05f58-muvjh152 reached c
 After the remaining sandbox and feature acceptance checks pass, review: production merchant activation and branding; HTTPS API routing; secret/environment separation; notification and return URLs; reconciliation, cancellation and refund operations; monitoring and alert ownership; rollback and database backup; privacy and payment terms; and a merchant-approved live smoke-test protocol.
 
 Produce a reviewed checklist with owners and evidence before wiring live endpoints. Monthly/trial changes need a separate product decision. Live remains disabled and requires explicit Evan approval.
+
+
+## Feature completion slice — 2026-10-06
+
+40 client tests, 13 API tests and both builds pass. No new dependency, price, trial, recurring activation or live endpoint was introduced. API 882d363 adds expiresAt to public wishlist reads without a migration.
+
+| Capability | Evidence |
+| --- | --- |
+| Next-feed | Home and Insight show the same estimate/sample count; second baby with insufficient sessions shows the non-clinical empty state. Median/distinct-session calculation tested. |
+| Reminders | Browser create/edit/delete/reload and baby isolation passed. Automated delivery check covers foreground, persisted once-only state, downgrade and timer cleanup. Multiple due reminders share one summary; device permission failures stay visible. |
+| Charts | Seven dated rows and accessible values verified against fixture feeding/pump/diaper totals; second profile shows only its own data. |
+| History | Browser incremental load 30 → 60 and kind filter passed. Pump history 37 Plus → 36 Free → 37 Plus proves hidden old data returns without deletion. |
+| PDF | Profile and period selectors verified; newborn omits HPL, pregnancy retains it. Free success uses quota; a separate font-503 browser scenario keeps quota and displays error. Production local build reloads and generates PDF after its server stops. Unit test verifies font embedding and multipage PDF bytes. The in-app browser did not expose a downloadable file event, so OS file save/viewer handling is not claimed. |
+| Wishlist | Public deployment tested with the previously webhook-activated lifetime sandbox account: publish 200, expiry returned, claim 200, duplicate claim 409, visible claim, revoke 200, revoked read 404. Deterministic API checks additionally cover other-household revoke refusal, expiry and explicit republish. |
+| Multi baby | Browser selection isolates report/reminders/insight; adding Rara switches to an empty newborn context. Pregnant mode recovers saved HPL. Store tests preserve HPL and records through mode change/downgrade. |
+
+Mobile 390×844 and desktop checks used light/dark themes and existing native controls. Existing keyboard dialog focus/restore and reduced-motion rules remain; compact buttons are at least 44px. Native notification permission delivery, OS share/WhatsApp destinations, screen-reader hardware, and real iPhone/iPad homescreen storage recovery require device checks. These are recorded limits, not completed hardware acceptance.
+
+The offline asset builder now fingerprints the actual versioned cache template, preventing a stale cache version from skipping new PDF/runtime assets. Synthetic fixtures and provider test-session secrets remain outside the repository.

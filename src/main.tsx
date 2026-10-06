@@ -10,7 +10,8 @@ import "./styles.css";
 applyTheme(getPrefs().theme);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme(getPrefs().theme));
 startSync();
-startReminders();
+const stopReminders = startReminders();
+import.meta.hot?.dispose(stopReminders);
 void finishGoogle(); // back from Google: session cookie → bearer → /me → /sync, like email Masuk
 
 createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);

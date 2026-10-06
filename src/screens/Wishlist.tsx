@@ -1,13 +1,29 @@
 import { Check, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { activeBabyId, isPlus, list, put, remove, useDB } from "../store";
-import { api, useAccount } from "../sync";
+import { ApiError, api, useAccount } from "../sync";
 import { toast, PlusSheet, TopBar } from "../ui";
+
+function useOnline() {
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    addEventListener("online", update); addEventListener("offline", update);
+    return () => { removeEventListener("online", update); removeEventListener("offline", update); };
+  }, []);
+  return online;
+}
 
 /** Free: make the list. Claim + share with family is Plus (not in the Free MVP). */
 export function Wishlist() {
   useDB();
   const acc = useAccount();
+  const online = useOnline();
+  const alive = useRef(true);
+  const lock = useRef(false);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const key = `bb_wishlist_share:${acc.me?.household.id}:${activeBabyId()}`;
   const [plus, setPlus] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -21,22 +37,25 @@ export function Wishlist() {
 
   useEffect(() => { setShare(localStorage.getItem(key)); setClaims([]); }, [key]);
   useEffect(() => {
-    if (!share) return;
+    if (!share || !online || !isPlus()) return;
+    setLoading(true);
     let cancelled = false;
-    api<{ items: SharedItem[] }>(`/wishlist/shared/${encodeURIComponent(share)}`).then(({ data }) => { if (!cancelled && Array.isArray(data.items)) { setClaims(data.items); setShareError(""); } }).catch(() => { if (!cancelled) setShareError("Tautan belum tersedia atau sudah kedaluwarsa. Publikasikan lagi untuk memperbarui."); });
+    api<{ items: SharedItem[]; expiresAt: string }>(`/wishlist/shared/${encodeURIComponent(share)}`).then(({ data }) => { if (!cancelled && Array.isArray(data.items)) { setClaims(data.items); setExpiresAt(data.expiresAt); setShareError(""); } }).catch(() => { if (!cancelled) setShareError("Tautan belum tersedia atau sudah kedaluwarsa. Publikasikan lagi untuk memperbarui."); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [share, refresh]);
+  }, [share, refresh, online]);
 
   async function publish() {
-    if (busy) return;
+    if (lock.current) return;
     if (!isPlus()) { setPlus(true); return; }
-    setBusy(true);
+    if (!online) { setShareError("Sambungkan internet untuk mempublikasikan daftar."); return; }
+    lock.current = true; setBusy(true); setShareError("");
     try {
-      const { data } = await api<{ token: string; url: string }>("/wishlist/shares", { method: "POST", body: JSON.stringify({ babyId: activeBabyId(), items: items.filter((i) => !i.have).map((i) => ({ id: i.id, label: i.label })) }) });
-      localStorage.setItem(key, data.token); setShare(data.token);
+      const { data } = await api<{ token: string; url: string; expiresAt: string }>("/wishlist/shares", { method: "POST", body: JSON.stringify({ babyId: activeBabyId(), items: items.filter((i) => !i.have).map((i) => ({ id: i.id, label: i.label })) }) });
+      if (!alive.current) return;
+      localStorage.setItem(key, data.token); setShare(data.token); setExpiresAt(data.expiresAt);
       setRefresh((n) => n + 1); toast("Daftar dipublikasikan. Pilih cara berbagi di bawah.");
-    } catch { toast("Daftar belum dibagikan. Cek koneksi atau izin berbagi, lalu coba lagi."); }
-    finally { setBusy(false); }
+    } catch { if (alive.current) setShareError("Daftar belum dibagikan. Cek koneksi atau izin berbagi, lalu coba lagi."); }
+    finally { lock.current = false; if (alive.current) setBusy(false); }
   }
 
   function add(e: React.FormEvent) {
@@ -66,7 +85,7 @@ export function Wishlist() {
                   >
                     <Check size={16} strokeWidth={3} />
                   </button>
-                  <span className="grow" style={{ color: i.have ? "var(--ink-muted)" : undefined }}>{i.label}{claims.find((c) => c.id === i.id)?.claimedBy && <span className="sub" style={{ display: "block" }}>Dipilih oleh {claims.find((c) => c.id === i.id)!.claimedBy}</span>}</span>
+                  <span className="grow" style={{ color: i.have ? "var(--ink-muted)" : undefined }}>{i.label}{isPlus() && claims.find((c) => c.id === i.id)?.claimedBy && <span className="sub" style={{ display: "block" }}>Dipilih oleh {claims.find((c) => c.id === i.id)!.claimedBy}</span>}</span>
                   <button className="icon-btn" aria-label={`Hapus ${i.label}`} onClick={() => remove("wishlist", i.id)}><Trash2 size={18} /></button>
                 </div>
               ))}
@@ -80,10 +99,14 @@ export function Wishlist() {
         <section className="card solid stack">
           <h2>Bagikan daftar kado · Plus</h2>
           <p className="muted">Hanya barang yang belum tersedia dan nama pemberi kado yang dibagikan lewat tautan. Catatan kesehatan tetap pribadi. Tautan berlaku 7 hari; bagikan lagi untuk memperbarui daftar.</p>
-          <button className="btn btn-soft block" disabled={busy || items.length > 100} onClick={publish}>{busy ? "Membagikan…" : "Publikasikan daftar"}</button>
-          {items.length > 100 && <p className="muted">Maksimal 100 barang per daftar yang dibagikan.</p>}
+          <button className="btn btn-soft block" disabled={busy || isPlus() && !online || items.filter((i) => !i.have).length > 100} onClick={publish}>{busy ? "Membagikan…" : "Publikasikan daftar"}</button>
+          {items.filter((i) => !i.have).length > 100 && <p className="muted">Maksimal 100 barang per daftar yang dibagikan.</p>}
+          {!online && <p role="status">Kamu offline. Daftar lokal tetap dapat diedit; publish, claim, refresh, dan menonaktifkan tautan membutuhkan internet.</p>}
+          {loading && <p role="status">Memeriksa daftar dan claim…</p>}
+          {expiresAt && <p className="muted">Tautan berlaku hingga {new Date(expiresAt).toLocaleString("id-ID")}.</p>}
           {shareError && <p role="status">{shareError}</p>}
           {share && <>
+            {isPlus() && !shareError && <>
             <a className="btn btn-coral block" target="_blank" rel="noopener noreferrer" href={`https://wa.me/?text=${encodeURIComponent("Daftar kado Momong: " + location.origin + "/#/kado-bersama?token=" + encodeURIComponent(share))}`}>Bagikan ke WhatsApp</a>
             <button className="btn btn-soft block" onClick={async () => {
               const url = location.origin + "/#/kado-bersama?token=" + encodeURIComponent(share);
@@ -94,13 +117,15 @@ export function Wishlist() {
               try { await navigator.clipboard.writeText(location.origin + "/#/kado-bersama?token=" + encodeURIComponent(share)); toast("Tautan disalin"); }
               catch { toast("Salin tautan belum diizinkan browser."); }
             }}>Salin tautan</button>
-            <button className="btn btn-soft block" onClick={() => setRefresh((n) => n + 1)}>Perbarui claim</button>
             <a className="link-btn" href={`#/kado-bersama?token=${encodeURIComponent(share)}`}>Lihat daftar yang dibagikan</a>
-            <button className="btn btn-soft block" disabled={busy} onClick={async () => {
-              setBusy(true);
-              try { await api(`/wishlist/shares/${encodeURIComponent(share)}`, { method: "DELETE" }); localStorage.removeItem(key); setShare(null); setClaims([]); toast("Tautan dinonaktifkan"); }
-              catch { toast("Tautan belum bisa dinonaktifkan. Coba lagi saat online."); }
-              finally { setBusy(false); }
+            </>}
+            {isPlus() && <button className="btn btn-soft block" disabled={!online || loading} onClick={() => setRefresh((n) => n + 1)}>Perbarui claim</button>}
+            <button className="btn btn-soft block" disabled={busy || !online} onClick={async () => {
+              if (lock.current) return;
+              lock.current = true; setBusy(true);
+              try { await api(`/wishlist/shares/${encodeURIComponent(share)}`, { method: "DELETE" }); localStorage.removeItem(key); if (!alive.current) return; setShare(null); setClaims([]); setExpiresAt(null); setShareError(""); toast("Tautan dinonaktifkan"); }
+              catch { if (alive.current) setShareError("Tautan belum bisa dinonaktifkan. Coba lagi saat online."); }
+              finally { lock.current = false; if (alive.current) setBusy(false); }
             }}>Nonaktifkan tautan</button>
           </>}
         </section>
@@ -113,6 +138,8 @@ export function Wishlist() {
 
 export type SharedItem = { id: string; label: string; claimedBy: string | null };
 export function SharedWishlist({ token }: { token: string | null }) {
+  const online = useOnline();
+  const lock = useRef(false);
   const [items, setItems] = useState<SharedItem[] | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -120,27 +147,33 @@ export function SharedWishlist({ token }: { token: string | null }) {
   const [round, setRound] = useState(0);
   useEffect(() => {
     let cancelled = false;
+    if (!online) return;
     if (!token) { setError("Tautan tidak lengkap. Minta tautan baru dari pemilik daftar."); return; }
     api<{ items: SharedItem[] }>(`/wishlist/shared/${encodeURIComponent(token)}`).then(({ data }) => {
       if (!Array.isArray(data.items)) throw new Error("invalid_response");
       if (!cancelled) { setItems(data.items); setError(""); }
     }).catch(() => { if (!cancelled) setError("Daftar belum tersedia. Tautan mungkin kedaluwarsa atau dinonaktifkan; cek koneksi lalu coba lagi."); });
     return () => { cancelled = true; };
-  }, [token, round]);
+  }, [token, round, online]);
   return <><TopBar title="Daftar kado bersama" /><div className="stack">
     <p className="muted">Pilih barang yang ingin kamu hadiahkan. Nama kamu terlihat oleh orang yang membuka tautan ini.</p>
     <label className="field"><span>Nama pemberi kado</span><input className="input" maxLength={80} value={name} onChange={(e) => setName(e.target.value)} /></label>
+    {!online && <p role="status">Daftar dan claim membutuhkan internet. Sambungkan koneksi untuk melanjutkan.</p>}
     {error && <p role="alert">{error}</p>}
     {!items && !error && <p role="status">Memuat daftar…</p>}
-    <button className="btn btn-soft block" onClick={() => setRound((r) => r + 1)}>Perbarui daftar</button>
+    <button className="btn btn-soft block" disabled={!online || busy} onClick={() => setRound((r) => r + 1)}>Perbarui daftar</button>
     {items?.length === 0 && <p className="muted">Belum ada barang yang perlu dihadiahkan.</p>}
     {items?.map((item) => <section className="card solid stack" key={item.id}>
       <h2>{item.label}</h2>
-      {item.claimedBy ? <p className="muted">Dipilih oleh {item.claimedBy}</p> : <button className="btn btn-ink block" disabled={busy || !name.trim()} onClick={async () => {
-        setBusy(true); setError("");
+      {item.claimedBy ? <p className="muted">Dipilih oleh {item.claimedBy}</p> : <button className="btn btn-ink block" disabled={busy || !online || !name.trim()} onClick={async () => {
+        if (lock.current) return;
+        lock.current = true; setBusy(true); setError("");
         try { await api(`/wishlist/shared/${encodeURIComponent(token!)}/claims`, { method: "POST", body: JSON.stringify({ itemId: item.id, name: name.trim() }) }); setRound((r) => r + 1); }
-        catch { setError("Barang belum bisa dipilih. Mungkin sudah dipilih orang lain; perbarui daftar."); }
-        finally { setBusy(false); }
+        catch (e) {
+          if (e instanceof ApiError && e.status === 409) { toast("Barang sudah dipilih orang lain. Daftar diperbarui."); setRound((r) => r + 1); }
+          else setError("Barang belum bisa dipilih. Cek koneksi atau minta tautan baru.");
+        }
+        finally { lock.current = false; setBusy(false); }
       }}>Saya hadiahkan ini</button>}
     </section>)}
   </div></>;

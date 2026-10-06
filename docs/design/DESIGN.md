@@ -36,3 +36,10 @@ No fake user data: the Plus page preview is marked CONTOH. Charts elsewhere use 
 Local automated tests exercise backup validation/rollback, both modes, scoped records and downgrade, estimate/chart calculations, PDF pagination, opt-in sync and logout. API tests mock provider transport and exercise verified billing, replay, ownership, consent, amount checks and cancellation.
 
 Real iPhone/iPad storage isolation, notification permissions and native install acceptance still require hardware. A real hosted sandbox payment, GoPay linking and acquiring-bank recurring activation are separate release checks. Never call mock tests a completed sandbox transaction.
+
+
+## Plus feature completion
+
+Report offers a native profile selector and period selector; selecting a profile also selects that baby throughout the app. Profile-scoped screens remount when the effective baby changes, including downgrade to the default baby. PDF preview caps at 80 entries with an explicit explanation; export includes the whole chosen period. Export errors stay inline, and controls lock during generation.
+
+Wishlist shows loading, expiry, offline guidance, claim conflict feedback and retry. Only explicit publish creates or renews a public snapshot. Expiry is returned by the API; revoke remains available after downgrade. Native reminder/profile forms read submitted FormData so autofilled date values are respected. Compact buttons have a 44px minimum height.

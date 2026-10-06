@@ -215,7 +215,7 @@ function NewbornHome() {
         {isPlus() && <a className="card plus-card" href="#/insight">
           <div className="label">Perkiraan menyusu · Plus</div>
           <div className="card-title">{estimate ? timeLabel(estimate.at) : "Butuh tiga sesi menyusu"}</div>
-          <p className="card-sub">{estimate ? `Dari ${estimate.samples} sesi dalam tujuh hari.` : "Catat botol atau ASI untuk melihat pola."} Perkiraan non-klinis; ikuti kebutuhan si kecil.</p>
+          <p className="card-sub">{estimate ? `Dari ${estimate.samples} sesi dalam tujuh hari.${estimate.at < Date.now() ? " Waktu perkiraan sudah lewat." : ""}` : "Catat botol atau ASI untuk melihat pola."} Perkiraan non-klinis; ikuti kebutuhan si kecil.</p>
         </a>}
         <PartnerCard />
         <WishlistCard />

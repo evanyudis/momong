@@ -136,7 +136,7 @@ function PlusInsights() {
           <svg viewBox="0 0 280 100" role="img" aria-label={`Grafik ${label.toLowerCase()} 7 hari; angka tersedia di bawah`}>
             {days.map((d, i) => <rect key={d.at} x={i * 40 + 8} y={95 - d[key] / max * 85} width={24} height={d[key] / max * 85} rx={4} fill="var(--accent-primary)" />)}
           </svg>
-          <div className="list">{days.map((d) => <div className="spread" key={d.at}><span>{dayName(d.at)}</span><span className="num">{d[key]} {unit}</span></div>)}</div>
+          <div className="list">{days.map((d) => <div className="spread" key={d.at}><span>{new Date(d.at).toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" })}</span><span className="num">{d[key]} {unit}</span></div>)}</div>
         </>}
       </section>;
     })}

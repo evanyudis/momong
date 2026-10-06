@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { createReportPDF } from "./pdf.ts";
+import { createReportPDF, downloadReportPDF } from "./pdf.ts";
 
 test("PDF export embeds its font, paginates a long report and produces a PDF file", async () => {
   const font = (await readFile(new URL('../public/NotoSans-Regular.ttf', import.meta.url))).toString('base64');
@@ -10,4 +10,11 @@ test("PDF export embeds its font, paginates a long report and produces a PDF fil
   const bytes = Buffer.from(doc.output('arraybuffer'));
   assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
   assert.ok(bytes.length > 10000);
+});
+
+test("failed font loading rejects export before creating a download", async () => {
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = async () => new Response("missing", { status: 503 });
+  try { await assert.rejects(downloadReportPDF("Laporan", [], "momong.pdf"), /pdf_font_unavailable/); }
+  finally { globalThis.fetch = fetchBefore; }
 });

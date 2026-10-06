@@ -1,19 +1,21 @@
-import { useState } from "react";
-import { DIAPER_LABEL, type PlusVariant } from "../content";
+import { useRef, useState } from "react";
+import { type PlusVariant } from "../content";
 import { dateLabel, durationLabel, pregnancy, timeLabel } from "../dates";
-import { isPlus, get, getPrefs, list, put, settings, useDB } from "../store";
+import { activeBabyId, babyProfiles, setPrefs, isPlus, get, getPrefs, list, put, settings, useDB } from "../store";
 import { toast, PlusSheet, TopBar } from "../ui";
 import { contractionStats, describe } from "./Log";
 
 const DAY = 86_400_000;
 const monthKey = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}`;
 
-/** PRD Free: PDF 1× per month per household (synced, so both partners share it). Printed via "Save as PDF". */
+/** Free PDF quota is shared through the household settings record. */
 export function Report() {
   useDB();
   const s = settings();
   const [range, setRange] = useState("14");
   const [busy, setBusy] = useState(false);
+  const lock = useRef(false);
+  const [error, setError] = useState("");
   const since = isPlus() && range === "all" ? 0 : Date.now() - Number(isPlus() ? range : "14") * DAY;
   const usedThisMonth = !isPlus() && get("settings", "report")?.month === monthKey();
   const born = s.birthMode === "postpartum";
@@ -29,8 +31,8 @@ export function Report() {
     .sort((a, b) => b.r.at - a.r.at);
 
   async function download() {
-    if (busy || usedThisMonth) return;
-    setBusy(true);
+    if (lock.current || usedThisMonth) return;
+    lock.current = true; setBusy(true); setError("");
     try {
       const { downloadReportPDF } = await import("../pdf");
       const lines = [
@@ -45,14 +47,17 @@ export function Report() {
       await downloadReportPDF(`Laporan ${isPlus() && range === "all" ? "semua catatan" : `${isPlus() ? range : "14"} hari`} - ${getPrefs().name || "Bunda"}`, lines, `momong-${new Date().toISOString().slice(0, 10)}.pdf`);
       if (!isPlus()) put("settings", { id: "report", month: monthKey() });
       toast("PDF siap diunduh");
-    } catch { toast("PDF belum bisa dibuat. Coba lagi; kuota belum terpakai."); }
-    finally { setBusy(false); }
+    } catch { setError("PDF belum bisa dibuat. Coba lagi; kuota belum terpakai."); }
+    finally { lock.current = false; setBusy(false); }
   }
 
   return (
     <>
       <div className="no-print"><TopBar title="Laporan" back="#/log" /></div>
       <div className="stack">
+        <p className="muted">Profil: {s.babyName || "Si kecil"}. PDF dibuat di perangkat dan dapat diunduh saat offline.</p>
+        {isPlus() && <label className="field no-print"><span>Profil laporan</span><select className="input" disabled={busy} value={activeBabyId()} onChange={(e) => setPrefs({ activeBabyId: e.target.value })}>{babyProfiles().map((baby) => <option key={baby.id} value={baby.id}>{baby.babyName || "Si kecil"}</option>)}</select></label>}
+        {error && <p role="alert">{error}</p>}
         <section className="card solid">
           <div className="card-title">Laporan {isPlus() && range === "all" ? "semua catatan" : `${isPlus() ? range : "14"} hari`} · {getPrefs().name || "Bunda"}</div>
           <div className="card-sub">
@@ -60,7 +65,7 @@ export function Report() {
           </div>
         </section>
 
-        {isPlus() && <label className="field no-print"><span>Periode laporan</span><select className="input" value={range} onChange={(e) => setRange(e.target.value)}><option value="7">7 hari</option><option value="14">14 hari</option><option value="30">30 hari</option><option value="all">Semua catatan</option></select></label>}
+        {isPlus() && <label className="field no-print"><span>Periode laporan</span><select className="input" disabled={busy} value={range} onChange={(e) => setRange(e.target.value)}><option value="7">7 hari</option><option value="14">14 hari</option><option value="30">30 hari</option><option value="all">Semua catatan</option></select></label>}
         {!born && (
           <>
             <section className="card solid">
@@ -86,9 +91,10 @@ export function Report() {
 
         {born && (
           <section className="card solid">
-            <div className="label">Menyusu & popok</div>
+            <div className="label">Menyusu, pompa & popok</div>
+            {feeds.length > 80 && <p className="muted">Preview menampilkan 80 catatan terbaru. PDF mencakup seluruh catatan dalam periode yang dipilih.</p>}
             {feeds.length === 0 ? <p className="muted" style={{ marginTop: 6 }}>Belum ada catatan.</p> : feeds.slice(0, 80).map(({ k, r }) => (
-              <p key={r.id} className="num" style={{ marginTop: 6 }}>{dateLabel(r.at)} {timeLabel(r.at)} · {k === "diaper" ? `Popok ${DIAPER_LABEL[r.type]}` : describe(k, r)}</p>
+              <p key={r.id} className="num" style={{ marginTop: 6 }}>{dateLabel(r.at)} {timeLabel(r.at)} · {describe(k, r)}</p>
             ))}
           </section>
         )}
@@ -99,6 +105,7 @@ export function Report() {
             className={`btn lg block ${usedThisMonth ? "btn-soft" : "btn-ink"}`}
             aria-haspopup={usedThisMonth ? "dialog" : undefined}
             disabled={busy}
+            aria-busy={busy}
             onClick={usedThisMonth ? () => setPlus("pdf") : download}
           >
             {busy ? "Membuat PDF…" : usedThisMonth ? "PDF bulan ini sudah dibuat" : "Unduh PDF"}

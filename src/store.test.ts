@@ -71,6 +71,11 @@ test("Plus history and baby profiles isolate records, preserve legacy data and s
   assert.equal(s.get("bag", custom.id)?.checked, true);
   s.put("pump", { id: "second-pump", at: Date.now(), ml: 60 });
   const second = s.activeBabyId();
+  s.saveSettings({ hpl: "2026-11-12", birthMode: "pregnant" });
+  assert.equal(s.settings().hpl, "2026-11-12");
+  s.saveSettings({ birthMode: "postpartum" });
+  assert.equal(s.settings().hpl, "2026-11-12", "mode changes preserve HPL");
+  assert.equal(s.settings().babyName, "Dara");
   s.setPrefs({ activeBabyId: "default" });
   assert.equal(s.get("bag", "diapers")?.checked, true);
   assert.ok(!s.list("pump").some((r) => r.id === "second-pump"));

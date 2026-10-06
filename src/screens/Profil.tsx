@@ -222,16 +222,21 @@ function AddBabySheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
   const [name, setName] = useState("");
   const [mode, setMode] = useState<"pregnant" | "postpartum">("postpartum");
   const [date, setDate] = useState(todayISO());
+  const [error, setError] = useState("");
   return <Sheet open={open} onOpenChange={onOpenChange} title="Tambah profil si kecil">
     <form className="stack" onSubmit={(e) => {
       e.preventDefault();
-      if (addBaby({ babyName: name.trim(), birthMode: mode, ...(mode === "pregnant" ? { hpl: date } : { babyBirth: date }) })) {
-        onOpenChange(false); setName(""); location.hash = "#/";
-      }
+      const form = new FormData(e.currentTarget);
+      const profileName = String(form.get("babyName") ?? "").trim();
+      const profileDate = String(form.get("profileDate") ?? "");
+      if (addBaby({ babyName: profileName, birthMode: mode, ...(mode === "pregnant" ? { hpl: profileDate } : { babyBirth: profileDate }) })) {
+        onOpenChange(false); setName(""); setError(""); location.hash = "#/";
+      } else setError("Isi nama dan tanggal yang valid. Tanggal lahir tidak boleh setelah hari ini; profil tambahan membutuhkan Plus.");
     }}>
-      <label className="field"><span>Nama si kecil</span><input className="input" required maxLength={120} pattern={String.raw`.*\S.*`} value={name} onChange={(e) => setName(e.target.value)} /></label>
+      {error && <p role="alert">{error}</p>}
+      <label className="field"><span>Nama si kecil</span><input className="input" name="babyName" required maxLength={120} pattern={String.raw`.*\S.*`} value={name} onChange={(e) => setName(e.target.value)} /></label>
       <label className="field"><span>Mode</span><select className="input" value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}><option value="postpartum">Newborn</option><option value="pregnant">Kehamilan</option></select></label>
-      <label className="field"><span>{mode === "pregnant" ? "HPL" : "Tanggal lahir"}</span><DateInput required max={mode === "postpartum" ? todayISO() : undefined} value={date} onChange={(e) => setDate(e.target.value)} /></label>
+      <label className="field"><span>{mode === "pregnant" ? "HPL" : "Tanggal lahir"}</span><DateInput name="profileDate" required max={mode === "postpartum" ? todayISO() : undefined} value={date} onChange={(e) => setDate(e.target.value)} /></label>
       <button className="btn btn-ink block">Simpan profil</button>
     </form>
   </Sheet>;

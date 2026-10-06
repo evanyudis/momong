@@ -15,7 +15,7 @@ import { Report } from "./screens/Report";
 import { SignIn } from "./screens/SignIn";
 import { Welcome } from "./screens/Welcome";
 import { SharedWishlist, Wishlist } from "./screens/Wishlist";
-import { getPrefs, settings, useDB } from "./store";
+import { activeBabyId, getPrefs, settings, useDB } from "./store";
 import { useAccount } from "./sync";
 import { Toaster } from "./ui";
 
@@ -33,6 +33,7 @@ export function App() {
   const acc = useAccount();
   const step = onboardingStep(s, acc, getPrefs().guest);
   const ready = step === "ready";
+  const babyKey = activeBabyId();
 
   useEffect(() => {
     if (path === "/plus" && !acc.token) sessionStorage.setItem("bb_auth_return", "#/plus");
@@ -40,22 +41,22 @@ export function App() {
   let screen;
   if (path === "/masuk") screen = <MagicLanding token={params.get("token")} />;
   else if (path === "/gabung") screen = <JoinLanding invite={params.get("invite")} />;
-  else if (path === "/kado-bersama") screen = <SharedWishlist token={params.get("token")} />;
+  else if (path === "/kado-bersama") screen = <SharedWishlist key={params.get("token")} token={params.get("token")} />;
   else if (path === "/pasangan") screen = <Partner />;
   else if (path === "/plus") {
     screen = acc.checking ? <p role="status">Memeriksa sesi…</p> : acc.token ? <Plus /> : <SignIn plus />;
   }
   else if (path === "/masuk-akun") screen = <SignIn />;
   else if (step === "signin") screen = <SignIn onboarding />;
-  else if (step === "setup") screen = <Welcome key={getPrefs().activeBabyId ?? "default"} user={acc.me?.user} />;
-  else if (path === "/log") screen = <Log key={getPrefs().activeBabyId ?? "default"} />;
-  else if (path === "/insight") screen = <Insight />;
+  else if (step === "setup") screen = <Welcome key={babyKey} user={acc.me?.user} />;
+  else if (path === "/log") screen = <Log key={babyKey} />;
+  else if (path === "/insight") screen = <Insight key={babyKey} />;
   else if (path === "/profil") screen = <Profil />;
   else if (path === "/tas") screen = <Bag />;
-  else if (path === "/pengingat") screen = <Reminders key={getPrefs().activeBabyId ?? "default"} />;
-  else if (path === "/laporan") screen = <Report />;
-  else if (path === "/kado") screen = <Wishlist />;
-  else screen = <Home />;
+  else if (path === "/pengingat") screen = <Reminders key={babyKey} />;
+  else if (path === "/laporan") screen = <Report key={babyKey} />;
+  else if (path === "/kado") screen = <Wishlist key={`${acc.me?.household.id}:${babyKey}`} />;
+  else screen = <Home key={babyKey} />;
 
   const showTabs = ready && TABS.some((t) => t.path === path);
   useLayoutEffect(() => afterNavigate(), [path]);

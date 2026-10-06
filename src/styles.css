@@ -220,7 +220,7 @@ button.card, a.card { display: block; width: 100%; text-align: left; border: 0; 
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.block { width: 100%; }
 .btn.lg { min-height: 60px; font-size: 18px; }
-.btn.sm { min-height: 40px; padding: 0 16px; font-size: 15px; }
+.btn.sm { min-height: 44px; padding: 0 16px; font-size: 15px; }
 .btn-ink { background: var(--ink); color: var(--on-ink); box-shadow: 0 8px 20px -8px rgb(0 0 0 / 0.3); }
 .btn-blue { background: var(--accent-primary); color: #FFFFFF; box-shadow: 0 8px 20px -8px rgb(0 0 0 / 0.25); }
 .btn-coral { background: var(--accent-partner); color: #4a2228; }
