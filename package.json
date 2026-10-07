@@ -25,7 +25,8 @@
     "posthog-js": "^1.438.1",
     "react": "^19.3.0",
     "react-aria-components": "^1.21.1",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

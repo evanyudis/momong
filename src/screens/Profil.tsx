@@ -3,7 +3,7 @@ import { setTelemetryConsent, telemetryConfigured, telemetryConsent } from "../t
 import { PLUS_ENABLED } from "../release";
 import { RestoreSheet } from "./Restore";
 import { InstallSheet } from "./Install";
-import { ChevronRight, Download, Sun, Moon, Monitor } from "lucide-react";
+import { Bell, ChevronRight, Download, Sun, Moon, Monitor } from "lucide-react";
 import { useState } from "react";
 import type { PlusVariant } from "../content";
 import { todayISO } from "../dates";
@@ -53,37 +53,37 @@ export function Profil() {
 
   return (
     <>
-      <Header title="Profil" />
+      <Header title="Profil" aside={(PLUS_ENABLED || isPlus()) && <a className="icon-btn" href="#/pengingat" aria-label="Pengingat"><Bell aria-hidden="true" size={22} /></a>} />
       <div className="stack">
         <section className="stack profile-summary">
           <div className="profile-identity">
             <span className="avatar blue" aria-hidden="true">{(prefs.name || h.me?.user.email || "M").slice(0, 1).toUpperCase()}</span>
             <div className="grow"><h2>{prefs.name || "Teman Momong"}</h2><p className="muted">{h.me?.user.email || "Catatan lokal · tanpa akun"}</p><p className="card-sub">Si kecil · {s.babyName || "Belum diisi"}</p></div>
             <div className="profile-actions">
-              <button type="button" className="btn btn-soft sm profile-edit" aria-haspopup="dialog" onClick={() => setEditingProfile(true)}>{h.signedIn ? "Edit Profile" : "Edit"}</button>
+              <button type="button" className="btn btn-soft sm profile-edit" aria-haspopup="dialog" onClick={() => setEditingProfile(true)}>Edit profil</button>
               {!h.signedIn && <a className="btn sm btn-signin" href="#/masuk-akun">Masuk</a>}
             </div>
           </div>
 
         </section>
         <section className="card plus-card stack"><PlusMesh />
-          <div className="spread"><div className="card-title">{isPlus() ? h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : h.me?.entitlement.plan === "trial" ? "Plus · Trial" : "Plus · Bulanan" : "Momong Plus"}</div><PlusBadge size="medium" /></div>
+          <div className="spread"><div className="card-title">{isPlus() ? h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Lifetime" : h.me?.entitlement.plan === "trial" ? "Plus · Trial" : "Plus · Bulanan" : "Momong Plus"}</div><PlusBadge size="medium" /></div>
           <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi.  {isPlus() ? "Akses Plus kamu aktif." : "Fitur Plus segera hadir."}</p>
           {!PLUS_ENABLED && !isPlus() ? <button className="btn btn-coral block" disabled>Segera hadir</button> : isPlus() ? <a className="btn btn-coral block" href="#/plus">Lihat status Plus</a>
             : <button className="btn btn-coral block" aria-haspopup="dialog" onClick={() => setPlus("overview")}>Coba Plus</button>}
         </section>
         {(PLUS_ENABLED || isPlus()) && <section className="card solid stack">
-          <label className="field"><span>Profil si kecil</span>
-            <select className="input" value={activeBabyId()} onChange={(e) => setPrefs({ activeBabyId: e.target.value })}>
-              {babyProfiles().filter((b) => isPlus() || b.id === "default").map((b) => <option key={b.id} value={b.id}>{b.babyName || "Si kecil"}</option>)}
-            </select>
-          </label>
-          <button className="btn btn-soft plus-entry block" disabled={!PLUS_ENABLED && !isPlus()} onClick={() => isPlus() ? setAddingBaby(true) : setPlus("insights")}>{PLUS_ENABLED || isPlus() ? "Tambah profil bayi · Plus" : "Segera hadir"}</button>
+          <div className="spread baby-profile-heading"><label htmlFor="baby-profile">Profil si kecil</label>
+            <button className="btn btn-soft sm" aria-haspopup="dialog" onClick={() => isPlus() ? setAddingBaby(true) : setPlus("insights")}>Tambah bayi</button>
+          </div>
+          <select id="baby-profile" className="input" value={activeBabyId()} onChange={(e) => setPrefs({ activeBabyId: e.target.value })}>
+            {babyProfiles().filter((b) => isPlus() || b.id === "default").map((b) => <option key={b.id} value={b.id}>{b.babyName || "Si kecil"}</option>)}
+          </select>
           {!isPlus() && babyProfiles().length > 1 && <p className="muted">Profil tambahan tetap tersimpan dan dapat dibuka saat Plus aktif.</p>}
         </section>}
 
 
-        {(PLUS_ENABLED || isPlus()) && <a className="btn btn-soft block" href="#/pengingat">Pengingat · Plus</a>}
+
 
 
         <section className="card solid">
@@ -156,7 +156,7 @@ export function Profil() {
         <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>Momong · Catatan, bukan saran medis.</p>
       </div>
 
-          <Sheet open={editingProfile} onOpenChange={setEditingProfile} title="Edit Profile"><div className="stack">
+          <Sheet open={editingProfile} onOpenChange={setEditingProfile} title="Edit profil"><div className="stack">
             <label className="field">
               <span>Nama panggilan</span>
               <input className="input" maxLength={120} value={prefs.name ?? ""} placeholder="Bunda" onChange={(e) => setPrefs({ name: e.target.value })} />

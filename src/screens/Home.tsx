@@ -1,11 +1,10 @@
-import { PlusMesh } from "../PlusMesh";
 import { Baby, BriefcaseMedical, ChevronRight, Droplet, Gift, Milk, Sprout, Square, Users } from "lucide-react";
 import { BAG_DEFAULTS, weekNote } from "../content";
 import { agoLabel, babyAge, dateLabel, isToday, pregnancy, timeLabel } from "../dates";
 import { initial, useHousehold } from "../household";
 import { nextFeed } from "../plus";
 import { isPlus, getPrefs, get, list, saveSettings, settings, useDB } from "../store";
-import { Header, Ring } from "../ui";
+import { Header, PlusBadge, Ring } from "../ui";
 import { SyncDot } from "./Partner";
 
 export function Home() {
@@ -217,8 +216,8 @@ function NewbornHome() {
           </div>
         </section>
 
-        {isPlus() && <a className="card plus-card" href="#/insight"><PlusMesh />
-          <div className="label">Perkiraan menyusu · Plus</div>
+        {isPlus() && <a className="card feed-estimate" href="#/insight">
+          <div className="feed-estimate-heading"><span className="plus-wave-text">Perkiraan Susu</span><PlusBadge size="small" /></div>
           <div className="card-title">{estimate ? timeLabel(estimate.at) : "Butuh tiga sesi menyusu"}</div>
           <p className="card-sub">{estimate ? `Dari ${estimate.samples} sesi dalam tujuh hari.${estimate.at < Date.now() ? " Waktu perkiraan sudah lewat." : ""}` : "Catat minum susu atau menyusu langsung untuk melihat pola."} Perkiraan non-klinis; ikuti kebutuhan si kecil.</p>
         </a>}

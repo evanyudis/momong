@@ -341,7 +341,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
       </div>
       <div ref={foot} className="paywall-foot">
         {PLUS_ENABLED && <PlanPicker sheet value={plan} onChange={setPlan} />}
-        {PLUS_ENABLED ? <a className="btn btn-coral lg block paywall-cta" href="#/plus" onClick={onClose}>Lanjut bayar · {plan === "plus_lifetime" ? "Selamanya" : "Bulanan"}</a> : <button className="btn btn-coral lg block paywall-cta" disabled>Segera hadir</button>}
+        {PLUS_ENABLED ? <a className="btn btn-coral lg block paywall-cta" href="#/plus" onClick={onClose}>Lanjut bayar · {plan === "plus_lifetime" ? "Lifetime" : "Bulanan"}</a> : <button className="btn btn-coral lg block paywall-cta" disabled>Segera hadir</button>}
         <p className="paywall-note">{PLUS_ENABLED ? <>Pembayaran lewat Midtrans · Sandbox.<br />Tidak ada uang nyata yang ditagih. Kamu bisa cek dulu sebelum bayar.</> : <>Fitur Plus sedang disiapkan.<br />Fitur gratis tetap bisa digunakan.</>}</p>
         <button type="button" className="paywall-later" onClick={onClose}>Nanti saja</button>
       </div>

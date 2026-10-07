@@ -38,10 +38,15 @@ test("Phase 1 ignores cached Plus access and renders a disabled coming-soon page
     sync.account().me.entitlement = { plan: "plus_lifetime", earlyAccess: true, expiresAt: null };
     assert.equal(sync.entitled(sync.account().me), true);
     const lifetime = renderToStaticMarkup(createElement(Plus));
-    assert.match(lifetime, /Plus · Selamanya/);
+    assert.match(lifetime, /Plus · Lifetime/);
     assert.match(lifetime, /gratis tanpa batas waktu/);
     assert.ok(!lifetime.includes("1970") && !lifetime.includes("Rp199.000"));
     assert.equal(sync.entitled({ entitlement: { plan: "plus_lifetime", expiresAt: null } }), false);
+    assert.match(lifetime, /class="plus-page"/);
+    assert.equal((lifetime.match(/class="plus-mesh"/g) ?? []).length, 1, "Plus has one shared page wave");
+    assert.equal((lifetime.match(/class="plus-feature-icon"/g) ?? []).length, 7);
+    assert.equal((lifetime.match(/card plus-glass/g) ?? []).length, 2, "status and features use glass cards");
+
 
 
   } finally { globalThis.fetch = original; await server.close(); }

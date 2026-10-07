@@ -1,6 +1,6 @@
 /* Tokens: opaque product cards on a flat neutral canvas. Dark theme flips variables only.
    Neutrals are true gray: chroma 0, hue 0. Logo blue #7EB8D4 / coral #E8A0A8 stay on couple marks only.
-   Glass stays on circle buttons and the floating nav. Never on the page. */
+   Glass stays on circle buttons and the floating nav; Plus uses its own glass canvas. */
 :root {
   --bg: oklch(0.985 0 0); /* #FAFAFA, flat canvas */
   --bg-muted: oklch(0.985 0 0);
@@ -904,3 +904,39 @@ html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::aft
 .plus-mesh { opacity: .32; }
 .plus-pill::before, .plus-entry::before { content: ""; }
 .paywall-panel .plus-mesh { bottom: auto; height: 320px; }
+
+/* Plus has its own immersive canvas; everyday screens keep neutral cards. */
+.feed-estimate-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.feed-estimate-heading h2 { font-size: 18px; }
+.plus-wave-text { font-weight: 600; color: var(--accent-partner-ink); background: linear-gradient(110deg, var(--accent-partner-ink), var(--plus-pattern-ink), var(--accent-partner-ink)); background-size: 220% 100%; background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: plus-text-wave 16s ease-in-out infinite alternate; }
+@keyframes plus-text-wave { to { background-position: 100% 50%; } }
+.baby-profile-heading .btn { min-height: 44px; }
+.plus-page { --ink-muted: var(--plus-muted); position: relative; isolation: isolate; color: var(--plus-ink); }
+.plus-page-backdrop { position: fixed; inset: 0; z-index: -1; background: var(--plus-fill); pointer-events: none; }
+.plus-page-backdrop .plus-mesh { z-index: 0; opacity: .65; }
+.plus-page .plus-glass { background: color-mix(in oklab, var(--surface) 88%, transparent); color: var(--ink); box-shadow: var(--elevation-raised); position: relative; }
+.plus-page .plus-hero > .plus-pill { position: absolute; top: 18px; right: 18px; z-index: 1; width: max-content; }
+.plus-page .plus-hero h1 { padding-right: 76px; }
+@supports (backdrop-filter: blur(16px)) {
+  .plus-page .plus-glass { background: color-mix(in oklab, var(--surface) 78%, transparent); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+}
+.plus-page .plus-hero > p { color: var(--ink-muted); }
+.plus-page .plus-glass:has(input, select) { background: color-mix(in oklab, var(--surface) 92%, transparent); }
+.plus-feature-icon { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border-radius: 12px; background: var(--surface-sunk); color: var(--accent-partner-ink); }
+.plus-page-features .link-btn { min-height: 44px; }
+.newborn-insights h2 { font-size: 20px; letter-spacing: -.025em; }
+.newborn-insights h3 { font-size: 18px; line-height: 1.4; }
+.estimate-time { font-size: 44px; font-weight: 650; line-height: 1.1; letter-spacing: -.04em; }
+.insight-note { color: var(--ink-muted); font-size: 13px; line-height: 1.5; }
+.insight-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 12px 0; }
+.insight-totals strong { display: block; font-size: 26px; font-weight: 600; margin-top: 6px; }
+.insight-totals small { font-size: 13px; color: var(--ink-muted); font-weight: 400; }
+.insight-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 14px; background: var(--surface-sunk); }
+.insight-metrics button { border: 0; border-radius: 10px; min-height: 44px; background: transparent; color: var(--ink-muted); font: inherit; font-size: 14px; cursor: pointer; }
+.insight-metrics button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--elevation-raised); }
+.insight-chart { width: 100%; height: 220px; min-width: 0; }
+.insight-details { border-top: var(--border-hairline) solid var(--border-subtle); }
+.insight-details summary { cursor: pointer; min-height: 44px; padding: 12px 0; font-size: 14px; font-weight: 600; }
+.insight-details .spread { min-height: 36px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) { .plus-wave-text { animation: none; } }
+@media (forced-colors: active) { .plus-wave-text { background: none; -webkit-text-fill-color: currentColor; } }
