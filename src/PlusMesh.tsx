@@ -20,7 +20,7 @@ export function PlusMesh() {
   }, []);
   return <div className="plus-mesh" aria-hidden="true">
     {!reduced && <MeshFallback><Suspense fallback={null}>
-      <MeshGradient colors={COLORS} speed={0.08} distortion={1} swirl={0.57}
+      <MeshGradient colors={COLORS} speed={0.95} distortion={1} swirl={0.57}
         grainMixer={0} grainOverlay={0} minPixelRatio={1} maxPixelCount={180000}
         style={{ width: "100%", height: "100%" }} />
     </Suspense></MeshFallback>}
