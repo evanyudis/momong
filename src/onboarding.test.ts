@@ -15,6 +15,11 @@ test("first screen is login, guests and authenticated users can set up without s
   const local = { token: null, me: null };
   assert.equal(onboardingStep({}, local), "signin");
   assert.equal(onboardingStep({}, local, true), "setup");
+  store.setPrefs({ guest: true });
+  assert.equal(onboardingStep(store.settings(), local, store.getPrefs().guest), "setup");
+  store.setPrefs({ guest: false });
+  assert.equal(onboardingStep(store.settings(), local, store.getPrefs().guest), "signin");
+  assert.deepEqual(store.settings(), {});
   assert.equal(onboardingStep({}, { token: "token", me: {} }), "setup");
   assert.equal(onboardingStep({ hpl: "2027-01-01" }, local), "ready");
   assert.equal(onboardingStep({ birthMode: "postpartum" }, local), "ready");

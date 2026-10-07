@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { animate } from "../motion";
 import { todayISO } from "../dates";
 import { motherNameFromAccount, saveOnboarding } from "../onboarding";
-import type { Settings } from "../store";
+import { setPrefs, type Settings } from "../store";
 import { DateInput, toast } from "../ui";
 
 export function Welcome({ user }: { user?: { name: string; email: string } }) {
@@ -41,6 +41,7 @@ export function Welcome({ user }: { user?: { name: string; email: string } }) {
     <div className="onboarding stack">
       <header className="header signin-head">
         {details && <button type="button" className="icon-btn" aria-label="Kembali ke pilihan pendamping" onClick={() => setDetails(false)}><ChevronLeft size={22} /></button>}
+        {!details && !user && <button type="button" className="icon-btn" aria-label="Kembali ke halaman masuk" onClick={() => setPrefs({ guest: false })}><ChevronLeft size={22} /></button>}
         <span className="signin-brand">Momong · {details ? "Langkah 2 dari 2" : "Langkah 1 dari 2"}</span>
         <h1 ref={heading} tabIndex={-1}>{details ? mode === "pregnant" ? "Kenalan dulu, yuk" : "Kenalan dengan si kecil" : "Momong menemani apa?"}</h1>
         <p className="muted">{details ? "Isi beberapa detail supaya catatanmu sesuai kebutuhan." : "Pilih yang kamu butuhkan sekarang. Bisa diganti nanti di Profil."}</p>
