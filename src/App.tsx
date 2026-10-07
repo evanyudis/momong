@@ -18,7 +18,7 @@ import { SignIn } from "./screens/SignIn";
 import { Welcome } from "./screens/Welcome";
 import { SharedWishlist, Wishlist } from "./screens/Wishlist";
 import { activeBabyId, getPrefs, settings, useDB } from "./store";
-import { useAccount } from "./sync";
+import { restoreAccount, signOut, useAccount } from "./sync";
 import { Toaster } from "./ui";
 
 const TABS = [
@@ -53,6 +53,8 @@ export function App() {
     screen = !PLUS_ENABLED ? <Plus /> : acc.checking ? <p role="status">Memeriksa sesi…</p> : acc.token ? <Plus /> : <SignIn plus />;
   }
   else if (path === "/masuk-akun") screen = <SignIn signup={params.get("mode") === "signup"} />;
+  else if (step === "restoring") screen = <p role="status">Memulihkan catatan akun…</p>;
+  else if (step === "restore-error") screen = <section className="card solid stack"><h1>Catatan belum bisa dipulihkan</h1><p role="alert">Cek koneksi lalu coba lagi sebelum mengatur profil.</p><button className="btn btn-ink block" onClick={() => void restoreAccount()}>Coba lagi</button><button className="link-btn" onClick={() => void signOut()}>Keluar akun</button></section>;
   else if (step === "signin") screen = <SignIn onboarding />;
   else if (step === "setup") screen = <Welcome key={babyKey} user={acc.me?.user} />;
   else if (path === "/log") screen = <Log key={babyKey} />;

@@ -38,7 +38,9 @@ test("login does not upload; opt-in sync merges; logout ignores an in-flight res
     assert.equal(store.get("kicks", "local").count, 1);
     assert.equal(sync.account().syncEnabled, false);
     await sync.syncNow();
-    assert.equal(calls.filter((p) => p === "/sync").length, 0);
+    assert.equal(calls.filter((p) => p === "/sync").length, 1, "login checks saved cloud data");
+    assert.deepEqual(syncBodies[0].changes, [], "restoration never uploads local records");
+    assert.ok(store.pending().some((r: any) => r.id === "local"));
     sync.setSyncEnabled(true);
     await sync.syncNow();
     assert.equal(store.get("kicks", "remote").count, 2);
@@ -73,5 +75,33 @@ test("login does not upload; opt-in sync merges; logout ignores an in-flight res
     assert.deepEqual(store.pending(), []);
     assert.deepEqual(JSON.parse(store.exportJSON()).data, {});
     assert.equal(memory.size, 0);
+
+    const { onboardingStep } = await server.ssrLoadModule("/src/onboarding.ts");
+    let failRestore = true;
+    const pulls: any[] = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/auth/sign-in/email") return Response.json({ token: "returning-member" });
+      if (path === "/me") return Response.json(me);
+      if (path === "/sync") {
+        assert.equal(onboardingStep(store.settings(), sync.account()), "restoring");
+        const body = JSON.parse(String(init?.body));
+        pulls.push(body);
+        if (failRestore) return Response.json({ error: "unavailable" }, { status: 503 });
+        return Response.json(body.since === 0
+          ? { cursor: 1, hasMore: true, changes: [{ collection: "kicks", id: "saved", data: { count: 4 }, updatedAt: 1 }] }
+          : { cursor: 2, changes: [{ collection: "settings", id: "main", data: { birthMode: "pregnant", hpl: "2027-01-01" }, updatedAt: 2 }] });
+      }
+      return Response.json({ ok: true });
+    }) as typeof fetch;
+    await sync.authEmail("masuk", "sari@example.com", "test-password");
+    assert.equal(onboardingStep(store.settings(), sync.account()), "restore-error", "failed pull cannot offer setup that overwrites saved mode");
+    failRestore = false;
+    await sync.restoreAccount();
+    assert.equal(onboardingStep(store.settings(), sync.account()), "ready", "returning member skips mode selection after paginated restore");
+    assert.equal(store.get("kicks", "saved").count, 4);
+    assert.equal(sync.account().syncEnabled, false, "restore does not grant upload consent");
+    assert.ok(pulls.every(body => body.changes.length === 0));
+    assert.equal(pulls.at(-1).since, 1);
   } finally { globalThis.fetch = realFetch; await server.close(); }
 });

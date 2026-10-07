@@ -2,7 +2,7 @@ import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
 import { PLUS_ENABLED } from "./release";
 import { nameFromEmail, type SignInMode } from "./signin";
-import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData } from "./store";
+import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
  *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
@@ -16,7 +16,7 @@ export type Me = {
   household: { id: string; seats: number; members: Member[] };
 };
 export type SyncStatus = "local" | "offline" | "syncing" | "synced" | "error";
-type State = { checking?: boolean; verifiedAt?: number; token: string | null; me: Me | null; status: SyncStatus; lastSyncAt: number | null; hasSynced: boolean; syncEnabled: boolean; error?: string };
+type State = { checking?: boolean; restoreError?: boolean; verifiedAt?: number; token: string | null; me: Me | null; status: SyncStatus; lastSyncAt: number | null; hasSynced: boolean; syncEnabled: boolean; error?: string };
 
 const load = <T,>(k: string, d: T): T => {
   try { return JSON.parse(localStorage.getItem(k) ?? "") ?? d; } catch { return d; }
@@ -78,7 +78,7 @@ function clearSession() {
   syncVersion++;
   clearTimeout(timer);
   localStorage.removeItem("bb_cursor");
-  set({ token: null, me: null, status: "local", lastSyncAt: null, hasSynced: false, syncEnabled: false, error: undefined });
+  set({ token: null, me: null, checking: false, restoreError: false, status: "local", lastSyncAt: null, hasSynced: false, syncEnabled: false, error: undefined });
 }
 
 export function setSyncEnabled(enabled: boolean) {
@@ -96,7 +96,7 @@ export function setSyncEnabled(enabled: boolean) {
 function establishSession(token?: string | null) {
   if (!token) throw new ApiError(502, "missing_session");
   sessionVersion++; syncVersion++;
-  set({ token, me: null, syncEnabled: false, hasSynced: false, status: "local", lastSyncAt: null });
+  set({ token, me: null, checking: true, restoreError: false, syncEnabled: false, hasSynced: false, status: "local", lastSyncAt: null });
 }
 
 export async function requestMagicLink(email: string) {
@@ -118,13 +118,46 @@ export async function authEmail(mode: SignInMode, email: string, password: strin
   await signedIn();
 }
 
-/** Signed in means token and /me. No /me, no session: drop the token rather than half sign in. Sync stays opt-in. */
 async function signedIn() {
   const version = sessionVersion;
-  await refreshMe().catch((e) => { if (version === sessionVersion) clearSession(); throw e; });
-  localStorage.removeItem("bb_cursor");
-  set({ syncEnabled: load<boolean>(`bb_sync_enabled:${state.me!.user.id}`, false), status: "local" });
-  if (state.syncEnabled) { markAllDirty(); void syncNow(); }
+  await restoreAccount();
+  if (version !== sessionVersion) throw new ApiError(0, "session_changed");
+  if (!state.me) {
+    clearSession();
+    throw new ApiError(502, "invalid_account");
+  }
+}
+
+/** Restore saved household data before offering setup. Uploads still require sync consent. */
+export async function restoreAccount() {
+  const version = sessionVersion;
+  set({ checking: true, restoreError: false });
+  try {
+    await refreshMe();
+    if (version !== sessionVersion) return;
+    localStorage.removeItem("bb_cursor");
+    set({ syncEnabled: load<boolean>(`bb_sync_enabled:${state.me!.user.id}`, false), status: "local" });
+    if (settings().birthMode !== "postpartum" && !settings().hpl) {
+      let since = 0, more = true;
+      while (more) {
+        const { data } = await api<{ cursor: number; changes: any[]; hasMore?: boolean }>("/sync", {
+          method: "POST", body: JSON.stringify({ since, changes: [] }),
+        });
+        if (version !== sessionVersion) return;
+        applyRemote(data.changes);
+        since = data.cursor;
+        more = !!data.hasMore;
+      }
+    }
+    if (state.syncEnabled) {
+      markAllDirty();
+      await syncNow();
+    }
+  } catch {
+    if (version === sessionVersion && state.token) set({ restoreError: true });
+  } finally {
+    if (version === sessionVersion) set({ checking: false });
+  }
 }
 
 // Set while the browser is away at Google. Success returns to #/profil, cancel/deny to #/masuk-akun (errorCallbackURL).
@@ -275,11 +308,5 @@ export function startSync() {
   window.addEventListener("offline", () => state.syncEnabled && set({ status: "offline" }));
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && revalidate());
   setInterval(() => document.visibilityState === "visible" && void syncNow(), 60_000);
-  if (state.token) {
-    set({ checking: navigator.onLine });
-    void refreshMe().then(() => {
-    set({ syncEnabled: load<boolean>(`bb_sync_enabled:${state.me!.user.id}`, false) });
-    if (state.syncEnabled) void syncNow();
-  }).catch(() => {}).finally(() => set({ checking: false }));
-  }
+  if (state.token) void restoreAccount();
 }
