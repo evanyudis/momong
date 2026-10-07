@@ -1,3 +1,4 @@
+import { PlusMesh } from "../PlusMesh";
 import { Baby, BriefcaseMedical, ChevronRight, Droplet, Gift, Milk, Sprout, Square, Users } from "lucide-react";
 import { BAG_DEFAULTS, weekNote } from "../content";
 import { agoLabel, babyAge, dateLabel, isToday, pregnancy, timeLabel } from "../dates";
@@ -216,7 +217,7 @@ function NewbornHome() {
           </div>
         </section>
 
-        {isPlus() && <a className="card plus-card" href="#/insight">
+        {isPlus() && <a className="card plus-card" href="#/insight"><PlusMesh />
           <div className="label">Perkiraan menyusu · Plus</div>
           <div className="card-title">{estimate ? timeLabel(estimate.at) : "Butuh tiga sesi menyusu"}</div>
           <p className="card-sub">{estimate ? `Dari ${estimate.samples} sesi dalam tujuh hari.${estimate.at < Date.now() ? " Waktu perkiraan sudah lewat." : ""}` : "Catat minum susu atau menyusu langsung untuk melihat pola."} Perkiraan non-klinis; ikuti kebutuhan si kecil.</p>

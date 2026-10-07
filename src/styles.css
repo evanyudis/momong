@@ -48,6 +48,7 @@
   --plus-muted: oklch(0.50 0 0);
   --plus-pill: var(--blush-500);
   --plus-pill-ink: oklch(0.32 0.07 12);
+  --plus-pattern-ink: oklch(0.50 0.12 12);
 
   /* Sign-in: logo blue #7EB8D4 ≈ oklch(0.753 0.072 229.7), one hue. 500 is light (L > 0.6) in both themes, so its ink stays dark. */
   --sky-500: oklch(0.753 0.072 229.7);
@@ -98,6 +99,7 @@
   --accent-partner-ink: #f2bfc5;
   --success-ink: #a9d6b3;
   --warning-ink: #f0c09b;
+  --plus-pattern-ink: oklch(0.78 0.10 12);
   --plus-fill-top: var(--blush-950);
   --plus-fill: var(--blush-900);
   --plus-muted: oklch(0.72 0 0);
@@ -594,7 +596,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 .blur-bars { display: flex; align-items: flex-end; gap: 8px; height: 88px; margin-top: 14px; filter: blur(4px); opacity: 0.85; }
 .blur-bars span { flex: 1; border-radius: 6px 6px 3px 3px; background: var(--plus-pill); }
 
-/* Pale pink Plus card (Profil) and the Insight preview. */
+/* Shared crimson Plus surfaces; decoration never intercepts a control. */
 .plus-card { background: var(--plus-fill); }
 .plus-chip { padding: 3px 10px; font-size: 13px; background: var(--surface); color: var(--accent-partner-ink); }
 
@@ -793,7 +795,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 @keyframes plus-welcome { from { opacity: 0; transform: translate(-50%, -12px) scale(.97); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .plus-activation { animation: none; } }
 
-.plus-card .card-sub, .plus-hero > p { color: var(--plus-muted); }
+.plus-card .card-sub, .plus-card .muted, .plus-hero > p { color: var(--plus-muted); }
 
 .sheet[data-instant="true"], .sheet-backdrop[data-instant="true"] { transition: none; }
 
@@ -869,3 +871,26 @@ html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::aft
 .history-filter-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 12px; border-radius: 10px; font-size: 14px; cursor: pointer; }
 .history-filter-option[data-focused], .history-filter-option[data-selected] { background: var(--surface-sunk); }
 .history-filter-option[data-focus-visible] { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+.profile-actions { display: flex; flex-direction: column; gap: 8px; flex: none; }
+
+/* Plus mesh stays behind content and never changes layout or hit targets. */
+.plus-card, .plus-hero, .plus-entry, .paywall-panel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.paywall-panel { position: absolute; }
+.plus-entry { background: var(--plus-fill); color: var(--accent-partner-ink); }
+.plus-mesh, .plus-pill::before, .plus-entry::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 85% 15%, var(--plus-pattern-ink), transparent 70%),
+    radial-gradient(ellipse at 15% 85%, var(--blush-500), transparent 65%);
+  opacity: .18;
+}
+.plus-mesh > div { height: 100%; }
+.plus-pill::before, .plus-entry::before { content: ""; }
+.paywall-panel .plus-mesh { bottom: auto; height: 320px; }

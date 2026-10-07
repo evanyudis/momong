@@ -1,3 +1,4 @@
+import { PlusMesh } from "../PlusMesh";
 import { PLUS_ENABLED } from "../release";
 import { Check, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -101,7 +102,7 @@ export function Wishlist() {
           <input aria-label="Nama barang" className="input" placeholder="Tambah barang" maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} />
           <button className="icon-btn" aria-label="Tambah" style={{ width: 52, height: 52 }}><Plus size={22} /></button>
         </form>
-        <section className="card solid stack">
+        <section className="card plus-card stack"><PlusMesh />
           <h2>Bagikan daftar kado · Plus</h2>
           <p className="muted">Hanya barang yang belum tersedia dan nama pemberi kado yang dibagikan lewat tautan. Catatan kesehatan tetap pribadi. Tautan berlaku 7 hari; bagikan lagi untuk memperbarui daftar.</p>
           <button className="btn btn-soft block" disabled={!PLUS_ENABLED && !isPlus() || busy || isPlus() && !online || items.filter((i) => !i.have).length > 100} onClick={publish}>{!PLUS_ENABLED && !isPlus() ? "Segera hadir" : busy ? "Membagikan…" : "Publikasikan daftar"}</button>

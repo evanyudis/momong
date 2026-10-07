@@ -1,3 +1,4 @@
+import { PlusMesh } from "./PlusMesh";
 import { PLUS_ENABLED } from "./release";
 import { PlanPicker, selectedPlan } from "./billing";
 import { Baby, Bell, CalendarDays, ChartNoAxesColumn, Check, ChevronLeft, FileText, Gift, History, Sparkles, Timer, Trash2, X } from "lucide-react";
@@ -304,7 +305,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
       onKeyDownCapture={() => { keyboard.current = true; root.current!.dataset.instant = "true"; }}
       onPointerDownCapture={() => { keyboard.current = false; root.current!.dataset.instant = String(reducedMotion()); }}>
       <div ref={backdrop} className="paywall-backdrop" onClick={onClose} />
-      <div ref={panel} className="paywall-panel">
+      <div ref={panel} className="paywall-panel"><PlusMesh />
         <button type="button" ref={grip} className="paywall-grip" onClick={onHeadClick}
           onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
           onPointerCancel={() => { drag.current = null; swallowClick.current = true; go(stage.current, "none"); }}

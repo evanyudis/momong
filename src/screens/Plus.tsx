@@ -1,3 +1,4 @@
+import { PlusMesh } from "../PlusMesh";
 import { PLUS_ENABLED } from "../release";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api, refreshMe, useAccount } from "../sync";
@@ -18,7 +19,7 @@ export function Plus() {
   if (acc.me?.entitlement.earlyAccess && isPlus()) return <>
     <TopBar title={acc.me.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : "Plus · Trial"} back="#/profil" />
     <div className="stack">
-      <section className="card plus-hero stack"><h1>Early access kamu aktif.</h1>
+      <section className="card plus-hero stack"><PlusMesh /><h1>Early access kamu aktif.</h1>
         <p>{acc.me.entitlement.plan === "plus_lifetime" ? "Akses Plus gratis tanpa batas waktu." : <>Gratis sampai {new Date(acc.me.entitlement.expiresAt!).toLocaleDateString("id-ID", { dateStyle: "long" })}.</>} Tidak ada tagihan atau perpanjangan otomatis. Akses berlaku untuk household kamu.</p>
       </section>
       <section className="card solid stack"><h2>Fitur Plus</h2>
@@ -29,7 +30,7 @@ export function Plus() {
   if (!PLUS_ENABLED) return <>
     <TopBar title="Momong Plus" back="#/profil" />
     <div className="stack">
-      <section className="card plus-hero stack">
+      <section className="card plus-hero stack"><PlusMesh />
         <h1>Grafik, riwayat lengkap, dan laporan.</h1>
         <p>Momong Plus sedang disiapkan. Kamu bisa terus memakai fitur gratis, termasuk sinkronisasi dan akses pasangan.</p>
         <button className="btn btn-coral lg block" disabled>Segera hadir</button>
@@ -158,7 +159,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
     <TopBar title="Plus" back="#/profil" />
     {celebrate && <p className="plus-activation" role="status">Selamat datang di Momong Plus ✦</p>}
     <div className="stack">
-      <section className="card plus-hero stack">
+      <section className="card plus-hero stack"><PlusMesh />
         <span className="pill plus-chip">Momong Plus · Sandbox</span>
         <h1>{active ? lifetime ? "Selamanya bersama si kecil." : "Lebih dekat dengan polanya." : expired ? "Masa Plusmu sudah berakhir." : "Hari kecil. Cerita besar."}</h1>
         <p>{active ? "Semua fitur Plus siap dibuka dari perangkat ini." : expired ? "Catatanmu tetap tersimpan. Periksa perpanjangan atau pilih Selamanya untuk membuka Plus lagi." : "Pahami pola, simpan kenangan, dan bagi persiapan dengan orang tersayang."}</p>

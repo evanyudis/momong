@@ -1,3 +1,4 @@
+import { PlusMesh } from "../PlusMesh";
 import { PLUS_ENABLED } from "../release";
 import { nextFeed, weeklyTotals } from "../plus";
 import { useState } from "react";
@@ -87,7 +88,7 @@ function NewbornInsight() {
       {!hasToday && <section className="card empty"><strong>Belum ada catatan hari ini</strong><p>Catat menyusu, pompa, atau popok untuk melihat ringkasannya.</p><a className="btn btn-ink" href="#/log">Buka Log</a></section>}
       {isPlus() && hasRecords && <PlusInsights />}
       {!isPlus() && hasRecords && preview && (
-        <section className="card plus-card" style={{ marginBottom: 14 }}>
+        <section className="card plus-card" style={{ marginBottom: 14 }}><PlusMesh />
           <div className="spread">
             <div className="card-title">Pola menyusu 7 hari</div>
             <PlusPill />

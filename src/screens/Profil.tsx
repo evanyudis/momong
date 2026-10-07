@@ -1,3 +1,4 @@
+import { PlusMesh } from "../PlusMesh";
 import { setTelemetryConsent, telemetryConfigured, telemetryConsent } from "../telemetry";
 import { PLUS_ENABLED } from "../release";
 import { RestoreSheet } from "./Restore";
@@ -52,17 +53,20 @@ export function Profil() {
 
   return (
     <>
-      <Header title="Profil" aside={h.signedIn ? undefined : <a className="btn sm btn-signin" href="#/masuk-akun">Masuk</a>} />
+      <Header title="Profil" />
       <div className="stack">
         <section className="stack profile-summary">
           <div className="profile-identity">
             <span className="avatar blue" aria-hidden="true">{(prefs.name || h.me?.user.email || "M").slice(0, 1).toUpperCase()}</span>
             <div className="grow"><h2>{prefs.name || "Teman Momong"}</h2><p className="muted">{h.me?.user.email || "Catatan lokal · tanpa akun"}</p><p className="card-sub">Si kecil · {s.babyName || "Belum diisi"}</p></div>
-            <button type="button" className="btn btn-soft sm profile-edit" aria-haspopup="dialog" onClick={() => setEditingProfile(true)}>Edit Profile</button>
+            <div className="profile-actions">
+              <button type="button" className="btn btn-soft sm profile-edit" aria-haspopup="dialog" onClick={() => setEditingProfile(true)}>{h.signedIn ? "Edit Profile" : "Edit"}</button>
+              {!h.signedIn && <a className="btn sm btn-signin" href="#/masuk-akun">Masuk</a>}
+            </div>
           </div>
 
         </section>
-        <section className="card plus-card stack">
+        <section className="card plus-card stack"><PlusMesh />
           <div className="spread"><div className="card-title">{isPlus() ? h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : h.me?.entitlement.plan === "trial" ? "Plus · Trial" : "Plus · Bulanan" : "Momong Plus"}</div><PlusBadge size="medium" /></div>
           <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi.  {isPlus() ? "Akses Plus kamu aktif." : "Fitur Plus segera hadir."}</p>
           {!PLUS_ENABLED && !isPlus() ? <button className="btn btn-coral block" disabled>Segera hadir</button> : isPlus() ? <a className="btn btn-coral block" href="#/plus">Lihat status Plus</a>
@@ -74,7 +78,7 @@ export function Profil() {
               {babyProfiles().filter((b) => isPlus() || b.id === "default").map((b) => <option key={b.id} value={b.id}>{b.babyName || "Si kecil"}</option>)}
             </select>
           </label>
-          <button className="btn btn-soft block" disabled={!PLUS_ENABLED && !isPlus()} onClick={() => isPlus() ? setAddingBaby(true) : setPlus("insights")}>{PLUS_ENABLED || isPlus() ? "Tambah profil bayi · Plus" : "Segera hadir"}</button>
+          <button className="btn btn-soft plus-entry block" disabled={!PLUS_ENABLED && !isPlus()} onClick={() => isPlus() ? setAddingBaby(true) : setPlus("insights")}>{PLUS_ENABLED || isPlus() ? "Tambah profil bayi · Plus" : "Segera hadir"}</button>
           {!isPlus() && babyProfiles().length > 1 && <p className="muted">Profil tambahan tetap tersimpan dan dapat dibuka saat Plus aktif.</p>}
         </section>}
 

@@ -19,6 +19,7 @@
   },
   "homepage": "https://github.com/evanyudis/momong#readme",
   "dependencies": {
+    "@paper-design/shaders-react": "^0.0.81",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.51.0",
     "posthog-js": "^1.438.1",

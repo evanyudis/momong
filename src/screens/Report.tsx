@@ -103,7 +103,7 @@ export function Report() {
         <div className="no-print stack" style={{ marginTop: 8 }}>
           {/* Free quota used: the button opens the Plus sheet instead of printing. The 1×/bulan rule itself is unchanged. */}
           <button
-            className={`btn lg block ${usedThisMonth ? "btn-soft" : "btn-ink"}`}
+            className={`btn lg block ${usedThisMonth ? "btn-soft plus-entry" : "btn-ink"}`}
             aria-haspopup={PLUS_ENABLED && usedThisMonth ? "dialog" : undefined}
             disabled={busy || usedThisMonth && !PLUS_ENABLED}
             aria-busy={busy}

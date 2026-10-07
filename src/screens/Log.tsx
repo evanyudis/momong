@@ -439,7 +439,7 @@ function NewbornLog() {
           <p className="faint" style={{ fontSize: 13, marginTop: 12 }}>{isPlus() ? "Semua riwayat tersimpan · Plus" : "Riwayat menyusu langsung, pumping, dan ganti popok tersedia selama 30 hari. Riwayat minum susu tersedia seluruhnya."}</p>
           {/* Only when the 30-day Free window is actually hiding entries. */}
           {hasHidden() && (
-            <button className="chip" style={{ marginTop: 12 }} disabled={!PLUS_ENABLED} aria-haspopup={PLUS_ENABLED ? "dialog" : undefined} onClick={() => setPlus("insights")}>{PLUS_ENABLED ? "Buka riwayat lengkap di Plus" : "Segera hadir"}</button>
+            <button className="chip plus-entry" style={{ marginTop: 12 }} disabled={!PLUS_ENABLED} aria-haspopup={PLUS_ENABLED ? "dialog" : undefined} onClick={() => setPlus("insights")}>{PLUS_ENABLED ? "Buka riwayat lengkap di Plus" : "Segera hadir"}</button>
           )}
         </section>
         <ReportCard />
