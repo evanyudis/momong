@@ -52,7 +52,7 @@ export const PLUS_COPY: Record<PlusVariant, { title: string; body: string }> = {
 export const PLUS_FEATURES = [
   { title: "Perkiraan menyusu", body: "Dari pola catatanmu, bukan saran medis." },
   { title: "Pengingat pilihanmu", body: "Atur sendiri; berjalan selama aplikasi terbuka." },
-  { title: "Grafik harian", body: "Lihat pola menyusu, pompa, dan popok." },
+  { title: "Grafik harian", body: "Lihat pola minum susu, menyusu langsung, pumping, dan ganti popok." },
   { title: "Riwayat lengkap", body: "Buka catatan lebih dari 30 hari." },
   { title: "PDF tanpa batas", body: "Unduh laporan untuk dibawa saat kontrol." },
   { title: "Wishlist bersama", body: "Bagikan tautan agar keluarga bisa claim hadiah." },

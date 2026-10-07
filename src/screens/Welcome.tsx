@@ -38,7 +38,7 @@ export function Welcome({ user }: { user?: { name: string; email: string } }) {
           </button>
           <button type="button" className="card onboarding-choice" aria-pressed={mode === "postpartum"} onClick={() => setMode("postpartum")}>
             <span className="glyph peach" aria-hidden="true"><Baby size={24} /></span>
-            <span className="grow"><span className="card-title">Catatan newborn</span><span className="card-sub">Catat menyusu, pompa, dan popok si kecil.</span></span>
+            <span className="grow"><span className="card-title">Catatan newborn</span><span className="card-sub">Catat minum susu, menyusu langsung, pumping, dan ganti popok.</span></span>
             <span className="onboarding-selected" aria-hidden="true"><Check size={16} /></span>
           </button>
           <button type="button" className="btn btn-signin lg block onboarding-continue" disabled={!mode} onClick={() => setDetails(true)}>Lanjut</button>

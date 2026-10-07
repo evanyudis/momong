@@ -328,17 +328,17 @@ function SymptomSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
 
 type Kind = "bottle" | "breast" | "pump" | "diaper";
 const KINDS: { kind: Kind; label: string; glyph: string; Icon: typeof Milk }[] = [
-  { kind: "bottle", label: "Botol", glyph: "mint", Icon: Milk },
-  { kind: "breast", label: "ASI", glyph: "peach", Icon: Baby },
-  { kind: "pump", label: "Pompa", glyph: "blue", Icon: Droplet },
-  { kind: "diaper", label: "Popok", glyph: "coral", Icon: Square },
+  { kind: "bottle", label: "Minum susu", glyph: "mint", Icon: Milk },
+  { kind: "breast", label: "Menyusu langsung (DBF)", glyph: "peach", Icon: Baby },
+  { kind: "pump", label: "Pumping", glyph: "blue", Icon: Droplet },
+  { kind: "diaper", label: "Ganti popok", glyph: "coral", Icon: Square },
 ];
 
 export function describe(kind: Kind, r: Rec) {
-  if (kind === "bottle") return `Botol ${r.ml} ml · ${r.milk === "formula" ? "Formula" : "ASI perah"}`;
-  if (kind === "breast") return `ASI ${SIDE_LABEL[r.side] ?? ""}${r.minutes ? ` · ${r.minutes} mnt` : ""}`;
-  if (kind === "pump") return `Pompa ${r.ml} ml`;
-  return `Popok · ${DIAPER_LABEL[r.type] ?? ""}`;
+  if (kind === "bottle") return `Minum susu ${r.ml} ml · ${r.milk === "formula" ? "Formula" : "ASI perah"}`;
+  if (kind === "breast") return `Menyusu langsung ${SIDE_LABEL[r.side] ?? ""}${r.minutes ? ` · ${r.minutes} mnt` : ""}`;
+  if (kind === "pump") return `Pumping ${r.ml} ml`;
+  return `Ganti popok · ${DIAPER_LABEL[r.type] ?? ""}`;
 }
 
 function NewbornLog() {
@@ -377,7 +377,7 @@ function NewbornLog() {
             </select></label>
           </div>
           {entries.length === 0 ? (
-            <div className="empty"><strong>Belum ada catatan</strong>Ketuk Botol, ASI, Pompa, atau Popok di atas untuk mulai.</div>
+            <div className="empty"><strong>Belum ada catatan</strong>Pilih aktivitas di atas untuk mulai mencatat.</div>
           ) : (
             <div className="list" style={{ marginTop: 4 }}>
               {entries.map(({ kind, r }) => (
@@ -392,7 +392,7 @@ function NewbornLog() {
             </div>
           )}
           {matching.length > limit && <button className="btn btn-soft block" onClick={() => setLimit((n) => n + 30)}>Lihat catatan sebelumnya</button>}
-          <p className="faint" style={{ fontSize: 13, marginTop: 12 }}>{isPlus() ? "Semua riwayat tersimpan · Plus" : "Riwayat ASI, pompa, dan popok: 30 hari terakhir. Botol: semua."}</p>
+          <p className="faint" style={{ fontSize: 13, marginTop: 12 }}>{isPlus() ? "Semua riwayat tersimpan · Plus" : "Riwayat menyusu langsung, pumping, dan ganti popok tersedia selama 30 hari. Riwayat minum susu tersedia seluruhnya."}</p>
           {/* Only when the 30-day Free window is actually hiding entries. */}
           {hasHidden() && (
             <button className="chip" style={{ marginTop: 12 }} aria-haspopup="dialog" onClick={() => setPlus("insights")}>Buka riwayat lengkap di Plus</button>
@@ -424,7 +424,7 @@ function NewbornSheet({ kind, onClose }: { kind: Kind | null; onClose: () => voi
   const [side, setSide] = useState("left");
   const [minutes, setMinutes] = useState(15);
   const [type, setType] = useState("pee");
-  const title = { bottle: "Catat botol", breast: "Catat ASI", pump: "Catat pompa", diaper: "Catat popok" }[k];
+  const title = { bottle: "Catat minum susu", breast: "Catat menyusu langsung (DBF)", pump: "Catat pumping", diaper: "Catat ganti popok" }[k];
 
   function save() {
     const at = Date.now();

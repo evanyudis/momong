@@ -110,7 +110,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; }
+html, body { margin: 0; overscroll-behavior: none; }
 body {
   font-family: var(--font-sans);
   background: var(--bg);
@@ -135,12 +135,24 @@ p { margin: 0; }
   max-width: 480px;
   margin: 0 auto;
   min-height: 100dvh;
-  padding: calc(env(safe-area-inset-top) + 28px) 20px calc(env(safe-area-inset-bottom) + 120px);
+  padding: calc(env(safe-area-inset-top) + 28px) max(20px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 120px) max(20px, env(safe-area-inset-left));
 }
 .stack { display: grid; gap: 14px; }
 .row { display: flex; align-items: center; gap: 12px; }
 .spread { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.newborn-today > .spread { align-items: flex-start; }
+.newborn-today .link-btn { flex: none; }
+.newborn-metrics { margin-top: 18px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.newborn-metric { min-width: 0; padding: 16px; border-radius: 16px; display: grid; justify-items: start; gap: 10px; }
+.newborn-metric .glyph { width: 40px; height: 40px; }
+.newborn-metric-label { min-height: 3em; font-size: 14px; font-weight: 500; line-height: 1.5; }
+.newborn-metric .stat { font-size: clamp(22px, 6vw, 30px); white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 380px) {
+  .pregnancy-summary { flex-direction: column; align-items: stretch; }
+  .pregnancy-summary > :last-child { align-self: center; }
+  .home-shortcuts { grid-template-columns: 1fr; }
+}
 
 .header { margin-bottom: 22px; }
 .header .date { color: var(--ink-muted); font-size: 15px; }
@@ -423,7 +435,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 .avatar.coral { background: #f5dfe1; color: var(--accent-partner-ink); }
 :root[data-theme="dark"] .avatar.blue { background: #2f4652; }
 :root[data-theme="dark"] .avatar.coral { background: #4d3135; }
-.avatar.vacant { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-faint); color: var(--ink-muted); }
+.avatar.vacant { background: var(--surface); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ink-faint) 30%, var(--surface)); color: var(--ink-muted); }
 .avatar.xl { width: 96px; height: 96px; box-shadow: 0 0 0 6px var(--bg); }
 .avatar.xl + .avatar.xl { margin-left: -22px; }
 
@@ -481,7 +493,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
   max-height: 88dvh;
   overflow-y: auto;
   z-index: var(--z-sheet);
-  padding: 10px 20px calc(env(safe-area-inset-bottom) + 24px);
+  padding: 10px max(20px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 24px) max(20px, env(safe-area-inset-left));
   border-radius: 28px 28px 0 0;
   background: var(--surface); /* sheets are opaque; glass is for cards, circle buttons, nav */
   box-shadow: var(--elevation-float);

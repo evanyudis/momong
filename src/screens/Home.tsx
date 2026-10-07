@@ -1,4 +1,4 @@
-import { Baby, BriefcaseMedical, ChevronRight, Gift, Settings as Gear, Sprout, Users } from "lucide-react";
+import { Baby, BriefcaseMedical, ChevronRight, Droplet, Gift, Milk, Settings as Gear, Sprout, Square, Users } from "lucide-react";
 import { BAG_DEFAULTS, weekNote } from "../content";
 import { agoLabel, babyAge, dateLabel, isToday, pregnancy, timeLabel } from "../dates";
 import { initial, useHousehold } from "../household";
@@ -41,7 +41,7 @@ function PregnancyHome() {
         )}
 
         <section className="card" aria-label="Kehamilan">
-          <div className="spread" style={{ alignItems: "center" }}>
+          <div className="spread pregnancy-summary">
             <div>
               <span className="pill warm"><span className="dot" />Trimester {p.trimester}</span>
               {/* Stacked so 3-digit counts never wrap "lagi" beside the number. */}
@@ -73,7 +73,7 @@ function PregnancyHome() {
           </div>
         </section>
 
-        <div className="grid2">
+        <div className="grid2 home-shortcuts">
           <BagCard />
           <PartnerCard />
         </div>
@@ -199,23 +199,31 @@ function NewbornHome() {
           </div>
         </section>
 
-        <section className="card">
+        <section className="card newborn-today">
           <div className="spread">
             <span className="label">Hari ini</span>
             <a className="link-btn" href="#/log" style={{ color: "inherit" }}>Catat <ChevronRight size={18} /></a>
           </div>
-          <div className="grid2" style={{ marginTop: 6, rowGap: 18 }}>
-            <Mini color="var(--semantic-feed)" label="Botol" value={`${bottles.reduce((n, r) => n + (r.ml || 0), 0)} ml`} />
-            <Mini color="var(--accent-partner)" label="ASI" value={`${today("breast").length}×`} />
-            <Mini color="var(--accent-primary)" label="Pompa" value={`${today("pump").reduce((n, r) => n + (r.ml || 0), 0)} ml`} />
-            <Mini color="var(--warning)" label="Popok" value={`${today("diaper").length}×`} />
+          <div className="grid2 newborn-metrics">
+            {[
+              { label: "Minum susu", value: bottles.reduce((n, r) => n + (r.ml || 0), 0), unit: "ml", glyph: "mint", color: "var(--semantic-feed)", Icon: Milk },
+              { label: "Menyusu langsung (DBF)", value: today("breast").length, unit: "kali", glyph: "peach", color: "var(--accent-partner)", Icon: Baby },
+              { label: "Pumping", value: today("pump").reduce((n, r) => n + (r.ml || 0), 0), unit: "ml", glyph: "blue", color: "var(--sky-500)", Icon: Droplet },
+              { label: "Ganti popok", value: today("diaper").length, unit: "kali", glyph: "coral", color: "var(--warning)", Icon: Square },
+            ].map(({ label, value, unit, glyph, color, Icon }) => (
+              <div key={label} className="newborn-metric" style={{ background: `color-mix(in oklab, ${color} 14%, var(--surface))` }}>
+                <span className={`glyph ${glyph}`} aria-hidden="true"><Icon size={20} /></span>
+                <div className="newborn-metric-label">{label}</div>
+                <div className="stat num">{value}<small> {unit}</small></div>
+              </div>
+            ))}
           </div>
         </section>
 
         {isPlus() && <a className="card plus-card" href="#/insight">
           <div className="label">Perkiraan menyusu · Plus</div>
           <div className="card-title">{estimate ? timeLabel(estimate.at) : "Butuh tiga sesi menyusu"}</div>
-          <p className="card-sub">{estimate ? `Dari ${estimate.samples} sesi dalam tujuh hari.${estimate.at < Date.now() ? " Waktu perkiraan sudah lewat." : ""}` : "Catat botol atau ASI untuk melihat pola."} Perkiraan non-klinis; ikuti kebutuhan si kecil.</p>
+          <p className="card-sub">{estimate ? `Dari ${estimate.samples} sesi dalam tujuh hari.${estimate.at < Date.now() ? " Waktu perkiraan sudah lewat." : ""}` : "Catat minum susu atau menyusu langsung untuk melihat pola."} Perkiraan non-klinis; ikuti kebutuhan si kecil.</p>
         </a>}
         <PartnerCard />
         <WishlistCard />

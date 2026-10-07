@@ -103,8 +103,8 @@ function NewbornInsight() {
                 <div className="grow">
                   <div className="title">{d === start ? "Hari ini" : dayName(d)}</div>
                   <div className="sub num">
-                    Botol {bottle.reduce((n, r) => n + (r.ml || 0), 0)} ml ({bottle.length}×) · ASI {inDay("breast", d).length}× ·
-                    Pompa {inDay("pump", d).reduce((n, r) => n + (r.ml || 0), 0)} ml · Popok {inDay("diaper", d).length}×
+                    Minum susu {bottle.reduce((n, r) => n + (r.ml || 0), 0)} ml ({bottle.length}×) · Menyusu langsung {inDay("breast", d).length}× ·
+                    Pumping {inDay("pump", d).reduce((n, r) => n + (r.ml || 0), 0)} ml · Ganti popok {inDay("diaper", d).length}×
                   </div>
                 </div>
               </div>
@@ -125,10 +125,10 @@ function PlusInsights() {
     <section className="card stack">
       <h2>Perkiraan menyusu berikutnya</h2>
       {estimate ? <><p className="stat num">{timeLabel(estimate.at)}</p><p className="muted">Perkiraan dari {estimate.samples} catatan terakhir.{estimate.at < Date.now() ? " Waktu perkiraan sudah lewat." : ""}</p></>
-        : <p className="muted">Catat minimal 3 sesi botol atau ASI dalam 7 hari untuk melihat perkiraan.</p>}
+        : <p className="muted">Catat minimal 3 sesi minum susu atau menyusu langsung dalam 7 hari untuk melihat perkiraan.</p>}
       <p className="faint">Berdasarkan kebiasaan catatan, bukan jadwal wajib atau saran medis. Ikuti kebutuhan si kecil.</p>
     </section>
-    {([['feeds', 'Menyusu', 'sesi'], ['pump', 'Pompa', 'ml'], ['diapers', 'Popok', 'kali']] as const).map(([key, label, unit]) => {
+    {([['feeds', 'Menyusu', 'sesi'], ['pump', 'Pumping', 'ml'], ['diapers', 'Ganti popok', 'kali']] as const).map(([key, label, unit]) => {
       const max = Math.max(1, ...days.map((d) => d[key]));
       return <section className="card stack" key={key}>
         <h2>{label} · 7 hari</h2>

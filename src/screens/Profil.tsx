@@ -76,7 +76,7 @@ export function Profil() {
           <div className="spread">
             <div>
               <div className="card-title" style={{ fontSize: 16 }}>Sudah lahir?</div>
-              <div className="card-sub">Mode newborn: botol, ASI, pompa, popok. Bisa balik kapan saja.</div>
+              <div className="card-sub">Catat minum susu, menyusu langsung, pumping, dan ganti popok. Bisa kembali ke mode hamil kapan saja.</div>
             </div>
             <button
               className="switch" role="switch" aria-checked={born} aria-label="Sudah lahir"
