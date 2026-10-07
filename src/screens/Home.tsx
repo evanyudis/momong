@@ -203,7 +203,7 @@ function NewbornHome() {
           <div className="grid2 newborn-metrics">
             {[
               { label: "Minum susu", value: bottles.reduce((n, r) => n + (r.ml || 0), 0), unit: "ml", color: "var(--semantic-feed)", Icon: Milk },
-              { label: "Menyusu langsung (DBF)", value: today("breast").length, unit: "kali", color: "var(--accent-partner)", Icon: Baby },
+              { label: "Menyusu langsung", value: today("breast").length, unit: "kali", color: "var(--accent-partner)", Icon: Baby },
               { label: "Pumping", value: today("pump").reduce((n, r) => n + (r.ml || 0), 0), unit: "ml", color: "var(--sky-500)", Icon: Droplet },
               { label: "Ganti popok", value: today("diaper").length, unit: "kali", color: "var(--warning)", Icon: Square },
             ].map(({ label, value, unit, color, Icon }) => (

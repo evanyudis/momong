@@ -163,3 +163,26 @@ test("failed persistence does not show unsaved records or preferences, and retry
   assert.equal(s.list("bottle").length, before + 1);
   assert.equal(s.pending().filter((r) => r.id === "failed-save").length, 1);
 });
+
+
+test("feeding edits preserve IDs, consumed totals and unmeasured pump volume through sync and backup", () => {
+  s.resetDeviceData();
+  const bottle = s.put("bottle", { at: Date.now(), ml: 90, milk: "formula" });
+  s.put("bottle", { id: bottle.id, offeredMl: 90, remainingMl: 25, ml: 65 });
+  assert.equal(s.list("bottle").length, 1);
+  assert.equal(s.get("bottle", bottle.id)?.milk, "formula");
+  const pump = s.put("pump", { at: Date.now(), ml: 60 });
+  s.put("pump", { id: pump.id, side: "both", ml: null, tags: ["Power pumping", "Malam"] });
+  assert.equal(s.pending().find(r => r.id === pump.id)?.data.ml, null);
+  const backup = s.parseBackup(s.exportJSON());
+  assert.equal(backup.data.pump?.[pump.id].ml, null);
+  assert.deepEqual(backup.data.pump?.[pump.id].tags, ["Power pumping", "Malam"]);
+  assert.equal(backup.data.bottle?.[bottle.id].remainingMl, 25);
+  s.resetDeviceData();
+  s.restoreBackup(backup);
+  assert.equal(s.get("pump", pump.id)?.ml, null);
+  assert.deepEqual(s.get("pump", pump.id)?.tags, ["Power pumping", "Malam"]);
+  s.put("pump", { id: pump.id, tags: [] });
+  assert.deepEqual(s.pending().find(r => r.id === pump.id)?.data.tags, []);
+  assert.equal(s.get("bottle", bottle.id)?.ml, 65);
+});

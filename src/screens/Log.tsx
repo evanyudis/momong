@@ -1,5 +1,7 @@
+import { durationMinutes, feedingDetails, localDateTime, normalizePumpTags } from "../feeding";
+import { Button as AriaButton, Select, Popover, ListBox, ListBoxItem } from "react-aria-components";
 import { PLUS_ENABLED } from "../release";
-import { Baby, ChevronRight, Droplet, FileText, Hand, Hospital, Milk, NotebookPen, Play, Plus, RotateCcw, Square, Timer, Trash2, TriangleAlert, X } from "lucide-react";
+import { Baby, Check, ChevronRight, Droplet, Filter, FileText, Hand, Hospital, Milk, NotebookPen, Pencil, Play, Plus, RotateCcw, Square, Timer, Trash2, TriangleAlert, X } from "lucide-react";
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DIAPER_LABEL, type PlusVariant, SIDE_LABEL, SYMPTOMS } from "../content";
 import { alertVisible, analyzePattern, clock, distanceTier, durLabel, finished, gapLabel, intervalFor } from "../contractions";
@@ -356,37 +358,38 @@ function SymptomSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
 type Kind = "bottle" | "breast" | "pump" | "diaper";
 const KINDS: { kind: Kind; label: string; glyph: string; Icon: typeof Milk }[] = [
   { kind: "bottle", label: "Minum susu", glyph: "mint", Icon: Milk },
-  { kind: "breast", label: "Menyusu langsung (DBF)", glyph: "peach", Icon: Baby },
+  { kind: "breast", label: "Menyusu langsung", glyph: "peach", Icon: Baby },
   { kind: "pump", label: "Pumping", glyph: "blue", Icon: Droplet },
   { kind: "diaper", label: "Ganti popok", glyph: "coral", Icon: Square },
 ];
 
 export function describe(kind: Kind, r: Rec) {
-  if (kind === "bottle") return `Minum susu ${r.ml} ml · ${r.milk === "formula" ? "Formula" : "ASI perah"}`;
-  if (kind === "breast") return `Menyusu langsung ${SIDE_LABEL[r.side] ?? ""}${r.minutes ? ` · ${r.minutes} mnt` : ""}`;
-  if (kind === "pump") return `Pumping ${r.ml} ml`;
+  if (kind === "bottle") return `Minum susu ${r.ml} ml · ${r.milk === "formula" ? "Formula" : "ASI perah"}${r.offeredMl != null ? ` · ditawarkan ${r.offeredMl} ml, sisa ${r.remainingMl} ml` : ""}`;
+  if (kind === "breast") return `Menyusu langsung ${r.side === "both" ? "Bergantian" : SIDE_LABEL[r.side] ?? ""}${r.minutes ? ` · ${durationLabel(r.minutes * 60000)}` : ""}`;
+  if (kind === "pump") return `Pumping${r.side ? ` ${SIDE_LABEL[r.side] ?? ""}` : ""}${r.ml != null ? ` · ${r.ml} ml` : " · tanpa volume"}${r.tags?.length ? ` · ${r.tags.join(", ")}` : ""}`;
   return `Ganti popok · ${DIAPER_LABEL[r.type] ?? ""}`;
 }
 
 function NewbornLog() {
   const [open, setOpen] = useState<Kind | null>(null);
+  const [editing, setEditing] = useState<Rec | null>(null);
   const [plus, setPlus] = useState<PlusVariant | null>(null);
-  const [limit, setLimit] = useState(30);
+  const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState(0);
   const [filter, setFilter] = useState("all");
-  const [period, setPeriod] = useState("all");
   const [savedRow, setSavedRow] = useState<string | null>(null);
   const matching = KINDS.filter(({ kind }) => filter === "all" || filter === kind).flatMap(({ kind }) =>
-    list(kind).filter((r) => period === "all" || r.at >= Date.now() - Number(period) * 86400000).map((r) => ({ kind, r }))).sort((a, b) => b.r.at - a.r.at);
-  const entries = matching
-    .sort((a, b) => b.r.at - a.r.at)
-    .slice(0, limit);
+    list(kind).map((r) => ({ kind, r }))).sort((a, b) => b.r.at - a.r.at);
+  const lastPage = Math.max(0, Math.ceil(matching.length / 30) - 1);
+  const currentPage = Math.min(page, lastPage);
+  const entries = expanded ? matching.slice(currentPage * 30, (currentPage + 1) * 30) : matching.slice(0, 5);
   return (
     <>
       <Header title="Log Bayi" />
       <div className="stack">
         <div className="grid2">
           {KINDS.map(({ kind, label, glyph, Icon }) => (
-            <button key={kind} className="card" onClick={() => setOpen(kind)}>
+            <button key={kind} className="card" onClick={() => { setEditing(null); setOpen(kind); }}>
               <span className={`glyph ${glyph}`}><Icon size={22} /></span>
               <div className="card-title" style={{ marginTop: 12 }}>{label}</div>
               <div className="card-sub num">{list(kind).filter((r) => isToday(r.at)).length}× hari ini</div>
@@ -395,31 +398,44 @@ function NewbornLog() {
         </div>
 
         <section className="card">
-          <div className="label">Riwayat catatan</div>
-          <div className="grid2" style={{ marginTop: 12 }}>
-            <label className="field"><span>Jenis</span><select className="input" value={filter} onChange={(e) => { setFilter(e.target.value); setLimit(30); }}>
-              <option value="all">Semua jenis</option>{KINDS.map(({ kind, label }) => <option key={kind} value={kind}>{label}</option>)}
-            </select></label>
-            <label className="field"><span>Periode</span><select className="input" value={period} onChange={(e) => { setPeriod(e.target.value); setLimit(30); }}>
-              <option value="7">7 hari</option><option value="30">30 hari</option><option value="all">Semua tersedia</option>
-            </select></label>
+          <div className="spread">
+            <div><div className="label">Riwayat catatan</div>{filter !== "all" && <div className="card-sub">{KINDS.find(k => k.kind === filter)?.label}</div>}</div>
+            <Select aria-label="Filter jenis catatan" selectedKey={filter} onSelectionChange={key => { setFilter(String(key)); setPage(0); }}>
+              <AriaButton className="icon-btn history-filter" data-filtered={filter !== "all" || undefined} aria-label="Filter jenis catatan"><Filter size={18} aria-hidden="true" /></AriaButton>
+              <Popover className="history-filter-popover" placement="bottom end" offset={8}>
+                <ListBox className="history-filter-list" aria-label="Jenis catatan">
+                  {[{ kind: "all", label: "Semua jenis" }, ...KINDS].map(({ kind, label }) => <ListBoxItem className="history-filter-option" key={kind} id={kind} textValue={label}>
+                    {({ isSelected }) => <><span>{label}</span>{isSelected && <Check size={16} aria-hidden="true" />}</>}
+                  </ListBoxItem>)}
+                </ListBox>
+              </Popover>
+            </Select>
           </div>
+          {matching.length > 5 && <button className="btn btn-soft block" style={{ marginTop: 12 }} aria-expanded={expanded} aria-controls="newborn-history" onClick={() => { setExpanded(!expanded); setPage(0); }}>
+            {expanded ? "Ringkas riwayat" : `Lihat semua (${matching.length})`}
+          </button>}
           {entries.length === 0 ? (
-            <div className="empty"><strong>{filter !== "all" || period !== "all" ? "Tidak ada catatan yang cocok" : "Belum ada catatan"}</strong>{filter !== "all" || period !== "all" ? <><span>Coba tampilkan semua jenis dan periode.</span><button type="button" className="btn btn-soft" onClick={() => { setFilter("all"); setPeriod("all"); setLimit(30); }}>Reset filter</button></> : "Pilih aktivitas di atas untuk mulai mencatat."}</div>
+            <div className="empty"><strong>{filter !== "all" ? "Tidak ada catatan yang cocok" : "Belum ada catatan"}</strong>{filter !== "all" ? <><span>Coba tampilkan semua jenis.</span><button type="button" className="btn btn-soft" onClick={() => { setFilter("all"); setPage(0); }}>Reset filter</button></> : "Pilih aktivitas di atas untuk mulai mencatat."}</div>
           ) : (
-            <div className="list" style={{ marginTop: 4 }}>
+            <div id="newborn-history" className="list" style={{ marginTop: 4, ...(expanded ? { maxHeight: "min(50dvh, 420px)", overflowY: "auto" as const } : {}) }}>
               {entries.map(({ kind, r }) => (
                 <div key={r.id} className={savedRow === r.id ? "list-row row-ack" : "list-row"}>
                   <div className="grow">
-                    <div className="title">{describe(kind, r)}</div>
-                    <div className="sub num">{isToday(r.at) ? "Hari ini" : new Date(r.at).toLocaleDateString("id-ID", { day: "numeric", month: "short" })} · {timeLabel(r.at)}</div>
+                    <div className="title">{describe(kind, { ...r, offeredMl: undefined, tags: undefined })}</div>
+                    {kind === "bottle" && r.offeredMl != null && <div className="sub num">Ditawarkan {r.offeredMl} ml · sisa {r.remainingMl} ml</div>}
+                    {kind === "pump" && r.tags?.length > 0 && <div className="sub">{r.tags.join(" · ")}</div>}
+                    <div className="sub num">{isToday(r.at) ? "Hari ini" : new Date(r.at).toLocaleDateString("id-ID", { day: "numeric", month: "short" })} · {kind === "breast" || kind === "pump" ? "Mulai " : ""}{timeLabel(r.at)}</div>
                   </div>
+                  <button className="icon-btn" aria-label={`Edit ${describe(kind, r)}`} onClick={() => { setEditing(r); setOpen(kind); }}><Pencil size={18} /></button>
                   <DeleteButton label={describe(kind, r)} onDelete={() => remove(kind, r.id)} />
                 </div>
               ))}
             </div>
           )}
-          {matching.length > limit && <button className="btn btn-soft block" onClick={() => setLimit((n) => n + 30)}>Lihat catatan sebelumnya</button>}
+          {expanded && matching.length > 30 && <div className="stack" style={{ marginTop: 12 }}>
+            <p className="card-sub num" aria-live="polite">{currentPage * 30 + 1}–{Math.min((currentPage + 1) * 30, matching.length)} dari {matching.length} catatan</p>
+            <div className="grid2"><button className="btn btn-soft" disabled={currentPage === 0} onClick={() => { setPage(currentPage - 1); document.getElementById("newborn-history")?.scrollTo(0, 0); }}>Lebih baru</button><button className="btn btn-soft" disabled={currentPage === lastPage} onClick={() => { setPage(currentPage + 1); document.getElementById("newborn-history")?.scrollTo(0, 0); }}>Lebih lama</button></div>
+          </div>}
           <p className="faint" style={{ fontSize: 13, marginTop: 12 }}>{isPlus() ? "Semua riwayat tersimpan · Plus" : "Riwayat menyusu langsung, pumping, dan ganti popok tersedia selama 30 hari. Riwayat minum susu tersedia seluruhnya."}</p>
           {/* Only when the 30-day Free window is actually hiding entries. */}
           {hasHidden() && (
@@ -428,7 +444,7 @@ function NewbornLog() {
         </section>
         <ReportCard />
       </div>
-      <NewbornSheet kind={open} onClose={() => setOpen(null)} onSaved={setSavedRow} />
+      <NewbornSheet record={editing} kind={open} onClose={() => setOpen(null)} onSaved={setSavedRow} />
       <PlusSheet variant={plus} onClose={() => setPlus(null)} />
     </>
   );
@@ -438,73 +454,168 @@ function NewbornLog() {
 function Seg({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: [string, string][] }) {
   const i = Math.max(0, options.findIndex(([v]) => v === value));
   return (
-    <div className="segmented" style={{ "--n": options.length, "--i": i } as CSSProperties}>
+    <div className="segmented" data-empty={!value || undefined} style={{ "--n": options.length, "--i": i } as CSSProperties}>
       {options.map(([v, l]) => <button type="button" key={v} aria-pressed={value === v} onClick={() => onChange(v)}>{l}</button>)}
     </div>
   );
 }
 
-function NewbornSheet({ kind, onClose, onSaved }: { kind: Kind | null; onClose: () => void; onSaved: (id: string) => void }) {
+type BreastDraft = { at: number; end?: number; side: string };
+const DRAFT_KEY = "bb_breast_timer_v1";
+function readBreastDraft(): BreastDraft | null {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? "null");
+    return d && Number.isFinite(d.at) && d.at <= Date.now() && ["left", "right", "both"].includes(d.side) &&
+      (d.end === undefined || Number.isFinite(d.end) && d.end >= d.at) ? d : null;
+  } catch { return null; }
+}
+
+function BreastClock({ at }: { at: number }) {
+  const now = useNow(true);
+  return <div className="num clock" role="timer" aria-label="Durasi menyusu">{clock(Math.max(0, now - at))}</div>;
+}
+
+function NewbornSheet({ kind, record, onClose, onSaved }: { kind: Kind | null; record: Rec | null; onClose: () => void; onSaved: (id: string) => void }) {
   const [last, setLast] = useState<Kind>("bottle");
   const k = kind ?? last;
-  useEffect(() => { if (kind) setLast(kind); }, [kind]);
-  const [ml, setMl] = useState(90);
+  const [ml, setMl] = useState("");
+  const [remaining, setRemaining] = useState("0");
   const [milk, setMilk] = useState("formula");
-  const [side, setSide] = useState("left");
-  const [minutes, setMinutes] = useState(15);
-  const [type, setType] = useState("pee");
-  const title = { bottle: "Catat minum susu", breast: "Catat menyusu langsung (DBF)", pump: "Catat pumping", diaper: "Catat ganti popok" }[k];
-
+  const [side, setSide] = useState("");
+  const [minutes, setMinutes] = useState("");
+  const [type, setType] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [addingTag, setAddingTag] = useState(false);
+  const [emptyPump, setEmptyPump] = useState(false);
+  const [at, setAt] = useState("");
+  const [draft, setDraft] = useState<BreastDraft | null>(null);
+  const running = !!draft && draft.end === undefined;
   const saved = useRef(false);
   const [error, setError] = useState("");
-  useEffect(() => { if (kind) { saved.current = false; setError(""); } }, [kind]);
+  useEffect(() => {
+    if (!kind) return;
+    setLast(kind);
+    const d = kind === "breast" && !record ? readBreastDraft() : null;
+    setDraft(d);
+    setMl(String(record?.offeredMl ?? record?.ml ?? ""));
+    setEmptyPump(!!record && record.ml == null);
+    setRemaining(String(record?.remainingMl ?? 0));
+    setMilk(record?.milk ?? "formula");
+    setSide(d?.side ?? record?.side ?? "");
+    setMinutes(d?.end !== undefined ? clock(d.end - d.at) : record?.minutes != null ? clock(record.minutes * 60000) : "");
+    setType(record?.type ?? "");
+    setTags(record?.tags ?? []);
+    setTagInput("");
+    setAddingTag(false);
+    setAt(localDateTime(d?.at ?? record?.at ?? Date.now()));
+    saved.current = false;
+    setError("");
+  }, [kind, record]);
+
+  function changeTimer(next: BreastDraft | null) {
+    try {
+      if (next) localStorage.setItem(DRAFT_KEY, JSON.stringify(next));
+      else localStorage.removeItem(DRAFT_KEY);
+      setDraft(next);
+      setError("");
+      if (next && next.at !== draft?.at) setAt(localDateTime(next.at));
+      if (next?.end !== undefined && next.end !== draft?.end) setMinutes(clock(next.end - next.at));
+    } catch { setError("Timer belum tersimpan. Coba lagi sebelum menutup."); }
+  }
+
   function save(e: React.FormEvent) {
     e.preventDefault();
-    if (saved.current || !kind) return;
-    if ((k === "bottle" || k === "pump") && (!Number.isFinite(ml) || ml <= 0 || ml > 500)) return;
-    if (k === "breast" && (!Number.isFinite(minutes) || minutes < 0 || minutes > 120)) return;
-    saved.current = true;
-    const at = Date.now();
+    if (saved.current || !kind || !canSave) return;
     try {
-    let record;
-    if (k === "bottle") record = put("bottle", { at, ml, milk });
-    if (k === "breast") record = put("breast", { at, side, minutes });
-    if (k === "pump") record = put("pump", { at, ml });
-    if (k === "diaper") record = put("diaper", { at, type });
-    if (record) onSaved(record.id);
-    onClose();
-    toast(`${describe(k, { id: "", updatedAt: at, at, ml, milk, side, minutes, type })} dicatat`);
-    } catch { saved.current = false; setError("Catatan belum tersimpan. Coba simpan lagi."); }
+      const details = feedingDetails(k, { at: draft && at === localDateTime(draft.at) ? draft.at : record && at === localDateTime(record.at) ? record.at : new Date(at).getTime(), ml, remaining, milk, side, minutes: k === "breast" ? durationMinutes(minutes) : minutes, type });
+      saved.current = true;
+      const pumpTags = k === "pump" ? normalizePumpTags([...tags, ...(tagInput.trim() ? [tagInput] : [])]) : undefined;
+      const result = put(k, { ...details, ...(pumpTags ? { tags: pumpTags } : {}), ...(record ? { id: record.id } : {}) });
+      if (draft) {
+        // The log is already durable; a failed draft cleanup must not cause a duplicate save.
+        try { localStorage.removeItem(DRAFT_KEY); } catch { /* keep the saved log */ }
+        setDraft(null);
+      }
+      onSaved(result.id);
+      onClose();
+      toast(`${describe(k, result)} ${record ? "diperbarui" : "dicatat"}`);
+    } catch (e) { saved.current = false; setError(e instanceof Error && !(e instanceof DOMException) ? e.message : "Catatan belum tersimpan. Coba simpan lagi."); }
   }
 
 
+  const tagOptions = [...new Set(["Power pumping", ...list("pump").flatMap(r => r.tags ?? []), ...tags])];
+  function addTag() {
+    if (!tagInput.trim()) return;
+    try { setTags(normalizePumpTags([...tags, tagInput])); setTagInput(""); setAddingTag(false); setError(""); }
+    catch (e) { setError((e as Error).message); }
+  }
+
+  let canSave = !running && (k !== "pump" || ml !== "" || emptyPump);
+  try {
+    const details = feedingDetails(k, { at: new Date(at).getTime(), ml, remaining, milk, side, minutes: k === "breast" ? durationMinutes(minutes) : minutes, type });
+    if (k === "breast" && !(details.minutes! > 0)) canSave = false;
+    if (k === "pump") normalizePumpTags([...tags, ...(tagInput.trim() ? [tagInput] : [])]);
+  } catch { canSave = false; }
+
+  const title = { bottle: "minum susu", breast: "menyusu langsung", pump: "pumping", diaper: "ganti popok" }[k];
   return (
-    <Sheet open={!!kind} onOpenChange={(o) => !o && onClose()} title={title}>
+    <Sheet open={!!kind} onOpenChange={(o) => !o && onClose()} title={`${record ? "Edit" : "Catat"} ${title}`}>
       <form className="stack" style={{ marginTop: 12 }} onSubmit={save}>
-        {error && <p role="alert">{error}</p>}
-        {(k === "bottle" || k === "pump") && (
-          <>
-            <label className="field">
-              <span>Jumlah (ml)</span>
-              <input className="input num" type="number" inputMode="numeric" min={1} max={500} value={ml} onChange={(e) => setMl(Number(e.target.value))} />
-            </label>
-            <div className="chips">
-              {[30, 60, 90, 120, 150].map((v) => <button key={v} type="button" className="chip num" aria-pressed={ml === v} onClick={() => setMl(v)}>{v} ml</button>)}
-            </div>
-          </>
-        )}
-        {k === "bottle" && <Seg value={milk} onChange={setMilk} options={[["formula", "Formula"], ["expressed", "ASI perah"]]} />}
-        {k === "breast" && (
-          <>
-            <Seg value={side} onChange={setSide} options={[["left", "Kiri"], ["right", "Kanan"], ["both", "Keduanya"]]} />
-            <label className="field">
-              <span>Durasi (menit)</span>
-              <input className="input num" type="number" inputMode="numeric" min={0} max={120} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} />
-            </label>
-          </>
-        )}
+        {(k === "bottle" || k === "pump") && <>
+          <label className="field">
+            <span>{k === "bottle" ? "Jumlah ditawarkan (ml)" : "Hasil pumping (ml, opsional)"}</span>
+            <input className="input num" type="number" inputMode="decimal" min={0} max={500} step="any" required={k === "bottle"} value={ml} onChange={(e) => { setMl(e.target.value); setEmptyPump(false); }} />
+          </label>
+          <div className="chips">
+            {[30, 60, 90, 120, 150].map((v) => <button key={v} type="button" className="chip num" aria-pressed={ml === String(v)} onClick={() => { setMl(String(v)); setEmptyPump(false); }}>{v} ml</button>)}
+          </div>
+        </>}
+        {k === "bottle" && <>
+          <label className="field"><span>Sisa susu (ml)</span><input className="input num" type="number" inputMode="decimal" required min={0} max={Number(ml) || 0} step="any" value={remaining} onChange={(e) => setRemaining(e.target.value)} /></label>
+          <p className="card-sub num" aria-live="polite">Diminum: {ml !== "" && remaining !== "" && Number(remaining) <= Number(ml) ? `${Math.round((Number(ml) - Number(remaining)) * 1000) / 1000} ml` : "–"}</p>
+          <Seg value={milk} onChange={setMilk} options={[["formula", "Formula"], ["expressed", "ASI perah"]]} />
+        </>}
+        {(k === "breast" || k === "pump") && <>
+          <div><div className="label" style={{ marginBottom: 8 }}>Sisi payudara</div><Seg value={side} onChange={(v) => {
+            if (draft) changeTimer({ ...draft, side: v });
+            setSide(v);
+          }} options={[["left", "Kiri"], ["right", "Kanan"], ["both", k === "breast" ? "Bergantian" : "Keduanya"]]} /></div>
+          {k === "pump" && <label className="pump-empty"><input type="checkbox" checked={emptyPump} onChange={e => { setEmptyPump(e.target.checked); if (e.target.checked) setMl(""); }} /><span>Catat pengosongan tanpa volume</span></label>}
+        </>}
+        {k === "breast" && <>
+          {!record && <div className="card stack">
+            {running ? <>
+              <BreastClock at={draft!.at} />
+              <p className="card-sub">Timer tetap berjalan saat catatan ditutup.</p>
+              <button type="button" className="btn btn-soft block" onClick={() => changeTimer({ ...draft!, end: Date.now() })}><Square size={18} /> Hentikan timer</button>
+            </> : <button type="button" className="btn btn-soft block" disabled={!side} onClick={() => changeTimer({ at: Date.now(), side })}><Play size={18} /> {draft ? "Mulai ulang timer" : "Mulai timer"}</button>}
+            {draft && <button type="button" className="btn btn-ghost block" onClick={() => { changeTimer(null); setMinutes(""); setAt(localDateTime(Date.now())); }}>Batalkan timer</button>}
+          </div>}
+          <label className="field"><span>Durasi (menit:detik)</span><input className="input num" type="text" inputMode="text" required pattern="[0-9]{1,4}:[0-5][0-9]" placeholder="05:30" aria-describedby="dbf-duration-hint" disabled={running} value={minutes} onChange={(e) => setMinutes(e.target.value)} /></label><p id="dbf-duration-hint" className="card-sub">{running ? "Hentikan timer untuk mengubah durasi." : "Contoh 05:30 = 5 menit 30 detik. Bisa diisi manual atau dari timer."}</p>
+        </>}
+        <label className="field"><span>{k === "breast" || k === "pump" ? "Waktu mulai sesi" : "Waktu catatan"}</span><input className="input num" type="datetime-local" required disabled={running} max={localDateTime(Date.now())} value={at} onChange={(e) => setAt(e.target.value)} /></label>
+        {k === "pump" && <div className="pump-tags">
+          <div className="label">Tag <span className="faint">(opsional)</span></div>
+          <div className="chips" role="group" aria-label="Pilih tag pumping">
+            {tagOptions.map(tag => <button type="button" className="chip" key={tag} aria-pressed={tags.includes(tag)} onClick={() => {
+              try { setTags(normalizePumpTags(tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag])); setError(""); }
+              catch (e) { setError((e as Error).message); }
+            }}>{tag}</button>)}
+            {!addingTag && <button type="button" className="chip" onClick={() => setAddingTag(true)}><Plus size={14} /> Tag baru</button>}
+          </div>
+          {addingTag && <div className="pump-tag-entry">
+            <input className="input" aria-label="Tag baru" autoFocus value={tagInput} maxLength={40} placeholder="Nama tag" onChange={e => setTagInput(e.target.value)} onKeyDown={e => {
+              if (e.key === "Enter") { e.preventDefault(); addTag(); }
+              if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setAddingTag(false); setTagInput(""); }
+            }} />
+            <button type="button" className="icon-btn" aria-label="Tambahkan tag" disabled={!tagInput.trim()} onClick={addTag}><Plus size={18} /></button>
+            <button type="button" className="icon-btn" aria-label="Batal tambah tag" onClick={() => { setAddingTag(false); setTagInput(""); }}><X size={18} /></button>
+          </div>}
+        </div>}
         {k === "diaper" && <Seg value={type} onChange={setType} options={[["pee", "Pipis"], ["poo", "Pup"], ["both", "Keduanya"]]} />}
-        <button type="submit" className="btn btn-ink lg block" disabled={(k === "bottle" || k === "pump") && !(ml > 0)}>Simpan</button>
+        {error && <p className="restore-error" role="alert"><TriangleAlert size={18} />{error}</p>}
+        <button type="submit" className="btn btn-ink lg block" disabled={!canSave}>{record ? "Simpan perubahan" : "Simpan catatan"}</button>
       </form>
     </Sheet>
   );

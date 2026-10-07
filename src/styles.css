@@ -849,3 +849,23 @@ html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::aft
 .theme-card { gap: 12px; }
 .theme-options { flex: 0 0 152px; }
 .theme-options button { display: grid; place-items: center; }
+
+/* Optional pumping labels stay compact until the user adds one. */
+.pump-tags { display: grid; gap: 8px; }
+.pump-tag-entry { display: flex; align-items: center; gap: 8px; }
+.pump-tag-entry .input { flex: 1; min-width: 0; }
+.pump-tag-entry .icon-btn { flex: none; }
+.profile-summary .profile-identity { margin: 0; }
+.profile-summary .profile-identity .grow { min-width: 0; overflow-wrap: anywhere; }
+
+.profile-summary .profile-identity .grow { flex: 1; }
+.profile-edit { flex: none; white-space: nowrap; }
+.segmented[data-empty]::before { opacity: 0; }
+.pump-empty { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; cursor: pointer; }
+.pump-empty input { width: 20px; height: 20px; accent-color: var(--ink); }
+.history-filter[data-filtered] { color: var(--ink); background: var(--surface-sunk); }
+.history-filter-popover { z-index: var(--z-sheet); width: 240px; max-width: calc(100vw - 32px); padding: 6px; border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface); color: var(--ink); box-shadow: var(--elevation-raised); }
+.history-filter-list { outline-offset: 2px; }
+.history-filter-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 10px 12px; border-radius: 10px; font-size: 14px; cursor: pointer; }
+.history-filter-option[data-focused], .history-filter-option[data-selected] { background: var(--surface-sunk); }
+.history-filter-option[data-focus-visible] { outline: 2px solid var(--ink); outline-offset: -2px; }

@@ -1,3 +1,4 @@
+import { normalizePumpTags } from "./feeding";
 import { midnight, todayISO } from "./dates";
 import type { Reminder } from "./reminders";
 import { useSyncExternalStore } from "react";
@@ -213,6 +214,7 @@ export function parseBackup(text: string): Backup {
         row.at !== undefined && !Number.isFinite(row.at))
         throw new Error("Catatan cadangan tidak valid.");
       for (const [key, field] of Object.entries(row)) {
+        if (col === "pump" && key === "tags") { normalizePumpTags(field); continue; }
         if (["__proto__", "constructor", "prototype"].includes(key) || field !== null && !["string", "number", "boolean"].includes(typeof field) ||
           typeof field === "number" && !Number.isFinite(field) || typeof field === "string" && field.length > 10000)
           throw new Error("Isi catatan cadangan tidak valid.");
@@ -225,7 +227,7 @@ export function parseBackup(text: string): Backup {
       for (const key of ["babyName", "name", "note", "label", "type", "side", "milk"]) if (row[key] !== undefined && typeof row[key] !== "string")
         throw new Error("Isi catatan cadangan tidak valid.");
       for (const key of ["checked", "custom", "have", "done"]) if (row[key] !== undefined && typeof row[key] !== "boolean") throw new Error("Status catatan cadangan tidak valid.");
-      for (const key of ["count", "minutes", "ml", "end", "last", "interval"]) if (row[key] !== undefined && (!Number.isFinite(row[key]) || row[key] < 0))
+      for (const key of ["count", "minutes", "ml", "offeredMl", "remainingMl", "end", "last", "interval"]) if (row[key] !== undefined && !(col === "pump" && key === "ml" && row[key] === null) && (!Number.isFinite(row[key]) || row[key] < 0))
         throw new Error("Angka catatan cadangan tidak valid.");
       records++;
     }
