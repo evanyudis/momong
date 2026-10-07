@@ -1,5 +1,5 @@
-import { CloudOff, LogOut, Mail, MessageCircle, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, CloudOff, LoaderCircle, LogOut, Mail, MessageCircle, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { agoLabel } from "../dates";
 import { initial, useHousehold } from "../household";
 import { go } from "../route";
@@ -26,7 +26,7 @@ export function SyncDot() {
   const [color, text] = map[status];
   return (
     <span className="row" style={{ gap: 6, color: status === "synced" ? "var(--success-ink)" : "var(--ink-muted)", fontWeight: 500 }}>
-      <span className="dot" style={{ background: color }} />{text}
+      {status === "syncing" ? <LoaderCircle size={14} className="sync-busy" aria-hidden="true" /> : status === "synced" ? <Check size={14} aria-hidden="true" /> : status === "local" ? null : <span className="dot" style={{ background: color }} />}{text}
     </span>
   );
 }
@@ -108,7 +108,7 @@ function SignIn({ invite }: { invite?: boolean }) {
             <span>Email</span>
             <input className="input" type="email" required autoComplete="email" inputMode="email" placeholder="nama@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
-          {state === "error" && <p style={{ color: "var(--danger)", fontSize: 15 }}>Tautan belum terkirim. Cek koneksi lalu coba lagi.</p>}
+          {state === "error" && <p role="alert" style={{ color: "var(--field-danger)", fontSize: 15 }}>Tautan belum terkirim. Cek koneksi lalu coba lagi.</p>}
           <button className="btn btn-blue lg block" disabled={state === "sending"}>{state === "sending" ? "Mengirim…" : "Kirim tautan masuk"}</button>
           <p className="faint" style={{ fontSize: 13, textAlign: "center" }}>Tanpa kata sandi. Catatan tetap tersimpan di HP walau offline.</p>
         </form>
@@ -119,13 +119,29 @@ function SignIn({ invite }: { invite?: boolean }) {
 
 function Household() {
   const h = useHousehold();
+  const previousPartner = useRef(h.partner?.id);
+  const [joinedPartner, setJoinedPartner] = useState<string | null>(null);
+  useEffect(() => {
+    if (!previousPartner.current && h.partner) setJoinedPartner(h.partner.id);
+    previousPartner.current = h.partner?.id;
+  }, [h.partner?.id]);
   const [invite, setInvite] = useState<{ url: string } | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState(false);
+  const [inviteAttempt, setInviteAttempt] = useState(0);
   const full = h.seatsUsed >= h.seats;
 
   useEffect(() => {
     if (full || !h.isOwner || invite) return;
-    createInvite().then(setInvite).catch(() => {});
-  }, [full, h.isOwner, invite]);
+    let cancelled = false;
+    setInviteLoading(true); setInviteError(false);
+    createInvite().then((value) => {
+      if (!cancelled) { setInvite(value); setInviteLoading(false); }
+    }).catch(() => {
+      if (!cancelled) { setInviteError(true); setInviteLoading(false); }
+    });
+    return () => { cancelled = true; };
+  }, [full, h.isOwner, invite, inviteAttempt]);
 
   const name = getPrefs().name || "Bunda";
   const message = invite
@@ -169,7 +185,7 @@ function Household() {
             <div className="list-row">
               {h.partner ? (
                 <>
-                  <span className="avatar coral" style={{ width: 48, height: 48, boxShadow: "none" }}>{initial(h.partnerName)}</span>
+                  <span className={`avatar coral${joinedPartner === h.partner.id ? " row-ack" : ""}`} style={{ width: 48, height: 48, boxShadow: "none" }}>{initial(h.partnerName)}</span>
                   <div className="grow">
                     <div className="title">{h.partnerName}</div>
                     <div className="sub">{h.partner.role === "owner" ? "Pemilik" : "Bergabung"} · bisa mengedit</div>
@@ -202,6 +218,11 @@ function Household() {
 
         {!full && h.isOwner && (
           <div className="stack" style={{ marginTop: 12 }}>
+            {inviteLoading && !invite && <p role="status">Menyiapkan tautan undangan…</p>}
+            {inviteError && <>
+              <p role="alert" style={{ color: "var(--field-danger)" }}>Tautan undangan belum bisa dibuat. Cek koneksi lalu coba lagi.</p>
+              <button className="btn btn-soft block" onClick={() => setInviteAttempt((n) => n + 1)}>Coba lagi</button>
+            </>}
             <a
               className="btn btn-blue lg block"
               href={invite ? `https://wa.me/?text=${encodeURIComponent(message)}` : undefined}

@@ -23,7 +23,7 @@ export function InstallSheet({ open, onOpenChange }: { open: boolean; onOpenChan
     const url = URL.createObjectURL(new Blob([exportJSON()], { type: "application/json" }));
     const a = document.createElement("a"); a.href = url; a.download = `momong-${todayISO()}.json`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setMessage("Simpan file ini. Di aplikasi baru, pilih Pulihkan dari file cadangan.");
+    setMessage("Simpan file ini. Di aplikasi baru, pilih Punya cadangan? Pulihkan data di layar awal.");
   }
   return <Sheet open={open} onOpenChange={onOpenChange} title={installed ? "Momong di layar utama" : "Tambahkan ke layar utama"}>
     {installed ? <p>Aplikasi sudah dibuka dari layar utama. Catatan tersimpan di perangkat ini.</p> : <div className="stack">
@@ -43,7 +43,7 @@ export function InstallSheet({ open, onOpenChange }: { open: boolean; onOpenChan
           platform === "android" ? <><li>Buka menu browser (⋮).</li><li>Pilih Instal aplikasi atau Tambahkan ke layar utama.</li><li>Konfirmasi instalasi dan buka Momong.</li></> :
           <><li>Buka Momong di Chrome, Edge, atau Safari.</li><li>Pilih ikon instalasi di address bar, atau menu Tambahkan ke Dock di Safari.</li><li>Konfirmasi dan buka Momong dari daftar aplikasi.</li></>}
       </ol>
-      <p className="muted">Jika catatan belum muncul, pilih Pulihkan dari file cadangan di layar awal. Jangan hapus aplikasi atau data browser asal.</p>
+      <p className="muted">Jika catatan belum muncul, pilih Punya cadangan? Pulihkan data di layar awal. Jangan hapus aplikasi atau data browser asal.</p>
       {available && installPrompt && <button className="btn btn-coral block" disabled={busy} onClick={async () => {
         if (!installPrompt || busy) return; setBusy(true);
         try { const prompt = installPrompt; await prompt.prompt(); const result = await prompt.userChoice;

@@ -1,8 +1,10 @@
+import { trackScreen } from "./telemetry";
+import { PLUS_ENABLED } from "./release";
 import { Baby, ChartNoAxesColumn, House, UserRound } from "lucide-react";
 import { type CSSProperties, useEffect, useLayoutEffect } from "react";
 import { afterNavigate } from "./motion";
 import { onboardingStep } from "./onboarding";
-import { useRoute } from "./route";
+import { restoreRoutePosition, useRoute } from "./route";
 import { Bag } from "./screens/Bag";
 import { Home } from "./screens/Home";
 import { Insight } from "./screens/Insight";
@@ -33,10 +35,14 @@ export function App() {
   const acc = useAccount();
   const step = onboardingStep(s, acc, getPrefs().guest);
   const ready = step === "ready";
+  useEffect(() => {
+    const publicScreen = ["/masuk", "/gabung", "/kado-bersama", "/pasangan", "/plus", "/masuk-akun"].includes(path);
+    trackScreen(publicScreen || step === "ready" ? path : step === "setup" ? "setup" : "/masuk-akun");
+  }, [path, step]);
   const babyKey = activeBabyId();
 
   useEffect(() => {
-    if (path === "/plus" && !acc.token) sessionStorage.setItem("bb_auth_return", "#/plus");
+    if (PLUS_ENABLED && path === "/plus" && !acc.token) sessionStorage.setItem("bb_auth_return", "#/plus");
   }, [path, acc.token]);
   let screen;
   if (path === "/masuk") screen = <MagicLanding token={params.get("token")} />;
@@ -44,9 +50,9 @@ export function App() {
   else if (path === "/kado-bersama") screen = <SharedWishlist key={params.get("token")} token={params.get("token")} />;
   else if (path === "/pasangan") screen = <Partner />;
   else if (path === "/plus") {
-    screen = acc.checking ? <p role="status">Memeriksa sesi…</p> : acc.token ? <Plus /> : <SignIn plus />;
+    screen = !PLUS_ENABLED ? <Plus /> : acc.checking ? <p role="status">Memeriksa sesi…</p> : acc.token ? <Plus /> : <SignIn plus />;
   }
-  else if (path === "/masuk-akun") screen = <SignIn />;
+  else if (path === "/masuk-akun") screen = <SignIn signup={params.get("mode") === "signup"} />;
   else if (step === "signin") screen = <SignIn onboarding />;
   else if (step === "setup") screen = <Welcome key={babyKey} user={acc.me?.user} />;
   else if (path === "/log") screen = <Log key={babyKey} />;
@@ -59,7 +65,20 @@ export function App() {
   else screen = <Home key={babyKey} />;
 
   const showTabs = ready && TABS.some((t) => t.path === path);
-  useLayoutEffect(() => afterNavigate(), [path]);
+  useLayoutEffect(() => { restoreRoutePosition(); return afterNavigate(); }, [path, params]);
+  useLayoutEffect(() => {
+    const main = document.querySelector("main.app");
+    if (!main) return;
+    const updateTitle = () => {
+      const heading = main.querySelector("h1, h2")?.textContent?.trim();
+      const title = heading ? `${heading} · Momong` : "Momong";
+      if (document.title !== title) document.title = title;
+    };
+    updateTitle();
+    const observer = new MutationObserver(updateTitle);
+    observer.observe(main, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, []);
   return (
     <>
       <div className="page-wash" aria-hidden="true" />

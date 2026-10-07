@@ -1,7 +1,8 @@
+import { RestoreSheet } from "./Restore";
 import { ChevronLeft } from "lucide-react";
 import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { Button, FieldError, Form, Input, Label, TextField } from "react-aria-components";
-import { parseBackup, restoreBackup, type Backup, setPrefs } from "../store";
+import { deviceHasData, setPrefs } from "../store";
 import { reducedMotion } from "../motion";
 import { FAILURE_TEXT, SIGNIN_EMPTY, signIn } from "../signin";
 import { ApiError, authEmail, startGoogle, takeGoogleReturn, authDestination } from "../sync";
@@ -38,11 +39,10 @@ function GoogleMark() {
 
 /** Account entry for onboarding and Profil. Email + password and Google OAuth.
  *  Controls are react-aria-components (unstyled), dressed only by the app's .btn / .input / .field rules. */
-export function SignIn({ onboarding = false, plus = false }: { onboarding?: boolean; plus?: boolean }) {
-  const [backup, setBackup] = useState<Backup | null>(null);
-  const [restoreError, setRestoreError] = useState("");
+export function SignIn({ onboarding = false, plus = false, signup = false }: { onboarding?: boolean; plus?: boolean; signup?: boolean }) {
+  const [restoreOpen, setRestoreOpen] = useState(false);
   const forPlus = plus || sessionStorage.getItem("bb_auth_return") === "#/plus";
-  const [s, dispatch] = useReducer(signIn, SIGNIN_EMPTY);
+  const [s, dispatch] = useReducer(signIn, { ...SIGNIN_EMPTY, mode: signup ? "daftar" : "masuk" });
   // Last input was a key: messages appear and leave without motion (emil-animations: keyboard actions never animate).
   const [still, setStill] = useState(false);
   const errLeaving = useLeaving(s.emailError, still);
@@ -97,7 +97,7 @@ export function SignIn({ onboarding = false, plus = false }: { onboarding?: bool
         {!onboarding && <a className="icon-btn" href="#/profil" aria-label="Kembali"><ChevronLeft size={22} /></a>}
         <span className="signin-brand">Momong</span>
         <h1>{onboarding ? "Selamat datang di Momong" : daftar ? "Buat akun Momong" : "Masuk ke Momong"}</h1>
-        <p className="muted">{forPlus ? "Masuk atau daftar untuk lanjut dengan Momong Plus." : onboarding ? "Catat tanpa akun. Masuk untuk Plus atau sinkron dengan pasangan." : "Supaya data tersimpan online. Sync dan pasangan tetap gratis."}</p>
+        <p className="muted">{forPlus ? "Masuk atau daftar untuk lanjut dengan Momong Plus." : onboarding ? "Catat tanpa akun. Masuk untuk sinkron dengan pasangan." : "Supaya data tersimpan online. Sync dan pasangan tetap gratis."}</p>
       </header>
       <div className="signin" onKeyDownCapture={() => setStill(true)} onPointerDownCapture={() => setStill(false)}>
         <Form className="stack" onSubmit={submit} validationBehavior="native" aria-busy={s.pending}>
@@ -142,26 +142,8 @@ export function SignIn({ onboarding = false, plus = false }: { onboarding?: bool
           sessionStorage.removeItem("bb_plus_plan");
           location.hash = "#/";
         }}>Lanjut tanpa akun</button>
-      <label className="btn btn-glass block" style={{ marginTop: 12 }}>Pulihkan dari file cadangan
-          <input type="file" accept=".json,application/json" style={{ width: "100%" }} onChange={async (e) => {
-            setRestoreError(""); setBackup(null);
-            const file = e.target.files?.[0]; if (!file) return;
-            try {
-              if (file.size > 5 * 1024 * 1024) throw new Error("File terlalu besar. Maksimal 5 MiB.");
-              setBackup(parseBackup(await file.text()));
-            } catch (err) { setRestoreError((err as Error).message); }
-            e.target.value = "";
-          }} />
-        </label>
-        {backup && <section className="card stack" aria-label="Konfirmasi pemulihan">
-          <h2>Pulihkan cadangan?</h2><p>{backup.records} catatan, termasuk catatan yang sudah dihapus. Data akun dan Plus tidak disertakan.</p>
-          <button className="btn block" onClick={() => {
-            try { restoreBackup(backup); location.hash = "#/"; location.reload(); }
-            catch (err) { setRestoreError((err as Error).message); }
-          }}>Pulihkan data</button>
-          <button className="btn btn-soft block" onClick={() => setBackup(null)}>Batal</button>
-        </section>}
-        {restoreError && <p role="alert">{restoreError}</p>}
+        {onboarding && !forPlus && !deviceHasData() && <button type="button" className="link-btn restore-entry" onClick={() => setRestoreOpen(true)}>Punya cadangan? Pulihkan data</button>}
+        <RestoreSheet open={restoreOpen} onOpenChange={setRestoreOpen} />
       </div>
     </>
   );

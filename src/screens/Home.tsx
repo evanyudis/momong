@@ -1,4 +1,4 @@
-import { Baby, BriefcaseMedical, ChevronRight, Droplet, Gift, Milk, Settings as Gear, Sprout, Square, Users } from "lucide-react";
+import { Baby, BriefcaseMedical, ChevronRight, Droplet, Gift, Milk, Sprout, Square, Users } from "lucide-react";
 import { BAG_DEFAULTS, weekNote } from "../content";
 import { agoLabel, babyAge, dateLabel, isToday, pregnancy, timeLabel } from "../dates";
 import { initial, useHousehold } from "../household";
@@ -6,10 +6,6 @@ import { nextFeed } from "../plus";
 import { isPlus, getPrefs, get, list, saveSettings, settings, useDB } from "../store";
 import { Header, Ring } from "../ui";
 import { SyncDot } from "./Partner";
-
-const GearLink = () => (
-  <a className="icon-btn" href="#/profil" data-morph="/profil" aria-label="Profil"><Gear size={20} /></a>
-);
 
 export function Home() {
   useDB();
@@ -26,7 +22,7 @@ function PregnancyHome() {
 
   return (
     <>
-      <Header title={`Halo, ${getPrefs().name || "Bunda"}`} aside={<GearLink />} />
+      <Header title={`Halo, ${getPrefs().name || "Bunda"}`} />
       <div className="stack">
         {p.daysLeft <= 0 && (
           <a className="card" href="#/profil" data-morph="/profil" style={{ background: "var(--accent-partner-soft)" }}>
@@ -180,7 +176,7 @@ function NewbornHome() {
   const estimate = nextFeed(feeds);
   return (
     <>
-      <Header title={`Halo, ${getPrefs().name || "Bunda"}`} aside={<GearLink />} />
+      <Header title={`Halo, ${getPrefs().name || "Bunda"}`} />
       <div className="stack">
         <section className="card">
           <div className="row">
@@ -201,18 +197,18 @@ function NewbornHome() {
 
         <section className="card newborn-today">
           <div className="spread">
-            <span className="label">Hari ini</span>
+            <div><h2 className="card-title">Hari si kecil</h2><p className="card-sub">Ringkasan aktivitas hari ini.</p></div>
             <a className="link-btn" href="#/log" style={{ color: "inherit" }}>Catat <ChevronRight size={18} /></a>
           </div>
           <div className="grid2 newborn-metrics">
             {[
-              { label: "Minum susu", value: bottles.reduce((n, r) => n + (r.ml || 0), 0), unit: "ml", glyph: "mint", color: "var(--semantic-feed)", Icon: Milk },
-              { label: "Menyusu langsung (DBF)", value: today("breast").length, unit: "kali", glyph: "peach", color: "var(--accent-partner)", Icon: Baby },
-              { label: "Pumping", value: today("pump").reduce((n, r) => n + (r.ml || 0), 0), unit: "ml", glyph: "blue", color: "var(--sky-500)", Icon: Droplet },
-              { label: "Ganti popok", value: today("diaper").length, unit: "kali", glyph: "coral", color: "var(--warning)", Icon: Square },
-            ].map(({ label, value, unit, glyph, color, Icon }) => (
+              { label: "Minum susu", value: bottles.reduce((n, r) => n + (r.ml || 0), 0), unit: "ml", color: "var(--semantic-feed)", Icon: Milk },
+              { label: "Menyusu langsung (DBF)", value: today("breast").length, unit: "kali", color: "var(--accent-partner)", Icon: Baby },
+              { label: "Pumping", value: today("pump").reduce((n, r) => n + (r.ml || 0), 0), unit: "ml", color: "var(--sky-500)", Icon: Droplet },
+              { label: "Ganti popok", value: today("diaper").length, unit: "kali", color: "var(--warning)", Icon: Square },
+            ].map(({ label, value, unit, color, Icon }) => (
               <div key={label} className="newborn-metric" style={{ background: `color-mix(in oklab, ${color} 14%, var(--surface))` }}>
-                <span className={`glyph ${glyph}`} aria-hidden="true"><Icon size={20} /></span>
+                <Icon size={20} aria-hidden="true" />
                 <div className="newborn-metric-label">{label}</div>
                 <div className="stat num">{value}<small> {unit}</small></div>
               </div>

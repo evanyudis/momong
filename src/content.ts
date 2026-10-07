@@ -37,7 +37,7 @@ export function weekNote(week: number): string {
   if (week < 20) return "Banyak orang mulai merasa lebih bertenaga di fase ini. Waktu yang pas untuk mulai menyiapkan tas RS pelan-pelan.";
   if (week < 28) return "Gerakan si kecil mulai lebih terasa. Kenali polanya; tidak perlu dihitung setiap saat.";
   if (week < 34) return "Masuk trimester ketiga. Cicil isi tas RS dan ajak pasangan ikut mencatat dari HP masing-masing.";
-  if (week < 37) return "Gerakan si kecil mungkin terasa lebih pelan karena ruang makin sempit. Tetap catat seperti biasa.";
+  if (week < 37) return "Kenali pola gerakan si kecil. Jika gerakan berkurang atau berubah dari biasanya, segera hubungi bidan atau dokter.";
   return "Sudah dekat. Simpan timer kontraksi di layar utama dan pastikan tas RS siap dibawa.";
 }
 

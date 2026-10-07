@@ -1,6 +1,7 @@
+import { PLUS_ENABLED } from "../release";
 import { useRef, useState } from "react";
 import { activeBabyId, settings, getPrefs, isPlus, setPrefs, uid, useDB } from "../store";
-import { TopBar } from "../ui";
+import { toast, TopBar } from "../ui";
 
 export function Reminders() {
   useDB();
@@ -8,6 +9,7 @@ export function Reminders() {
   const [label, setLabel] = useState("");
   const [date, setDate] = useState("");
   const [error, setError] = useState("");
+  const [savedRow, setSavedRow] = useState<string | null>(null);
   const labelInput = useRef<HTMLInputElement>(null);
   const prefs = getPrefs();
   const all = prefs.reminders ?? [];
@@ -17,16 +19,21 @@ export function Reminders() {
     <div className="stack">
       <p className="muted">Profil: {settings().babyName || "Si kecil"}.</p>
       <p className="muted">Pengingat di perangkat ini berjalan saat aplikasi terbuka. Saat kembali ke aplikasi, pengingat yang terlewat akan ditampilkan.</p>
-      {!isPlus() ? <a className="btn btn-coral block" href="#/plus">Buka pengingat dengan Plus</a> : <>
+      {!PLUS_ENABLED && !isPlus() ? <button className="btn btn-coral block" disabled>Segera hadir</button> : !isPlus() ? <a className="btn btn-coral block" href="#/plus">Buka pengingat dengan Plus</a> : <>
         <form className="card solid stack" onSubmit={(e) => {
           e.preventDefault();
           const form = new FormData(e.currentTarget);
           const title = String(form.get("label") ?? "").trim();
           const at = new Date(String(form.get("at") ?? "")).getTime();
           if (!title || !Number.isFinite(at) || at <= Date.now()) return setError("Isi nama dan pilih waktu setelah sekarang.");
-          setPrefs({ reminders: [...all.filter((r) => r.id !== editing), { id: editing ?? uid(), babyId: activeBabyId(), label: title.slice(0, 120), at }] });
+          try {
+          const id = editing ?? uid();
+          setPrefs({ reminders: [...all.filter((r) => r.id !== editing), { id, babyId: activeBabyId(), label: title.slice(0, 120), at }] });
+          setSavedRow(id);
           setEditing(null);
           setLabel(""); setDate(""); setError("");
+          toast(`Pengingat ${title.slice(0, 120)} ${editing ? "diperbarui" : "tersimpan"}`);
+          } catch { setError("Pengingat belum tersimpan. Coba lagi."); }
         }}>
           <label className="field"><span>Nama pengingat</span><input ref={labelInput} className="input" name="label" required maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Misal: pompa atau vitamin" /></label>
           <label className="field"><span>Waktu</span><input className="input" name="at" type="datetime-local" required value={date} onChange={(e) => setDate(e.target.value)} /></label>
@@ -47,7 +54,7 @@ export function Reminders() {
         <section className="card solid stack">
           <h2>Pengingat tersimpan</h2>
           {!items.length && <p className="muted">Belum ada pengingat. Tambahkan nama dan waktunya di atas.</p>}
-          {items.map((r) => <div className="spread" key={r.id}><div><div className="title">{r.label}</div><div className="sub">{new Date(r.at).toLocaleString("id-ID")}{r.firedAt ? " · Sudah ditampilkan" : ""}</div></div><button className="btn btn-soft sm" aria-label={`Edit pengingat ${r.label}`} onClick={() => {
+          {items.map((r) => <div className={savedRow === r.id ? "spread row-ack" : "spread"} key={r.id}><div><div className="title">{r.label}</div><div className="sub">{new Date(r.at).toLocaleString("id-ID")}{r.firedAt ? " · Sudah ditampilkan" : ""}</div></div><button className="btn btn-soft sm" aria-label={`Edit pengingat ${r.label}`} onClick={() => {
             setEditing(r.id); setLabel(r.label);
             const local = new Date(r.at - new Date(r.at).getTimezoneOffset() * 60000);
             setDate(local.toISOString().slice(0, 16));

@@ -7,7 +7,7 @@ test("login does not upload; opt-in sync merges; logout ignores an in-flight res
   const storage = { get length() { return memory.size; }, key: (i: number) => [...memory.keys()][i] ?? null, getItem: (k: string) => memory.get(k) ?? null, setItem: (k: string, v: string) => void memory.set(k, v), removeItem: (k: string) => void memory.delete(k) };
   Object.assign(globalThis, { localStorage: storage, sessionStorage: storage });
   Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
-  const server = await createServer({ server: { middlewareMode: true }, define: { "import.meta.env.VITE_API_URL": JSON.stringify("http://test.local") } });
+  const server = await createServer({ server: { middlewareMode: true }, define: { "import.meta.env.VITE_API_URL": JSON.stringify("http://test.local"), "import.meta.env.VITE_PLUS_ENABLED": JSON.stringify("true") } });
   const realFetch = globalThis.fetch;
   let release: ((r: Response) => void) | undefined;
   let delayed = false;

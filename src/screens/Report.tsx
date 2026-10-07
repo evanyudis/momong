@@ -1,3 +1,4 @@
+import { PLUS_ENABLED } from "../release";
 import { useRef, useState } from "react";
 import { type PlusVariant } from "../content";
 import { dateLabel, durationLabel, pregnancy, timeLabel } from "../dates";
@@ -103,12 +104,12 @@ export function Report() {
           {/* Free quota used: the button opens the Plus sheet instead of printing. The 1×/bulan rule itself is unchanged. */}
           <button
             className={`btn lg block ${usedThisMonth ? "btn-soft" : "btn-ink"}`}
-            aria-haspopup={usedThisMonth ? "dialog" : undefined}
-            disabled={busy}
+            aria-haspopup={PLUS_ENABLED && usedThisMonth ? "dialog" : undefined}
+            disabled={busy || usedThisMonth && !PLUS_ENABLED}
             aria-busy={busy}
             onClick={usedThisMonth ? () => setPlus("pdf") : download}
           >
-            {busy ? "Membuat PDF…" : usedThisMonth ? "PDF bulan ini sudah dibuat" : "Unduh PDF"}
+            {busy ? "Membuat PDF…" : usedThisMonth ? PLUS_ENABLED ? "PDF bulan ini sudah dibuat" : "Segera hadir" : "Unduh PDF"}
           </button>
           <p className="faint" style={{ fontSize: 14, textAlign: "center" }}>
             {usedThisMonth ? "Kuota gratis kembali awal bulan depan. Laporan tetap bisa dilihat di sini." : isPlus() ? "PDF tanpa batas · Plus" : "1× gratis per bulan. PDF dibuat di perangkat ini."}

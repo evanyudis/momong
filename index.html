@@ -2,8 +2,8 @@
 <html lang="id">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#f7f2eb" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#fafafa" />
     <meta name="description" content="Momong: catat kehamilan dan si kecil berdua pasangan. Jalan offline." />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -11,15 +11,23 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="preload" href="/fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <style>@font-face { font-family: Geist; font-style: normal; font-weight: 400 700; font-display: swap; src: url('/fonts/geist-latin.woff2') format('woff2'); }</style>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Momong" />
+    <meta property="og:description" content="Catat kehamilan dan si kecil berdua pasangan. Jalan offline." />
+    <meta property="og:url" content="https://momong.evanyudis.com/" />
+    <meta property="og:image" content="https://momong.evanyudis.com/og-momong.jpg" />
+    <meta property="og:image:alt" content="Tampilan Momong Plus: grafik, riwayat lengkap, dan laporan." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href="https://momong.evanyudis.com/" />
     <title>Momong</title>
     <script>
       // Set theme before first paint (no flash on refresh).
       try {
         var t = (JSON.parse(localStorage.getItem("bb_prefs_v1")) || {}).theme;
         if (t === "dark" || (t !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)) document.documentElement.dataset.theme = "dark";
+        document.querySelector('meta[name="theme-color"]').content = document.documentElement.dataset.theme === "dark" ? "#141414" : "#fafafa";
       } catch (e) {}
     </script>
   </head>

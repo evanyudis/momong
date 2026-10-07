@@ -75,10 +75,17 @@ try {
       await new Promise(requestAnimationFrame);
     };
     await toggle();
-    if (!sheet.querySelector('.paywall-features h4').getAnimations().length) throw new Error('USP titles must morph from checklist positions');
-    if (Math.abs(sheet.querySelector('.paywall-cta').getBoundingClientRect().bottom - bottom) > 1) throw new Error('CTA must stay pinned during morph');
+    if (sheet.dataset.expanded !== 'true') throw new Error('Details must switch at the start of expansion');
+    for (const card of sheet.querySelectorAll('.plus-plan')) {
+      const motion = card.getAnimations()[0];
+      if (!motion || motion.effect.getKeyframes().at(-1).transform !== 'none') throw new Error('Package cards must settle from their previous visual position');
+      if (motion.effect.getTiming().duration > 300) throw new Error('Package transition must stay under 300ms');
+    }
+    if (sheet.querySelector('.paywall-benefits').getAnimations().length) throw new Error('Details must not run a second animation during the slide');
+    if (getComputedStyle(sheet.querySelector('.paywall-backdrop')).backdropFilter !== 'none') throw new Error('Backdrop must not blur the moving surface');
+    if (Math.abs(sheet.querySelector('.paywall-cta').getBoundingClientRect().bottom - bottom) > 1) throw new Error('CTA must stay pinned during expansion');
     await toggle();
-    if (!sheet.querySelector('.paywall-checklist strong').getAnimations().length) throw new Error('Mid-animation reversal must morph back');
+    if (sheet.dataset.expanded !== 'false') throw new Error('Reversal must immediately restore compact content');
     return true;
   })()`);
   check(`assert(sheet.dataset.expanded === 'false', 'interrupted expansion returns to compact');`);

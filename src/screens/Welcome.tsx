@@ -1,9 +1,10 @@
 import { Baby, Check, ChevronLeft, Heart } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
+import { animate } from "../motion";
 import { todayISO } from "../dates";
 import { motherNameFromAccount, saveOnboarding } from "../onboarding";
 import type { Settings } from "../store";
-import { DateInput } from "../ui";
+import { DateInput, toast } from "../ui";
 
 export function Welcome({ user }: { user?: { name: string; email: string } }) {
   const [mode, setMode] = useState<Settings["birthMode"]>(undefined);
@@ -13,11 +14,27 @@ export function Welcome({ user }: { user?: { name: string; email: string } }) {
   const [birth, setBirth] = useState("");
   const [babyName, setBabyName] = useState("");
   const heading = useRef<HTMLHeadingElement>(null);
-  useLayoutEffect(() => { heading.current?.focus(); }, [details]);
+  const body = useRef<HTMLDivElement>(null);
+  const previousStep = useRef(details);
+  const submitted = useRef(false);
+  const [error, setError] = useState("");
+  useLayoutEffect(() => {
+    heading.current?.focus({ preventScroll: true });
+    if (previousStep.current === details) return;
+    previousStep.current = details;
+    return animate(body.current, [{ opacity: 0, transform: `translateX(${details ? 12 : -12}px)` }, { opacity: 1, transform: "none" }], 220);
+  }, [details]);
 
   function start(e: React.FormEvent) {
     e.preventDefault();
-    if (saveOnboarding({ mode, name, hpl, babyBirth: birth, babyName })) location.hash = "#/";
+    if (submitted.current) return;
+    submitted.current = true;
+    try {
+      if (saveOnboarding({ mode, name, hpl, babyBirth: birth, babyName })) {
+        toast("Profil siap. Selamat datang di Momong!", true);
+        location.hash = "#/";
+      } else submitted.current = false;
+    } catch { submitted.current = false; setError("Profil belum tersimpan. Coba lagi."); }
   }
 
   return (
@@ -29,6 +46,11 @@ export function Welcome({ user }: { user?: { name: string; email: string } }) {
         <p className="muted">{details ? "Isi beberapa detail supaya catatanmu sesuai kebutuhan." : "Pilih yang kamu butuhkan sekarang. Bisa diganti nanti di Profil."}</p>
       </header>
 
+      <div className="onboarding-progress" role="progressbar" aria-label="Langkah pengaturan" aria-valuemin={1} aria-valuemax={2} aria-valuenow={details ? 2 : 1}>
+        <span data-complete="true" /><span data-complete={details} />
+      </div>
+      {error && <p role="alert">{error}</p>}
+      <div ref={body}>
       {!details ? (
         <div className="stack" role="group" aria-label="Pilihan pendamping">
           <button type="button" className="card onboarding-choice" aria-pressed={mode === "pregnant"} onClick={() => setMode("pregnant")}>
@@ -61,6 +83,7 @@ export function Welcome({ user }: { user?: { name: string; email: string } }) {
           <button type="submit" className="btn btn-signin lg block">Mulai pakai Momong</button>
         </form>
       )}
+      </div>
     </div>
   );
 }

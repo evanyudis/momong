@@ -1,8 +1,9 @@
-import { Check, Plus, Trash2 } from "lucide-react";
+import { PLUS_ENABLED } from "../release";
+import { Check, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { activeBabyId, isPlus, list, put, remove, useDB } from "../store";
 import { ApiError, api, useAccount } from "../sync";
-import { toast, PlusSheet, TopBar } from "../ui";
+import { DeleteButton, toast, PlusSheet, TopBar } from "../ui";
 
 function useOnline() {
   const [online, setOnline] = useState(navigator.onLine);
@@ -32,6 +33,7 @@ export function Wishlist() {
   const [claims, setClaims] = useState<SharedItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [label, setLabel] = useState("");
+  const [savedRow, setSavedRow] = useState<string | null>(null);
   const items = list("wishlist").sort((a, b) => a.at - b.at);
   const have = items.filter((i) => i.have).length;
 
@@ -61,8 +63,11 @@ export function Wishlist() {
   function add(e: React.FormEvent) {
     e.preventDefault();
     if (!label.trim()) return;
-    put("wishlist", { label: label.trim().slice(0, 120), have: false, at: Date.now() });
-    setLabel("");
+    try {
+      const title = label.trim().slice(0, 120);
+      const record = put("wishlist", { label: title, have: false, at: Date.now() });
+      setSavedRow(record.id); setLabel(""); setShareError(""); toast(`${title} ditambahkan ke daftar kado`);
+    } catch { setShareError("Barang belum tersimpan. Coba lagi."); }
   }
 
   return (
@@ -78,15 +83,15 @@ export function Wishlist() {
           ) : (
             <div className="list">
               {items.map((i) => (
-                <div key={i.id} className="list-row">
-                  <button
-                    className="check" role="checkbox" aria-checked={!!i.have} aria-label={`${i.label} sudah ada`}
-                    onClick={() => put("wishlist", { id: i.id, have: !i.have })}
-                  >
-                    <Check size={16} strokeWidth={3} />
-                  </button>
-                  <span className="grow" style={{ color: i.have ? "var(--ink-muted)" : undefined }}>{i.label}{isPlus() && claims.find((c) => c.id === i.id)?.claimedBy && <span className="sub" style={{ display: "block" }}>Dipilih oleh {claims.find((c) => c.id === i.id)!.claimedBy}</span>}</span>
-                  <button className="icon-btn" aria-label={`Hapus ${i.label}`} onClick={() => remove("wishlist", i.id)}><Trash2 size={18} /></button>
+                <div key={i.id} className={savedRow === i.id ? "list-row row-ack" : "list-row"}>
+                  <label className="check-label">
+                    <span className="check-box"><input type="checkbox" className="check" checked={!!i.have} onChange={(e) => {
+                      try { put("wishlist", { id: i.id, have: e.target.checked }); setShareError(""); }
+                      catch { setShareError("Perubahan belum tersimpan. Coba lagi."); }
+                    }} /><Check size={16} strokeWidth={3} aria-hidden="true" /></span>
+                    <span className="grow">{i.label}{isPlus() && claims.find((c) => c.id === i.id)?.claimedBy && <span className="sub" style={{ display: "block" }}>Dipilih oleh {claims.find((c) => c.id === i.id)!.claimedBy}</span>}</span>
+                  </label>
+                  <DeleteButton label={i.label} onDelete={() => remove("wishlist", i.id)} />
                 </div>
               ))}
             </div>
@@ -99,7 +104,7 @@ export function Wishlist() {
         <section className="card solid stack">
           <h2>Bagikan daftar kado · Plus</h2>
           <p className="muted">Hanya barang yang belum tersedia dan nama pemberi kado yang dibagikan lewat tautan. Catatan kesehatan tetap pribadi. Tautan berlaku 7 hari; bagikan lagi untuk memperbarui daftar.</p>
-          <button className="btn btn-soft block" disabled={busy || isPlus() && !online || items.filter((i) => !i.have).length > 100} onClick={publish}>{busy ? "Membagikan…" : "Publikasikan daftar"}</button>
+          <button className="btn btn-soft block" disabled={!PLUS_ENABLED && !isPlus() || busy || isPlus() && !online || items.filter((i) => !i.have).length > 100} onClick={publish}>{!PLUS_ENABLED && !isPlus() ? "Segera hadir" : busy ? "Membagikan…" : "Publikasikan daftar"}</button>
           {items.filter((i) => !i.have).length > 100 && <p className="muted">Maksimal 100 barang per daftar yang dibagikan.</p>}
           {!online && <p role="status">Kamu offline. Daftar lokal tetap dapat diedit; publish, claim, refresh, dan menonaktifkan tautan membutuhkan internet.</p>}
           {loading && <p role="status">Memeriksa daftar dan claim…</p>}
@@ -143,6 +148,7 @@ export function SharedWishlist({ token }: { token: string | null }) {
   const [items, setItems] = useState<SharedItem[] | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [savedItem, setSavedItem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [round, setRound] = useState(0);
   useEffect(() => {
@@ -163,12 +169,12 @@ export function SharedWishlist({ token }: { token: string | null }) {
     {!items && !error && <p role="status">Memuat daftar…</p>}
     <button className="btn btn-soft block" disabled={!online || busy} onClick={() => setRound((r) => r + 1)}>Perbarui daftar</button>
     {items?.length === 0 && <p className="muted">Belum ada barang yang perlu dihadiahkan.</p>}
-    {items?.map((item) => <section className="card solid stack" key={item.id}>
+    {items?.map((item) => <section className={savedItem === item.id ? "card solid stack row-ack" : "card solid stack"} key={item.id}>
       <h2>{item.label}</h2>
       {item.claimedBy ? <p className="muted">Dipilih oleh {item.claimedBy}</p> : <button className="btn btn-ink block" disabled={busy || !online || !name.trim()} onClick={async () => {
         if (lock.current) return;
         lock.current = true; setBusy(true); setError("");
-        try { await api(`/wishlist/shared/${encodeURIComponent(token!)}/claims`, { method: "POST", body: JSON.stringify({ itemId: item.id, name: name.trim() }) }); setRound((r) => r + 1); }
+        try { await api(`/wishlist/shared/${encodeURIComponent(token!)}/claims`, { method: "POST", body: JSON.stringify({ itemId: item.id, name: name.trim() }) }); setSavedItem(item.id); setRound((r) => r + 1); toast(`${item.label} dipilih sebagai kado`); }
         catch (e) {
           if (e instanceof ApiError && e.status === 409) { toast("Barang sudah dipilih orang lain. Daftar diperbarui."); setRound((r) => r + 1); }
           else setError("Barang belum bisa dipilih. Cek koneksi atau minta tautan baru.");

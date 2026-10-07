@@ -142,3 +142,24 @@ test("backup rejects invalid payloads and rolls back quota failure", () => {
   assert.equal(mem.has("bb_db_v1"), false);
   assert.deepEqual(s.getPrefs(), {});
 });
+
+
+test("failed persistence does not show unsaved records or preferences, and retry saves once", () => {
+  const before = s.list("bottle").length;
+  const prefs = s.getPrefs();
+  const original = storage.setItem;
+  storage.setItem = (key, value) => {
+    if (key === "bb_db_v1" || key === "bb_prefs_v1") throw new Error("Storage full");
+    original(key, value);
+  };
+  try {
+    assert.throws(() => s.put("bottle", { id: "failed-save", at: Date.now(), ml: 90 }));
+    assert.equal(s.list("bottle").length, before);
+    assert.equal(s.get("bottle", "failed-save"), undefined);
+    assert.throws(() => s.setPrefs({ name: "Unsaved name" }));
+    assert.deepEqual(s.getPrefs(), prefs);
+  } finally { storage.setItem = original; }
+  s.put("bottle", { id: "failed-save", at: Date.now(), ml: 90 });
+  assert.equal(s.list("bottle").length, before + 1);
+  assert.equal(s.pending().filter((r) => r.id === "failed-save").length, 1);
+});

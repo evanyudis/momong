@@ -32,13 +32,24 @@ const read = <T,>(k: string, d: T): T => {
 };
 let db: DB = read<DB>(DB_KEY, {});
 let dirty = new Set<string>(read<string[]>(DIRTY_KEY, []));
+let persistedDB = db;
+let persistedDirty = new Set(dirty);
 let version = 0;
 const listeners = new Set<() => void>();
 const onChangeHooks = new Set<() => void>();
 
 function commit(local: boolean) {
-  localStorage.setItem(DB_KEY, JSON.stringify(db));
-  localStorage.setItem(DIRTY_KEY, JSON.stringify([...dirty]));
+  try {
+    // Write the queue first: an interrupted save can leave an extra dirty ID, never an unqueued record.
+    localStorage.setItem(DIRTY_KEY, JSON.stringify([...dirty]));
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+  } catch (error) {
+    db = persistedDB;
+    dirty = new Set(persistedDirty);
+    throw error;
+  }
+  persistedDB = db;
+  persistedDirty = new Set(dirty);
   version++;
   listeners.forEach((l) => l());
   if (local) onChangeHooks.forEach((h) => h());
@@ -163,8 +174,9 @@ const PREFS_KEY = "bb_prefs_v1";
 let prefs: Prefs = read<Prefs>(PREFS_KEY, {});
 export const getPrefs = () => prefs;
 export function setPrefs(p: Prefs) {
-  prefs = { ...prefs, ...p };
-  localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  const next = { ...prefs, ...p };
+  localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+  prefs = next;
   version++;
   listeners.forEach((l) => l());
 }
@@ -176,6 +188,7 @@ export function resetDeviceData() {
     for (const key of keys) if (key?.startsWith("bb_")) storage.removeItem(key);
   }
   db = {}; dirty.clear(); prefs = {}; plusAccess = false;
+  persistedDB = db; persistedDirty = new Set(dirty);
   version++;
   listeners.forEach((l) => l());
 }
@@ -256,5 +269,6 @@ export function restoreBackup(backup: Backup) {
     throw new Error("Penyimpanan perangkat penuh. Cadangan belum dipulihkan.");
   }
   db = valid.data; dirty = new Set(nextDirty); prefs = nextPrefs;
+  persistedDB = db; persistedDirty = new Set(dirty);
   version++; listeners.forEach((l) => l());
 }

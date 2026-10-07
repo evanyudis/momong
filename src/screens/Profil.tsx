@@ -1,13 +1,16 @@
+import { setTelemetryConsent, telemetryConfigured, telemetryConsent } from "../telemetry";
+import { PLUS_ENABLED } from "../release";
+import { RestoreSheet } from "./Restore";
 import { InstallSheet } from "./Install";
-import { ChevronRight, Download } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ChevronRight, Download, Sun, Moon, Monitor } from "lucide-react";
+import { useState } from "react";
 import type { PlusVariant } from "../content";
 import { todayISO } from "../dates";
 import { useHousehold } from "../household";
 import { addBaby, babyProfiles, activeBabyId, isPlus, exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
 import { resetGuestData, signOut } from "../sync";
 import { SyncDot } from "./Partner";
-import { DateInput, Header, PlusSheet, Sheet, toast } from "../ui";
+import { DateInput, Header, PlusBadge, PlusSheet, Sheet, toast } from "../ui";
 
 export function applyTheme(theme: Prefs["theme"]) {
   const dark = theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
@@ -17,13 +20,14 @@ export function applyTheme(theme: Prefs["theme"]) {
   style.textContent = "*,*::before,*::after{transition-property:transform,translate,scale,opacity!important}";
   document.head.appendChild(style);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#1b1917" : "#f7f2eb");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#141414" : "#fafafa");
   requestAnimationFrame(() => requestAnimationFrame(() => style.remove()));
 }
 
 /** Profil tab: mode, theme, export, and the link to Sinkron & pasangan. Settings live here; there is no separate settings page. */
 export function Profil() {
   useDB();
+  const [analytics, setAnalytics] = useState(telemetryConsent);
   const s = settings();
   const prefs = getPrefs();
   const h = useHousehold();
@@ -33,6 +37,7 @@ export function Profil() {
   const [bornOpen, setBornOpen] = useState(false);
   const [backOpen, setBackOpen] = useState(false);
   const [addingBaby, setAddingBaby] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [plus, setPlus] = useState<PlusVariant | null>(null);
 
@@ -51,25 +56,25 @@ export function Profil() {
       <div className="stack">
         <section className="profile-identity"><span className="avatar blue" aria-hidden="true">{(prefs.name || h.me?.user.email || "M").slice(0, 1).toUpperCase()}</span><div><h2>{prefs.name || "Teman Momong"}</h2><p className="muted">{h.me?.user.email || "Catatan lokal · tanpa akun"}</p></div></section>
         <section className="card plus-card stack">
-          <div className="card-title">{isPlus() ? h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : "Plus · Bulanan" : "Momong Plus"}</div>
-          <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi. Pembayaran masih sandbox.</p>
-          {isPlus() ? <a className="btn btn-coral block" href="#/plus">Lihat status Plus</a>
+          <div className="spread"><div className="card-title">{isPlus() ? h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : h.me?.entitlement.plan === "trial" ? "Plus · Trial" : "Plus · Bulanan" : "Momong Plus"}</div><PlusBadge size="medium" /></div>
+          <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi.  {isPlus() ? "Akses Plus kamu aktif." : "Fitur Plus segera hadir."}</p>
+          {!PLUS_ENABLED && !isPlus() ? <button className="btn btn-coral block" disabled>Segera hadir</button> : isPlus() ? <a className="btn btn-coral block" href="#/plus">Lihat status Plus</a>
             : <button className="btn btn-coral block" aria-haspopup="dialog" onClick={() => setPlus("overview")}>Coba Plus</button>}
         </section>
-        <section className="card solid stack">
+        {(PLUS_ENABLED || isPlus()) && <section className="card solid stack">
           <label className="field"><span>Profil si kecil</span>
             <select className="input" value={activeBabyId()} onChange={(e) => setPrefs({ activeBabyId: e.target.value })}>
               {babyProfiles().filter((b) => isPlus() || b.id === "default").map((b) => <option key={b.id} value={b.id}>{b.babyName || "Si kecil"}</option>)}
             </select>
           </label>
-          <button className="btn btn-soft block" onClick={() => isPlus() ? setAddingBaby(true) : setPlus("insights")}>Tambah profil bayi · Plus</button>
+          <button className="btn btn-soft block" disabled={!PLUS_ENABLED && !isPlus()} onClick={() => isPlus() ? setAddingBaby(true) : setPlus("insights")}>{PLUS_ENABLED || isPlus() ? "Tambah profil bayi · Plus" : "Segera hadir"}</button>
           {!isPlus() && babyProfiles().length > 1 && <p className="muted">Profil tambahan tetap tersimpan dan dapat dibuka saat Plus aktif.</p>}
-        </section>
+        </section>}
         <button className="card solid" aria-haspopup="dialog" onClick={() => setEditingProfile(true)}>
           <div className="spread"><div><div className="card-title">Detail profil</div><p className="card-sub">{prefs.name || "Nama panggilan"} · {s.babyName || "Si kecil"}</p></div><ChevronRight size={20} /></div>
         </button>
 
-        <a className="btn btn-soft block" href="#/pengingat">Pengingat · Plus</a>
+        {(PLUS_ENABLED || isPlus()) && <a className="btn btn-soft block" href="#/pengingat">Pengingat · Plus</a>}
 
 
         <section className="card solid">
@@ -86,23 +91,17 @@ export function Profil() {
 
         </section>
 
-        <section className="card solid">
-          <div className="card-title" style={{ fontSize: 16, marginBottom: 12 }}>Tema</div>
-          <div className="segmented" style={{ "--n": 3, "--i": ["light", "dark", "system"].indexOf(prefs.theme ?? "system") } as React.CSSProperties}>
-            {([["light", "Terang"], ["dark", "Gelap"], ["system", "Sistem"]] as const).map(([v, l]) => (
-              <button key={v} aria-pressed={(prefs.theme ?? "system") === v} onClick={() => { setPrefs({ theme: v }); applyTheme(v); }}>{l}</button>
-            ))}
-          </div>
-        </section>
 
-        <a className="card solid" href="#/pasangan">
+        <a className="card solid" href={h.signedIn ? "#/pasangan" : "#/masuk-akun?mode=signup"}>
           <div className="spread">
             <div>
               <div className="card-title" style={{ fontSize: 16 }}>Sinkron & pasangan</div>
-              <div style={{ fontSize: 14, marginTop: 2 }}>{h.signedIn ? <SyncDot /> : <span className="muted">Gratis · opsional</span>}</div>
+              <div style={{ fontSize: 14, marginTop: 2 }}>{h.signedIn ? <SyncDot /> : <span className="muted">Belum terhubung · catatan lokal</span>}</div>
             </div>
             <ChevronRight size={20} className="faint" />
           </div>
+          {!h.signedIn && <p className="card-sub">Daftar untuk menyimpan catatan online dan sinkron dengan pasangan. Gratis.</p>}
+          {h.signedIn && !h.acc.syncEnabled && <p className="card-sub">Aktifkan sinkronisasi agar catatan tersimpan online.</p>}
         </a>
 
         <button className="card solid" onClick={download}>
@@ -123,9 +122,26 @@ export function Profil() {
             void signOut(); toast("Keluar dari akun. Catatan tetap di HP ini.");
           }}>Keluar akun</button>
         </section>}
+        <section className="card solid spread theme-card">
+          <div className="card-title" style={{ fontSize: 16 }}>Tema</div>
+          <div className="segmented theme-options" role="group" aria-label="Tema" style={{ "--n": 3, "--i": ["light", "dark", "system"].indexOf(prefs.theme ?? "system") } as React.CSSProperties}>
+            {([["light", "Terang", Sun], ["dark", "Gelap", Moon], ["system", "Sistem", Monitor]] as const).map(([v, l, Icon]) => (
+              <button key={v} aria-label={l} title={l} aria-pressed={(prefs.theme ?? "system") === v} onClick={() => { setPrefs({ theme: v }); applyTheme(v); }}><Icon size={20} aria-hidden="true" /></button>
+            ))}
+          </div>
+        </section>
+
+        {telemetryConfigured() && <section className="card solid">
+          <div className="spread">
+            <div><div className="card-title">Bantu tingkatkan Momong</div><p className="card-sub" id="telemetry-description">Izinkan pengiriman statistik halaman dan error teknis ke PostHog. Isi catatan, nama, email, dan tanggal tidak dikirim. Bisa dimatikan kapan saja.</p></div>
+            <button type="button" className="switch" role="switch" aria-checked={analytics} aria-label="Bantu tingkatkan Momong" aria-describedby="telemetry-description" onClick={() => { const next = !analytics; setTelemetryConsent(next); setAnalytics(telemetryConsent()); }} />
+          </div>
+        </section>}
+
         {!h.acc.token && <section className="card solid stack">
           <div className="card-title">Data di perangkat</div>
-          <p className="card-sub">Hapus catatan dan mulai kembali dari awal.</p>
+          <p className="card-sub">Cadangan dan catatan yang tersimpan di HP ini.</p>
+          <button type="button" className="btn btn-soft block" onClick={() => setRestoreOpen(true)}>Pulihkan cadangan</button>
           <button className="btn btn-danger-soft block" aria-haspopup="dialog" onClick={() => setResetOpen(true)}>Hapus semua data di perangkat</button>
         </section>}
         <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>Momong · Catatan, bukan saran medis.</p>
@@ -152,6 +168,7 @@ export function Profil() {
               </label>
             </div>
           )}<button className="btn btn-ink block" style={{ marginTop: 16 }} onClick={() => setEditingProfile(false)}>Selesai</button></Sheet>
+      <RestoreSheet open={restoreOpen} onOpenChange={setRestoreOpen} />
       <InstallSheet open={installOpen} onOpenChange={setInstallOpen} />
       <AddBabySheet open={addingBaby} onOpenChange={setAddingBaby} />
       <BornSheet open={bornOpen} onOpenChange={setBornOpen} />
@@ -173,27 +190,29 @@ export function Profil() {
   );
 }
 
-/** Newborn → hamil: confirm, short loading, then flip birthMode only. Every log stays. */
+/** Switching mode preserves every log. */
 function PregnantSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
-  const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (!busy) return;
-    const t = setTimeout(() => {
-      saveSettings({ birthMode: "pregnant" }); // mode flag only; no collection is touched
-      onOpenChange(false); // busy stays on through the exit; Profil unmounts on the hash change
+  const [error, setError] = useState("");
+  const [hpl, setHpl] = useState(settings().hpl ?? "");
+  function switchMode() {
+    try {
+      saveSettings({ birthMode: "pregnant", hpl: settings().hpl || hpl });
+      onOpenChange(false);
+      toast("Mode kehamilan aktif. Catatan newborn tetap tersimpan.");
       location.hash = "#/";
-    }, 700);
-    return () => clearTimeout(t);
-  }, [busy, onOpenChange]);
+    } catch { setError("Mode belum berubah. Coba lagi."); }
+  }
   return (
-    <Sheet open={open} onOpenChange={(o) => !busy && onOpenChange(o)} title="Kembali ke mode hamil?">
+    <Sheet open={open} onOpenChange={onOpenChange} title="Kembali ke mode hamil?">
+      {error && <p role="alert">{error}</p>}
       <p className="muted" style={{ marginBottom: 16 }}>Catatan newborn tetap tersimpan. Kamu bisa pindah lagi ke mode newborn kapan saja.</p>
-      <div className="stack">
-        <button className="btn btn-coral lg block" disabled={busy} aria-busy={busy} onClick={() => setBusy(true)}>
-          {busy ? "Memindahkan…" : "Ya, kembali"}
+      <form className="stack" onSubmit={(e) => { e.preventDefault(); switchMode(); }}>
+        {!settings().hpl && <label className="field"><span>HPL (hari perkiraan lahir)</span><DateInput required value={hpl} onChange={(e) => setHpl(e.target.value)} /></label>}
+        <button className="btn btn-coral lg block" disabled={!(settings().hpl || hpl)}>
+          Ya, kembali
         </button>
-        <button className="btn btn-soft block" disabled={busy} onClick={() => onOpenChange(false)}>Nanti saja</button>
-      </div>
+        <button type="button" className="btn btn-soft block" onClick={() => onOpenChange(false)}>Nanti saja</button>
+      </form>
     </Sheet>
   );
 }
@@ -201,15 +220,22 @@ function PregnantSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
 function BornSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const [date, setDate] = useState(todayISO());
   const [name, setName] = useState("");
+  const [error, setError] = useState("");
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title="Selamat datang, si kecil">
+      {error && <p role="alert">{error}</p>}
       <p className="muted" style={{ marginBottom: 16 }}>Catatan kehamilan tetap tersimpan. Kamu bisa kembali ke mode hamil kapan saja.</p>
       <div className="stack">
         <label className="field"><span>Nama si kecil (opsional)</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Si kecil" /></label>
         <label className="field"><span>Tanggal lahir</span><DateInput max={todayISO()} value={date} onChange={(e) => setDate(e.target.value)} /></label>
         <button
           className="btn btn-coral lg block" disabled={!date}
-          onClick={() => { saveSettings({ birthMode: "postpartum", babyBirth: date, babyName: name.trim() || undefined }); onOpenChange(false); location.hash = "#/"; }}
+          onClick={() => {
+            try {
+              saveSettings({ birthMode: "postpartum", babyBirth: date, babyName: name.trim() || undefined });
+              onOpenChange(false); toast("Mode newborn aktif. Catatan kehamilan tetap tersimpan."); location.hash = "#/";
+            } catch { setError("Mode belum berubah. Coba lagi."); }
+          }}
         >
           Pindah ke mode newborn
         </button>

@@ -1,11 +1,12 @@
+import { PLUS_ENABLED } from "../release";
 import { Baby, ChevronRight, Droplet, FileText, Hand, Hospital, Milk, NotebookPen, Play, Plus, RotateCcw, Square, Timer, Trash2, TriangleAlert, X } from "lucide-react";
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DIAPER_LABEL, type PlusVariant, SIDE_LABEL, SYMPTOMS } from "../content";
 import { alertVisible, analyzePattern, clock, distanceTier, durLabel, finished, gapLabel, intervalFor } from "../contractions";
 import { durationLabel, isToday, pregnancy, timeLabel } from "../dates";
-import { fillIn, reducedMotion } from "../motion";
+import { animate, reducedMotion } from "../motion";
 import { isPlus, getPrefs, hasHidden, list, put, remove, type Rec, setPrefs, settings, useDB } from "../store";
-import { Header, PlusSheet, Sheet, toast } from "../ui";
+import { DeleteButton, Header, PlusSheet, Sheet, toast } from "../ui";
 
 export function Log() {
   useDB();
@@ -41,16 +42,20 @@ function PregnancyLog() {
   const [historyOpen, setHistoryOpen] = useState(false);
   // Last saved duration shown on the clock until "Reset". Display only; never touches data.
   const [saved, setSaved] = useState<number | null>(null);
-  // Kick progress fills in on enter (first-run entrance).
   const segRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => { if (segRef.current) fillIn(segRef.current.querySelectorAll("i.on")); }, []);
-
+  const changedKick = useRef(false);
   const kick = list("kicks")[0];
   const kickActive = kick && !kick.done;
+  useLayoutEffect(() => {
+    if (!changedKick.current) return;
+    changedKick.current = false;
+    return animate(segRef.current?.children[(kick?.count ?? 1) - 1] ?? null, [{ opacity: .4, transform: "scaleX(.6)" }, { opacity: 1, transform: "none" }], 150);
+  }, [kick?.count, kick?.id]);
   const [symOpen, setSymOpen] = useState(false);
   const symToday = list("symptoms").filter((r) => isToday(r.at));
 
   function toggleContraction() {
+    try {
     if (running) {
       const end = Date.now();
       // Start-to-start, like v1: this start minus the previous finished start.
@@ -61,9 +66,12 @@ function PregnancyLog() {
       setSaved(null);
       put("contractions", { at: Date.now() });
     }
+    } catch { toast("Kontraksi belum tersimpan. Coba lagi."); }
   }
 
   function addKick() {
+    try {
+    changedKick.current = true;
     if (!kickActive) {
       put("kicks", { at: Date.now(), count: 1, last: Date.now() });
       return;
@@ -72,6 +80,7 @@ function PregnancyLog() {
     const done = count >= 10;
     put("kicks", { id: kick.id, count, last: Date.now(), done });
     if (done) toast(`10 gerakan dalam ${durationLabel(Date.now() - kick.at)}`);
+    } catch { changedKick.current = false; toast("Gerakan belum tersimpan. Coba lagi."); }
   }
 
   return (
@@ -119,13 +128,13 @@ function PregnancyLog() {
                 {kickActive ? `Sesi berjalan · mulai ${timeLabel(kick.at)}` : kick ? `Sesi terakhir ${timeLabel(kick.at)} · ${kick.count} gerakan` : "Ketuk setiap terasa gerakan"}
               </div>
             </div>
-            <div className="stat num">{kickActive ? kick.count : 0}<small> / 10</small></div>
+            <div className="stat num">{kick?.count ?? 0}<small> / 10</small></div>
           </div>
           <div ref={segRef} className="segments" aria-hidden="true">
-            {Array.from({ length: 10 }, (_, i) => <i key={i} className={kickActive && i < kick.count ? "on" : ""} />)}
+            {Array.from({ length: 10 }, (_, i) => <i key={i} className={kick && i < kick.count ? "on" : ""} />)}
           </div>
           <button className="btn btn-soft block" style={{ marginTop: 16 }} onClick={addKick}>
-            {kickActive ? <><Plus size={18} /> Gerakan</> : "Mulai sesi"}
+            {kickActive ? <><Plus size={18} /> Gerakan</> : kick?.done ? "Mulai sesi baru" : "Mulai sesi"}
           </button>
         </section>
 
@@ -143,15 +152,27 @@ function PregnancyLog() {
           {symToday.length > 0 && (
             <div className="chips" style={{ marginTop: 14 }}>
               {symToday.map((r) => (
-                <button key={r.id} className="chip" onClick={() => { remove("symptoms", r.id); toast("Gejala dihapus"); }} aria-label={`Hapus ${r.name}`}>
+                <DeleteButton key={r.id} className="chip" label={r.name} onDelete={() => remove("symptoms", r.id)}>
                   <span className="dot" />{r.name}
-                </button>
+                </DeleteButton>
               ))}
             </div>
           )}
         </section>
 
-        <a className="card" href="#/laporan" data-morph="/laporan">
+        <ReportCard />
+      </div>
+
+      <ContractionHistory open={historyOpen} onOpenChange={setHistoryOpen} />
+
+      <SymptomSheet open={symOpen} onOpenChange={setSymOpen} />
+    </>
+  );
+}
+
+function ReportCard() {
+  return (
+        <a className="card" href="#/laporan">
           <div className="row">
             <span className="glyph coral"><FileText size={22} /></span>
             <div style={{ flex: 1 }}>
@@ -161,12 +182,6 @@ function PregnancyLog() {
             <ChevronRight size={20} className="faint" />
           </div>
         </a>
-      </div>
-
-      <ContractionHistory open={historyOpen} onOpenChange={setHistoryOpen} />
-
-      <SymptomSheet open={symOpen} onOpenChange={setSymOpen} />
-    </>
   );
 }
 
@@ -202,7 +217,7 @@ function ContractionHistory({ open, onOpenChange }: { open: boolean; onOpenChang
                   <div className="title num">{dayTime(running.at)}</div>
                   <div className="sub">Sedang berjalan</div>
                 </div>
-                <button className="icon-btn" aria-label="Hapus" onClick={() => remove("contractions", running.id)}><Trash2 size={18} /></button>
+                <DeleteButton label={`Kontraksi ${timeLabel(running.at)}`} onDelete={() => remove("contractions", running.id)} />
               </div>
             )}
             {rows.map((c) => {
@@ -220,7 +235,7 @@ function ContractionHistory({ open, onOpenChange }: { open: boolean; onOpenChang
                   ) : (
                     <span className="faint" style={{ fontSize: 13 }}>Kontraksi pertama</span>
                   )}
-                  <button className="icon-btn" aria-label="Hapus" onClick={() => remove("contractions", c.id)}><Trash2 size={18} /></button>
+                  <DeleteButton label={`Kontraksi ${timeLabel(c.at)}`} onDelete={() => remove("contractions", c.id)} />
                 </div>
               );
             })}
@@ -299,16 +314,28 @@ export function PatternAlert() {
 function SymptomSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [note, setNote] = useState("");
-  useEffect(() => { if (open) { setPicked([]); setNote(""); } }, [open]);
+  const savedNames = useRef(new Set<string>());
+  const saving = useRef(false);
+  const [error, setError] = useState("");
+  useEffect(() => { if (open) { setPicked([]); setNote(""); setError(""); savedNames.current.clear(); saving.current = false; } }, [open]);
   const toggle = (s: string) => setPicked((p) => (p.includes(s) ? p.filter((x) => x !== s) : [...p, s]));
   function save() {
-    const at = Date.now();
-    picked.forEach((name) => put("symptoms", { at, name, note: note.trim() || undefined }));
-    onOpenChange(false);
-    toast(`${picked.length} gejala dicatat`);
+    if (saving.current) return;
+    saving.current = true;
+    try {
+      const at = Date.now();
+      for (const name of picked) {
+        if (savedNames.current.has(name)) continue;
+        put("symptoms", { at, name, note: note.trim() || undefined });
+        savedNames.current.add(name);
+      }
+      onOpenChange(false);
+      toast(`${picked.length} gejala dicatat`);
+    } catch { saving.current = false; setError("Catatan belum lengkap tersimpan. Coba simpan lagi."); }
   }
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title="Catat gejala">
+      {error && <p role="alert">{error}</p>}
       <p className="muted" style={{ marginBottom: 16 }}>Pilih yang kamu rasakan sekarang.</p>
       <div className="chips">
         {SYMPTOMS.map((s) => (
@@ -347,6 +374,7 @@ function NewbornLog() {
   const [limit, setLimit] = useState(30);
   const [filter, setFilter] = useState("all");
   const [period, setPeriod] = useState("all");
+  const [savedRow, setSavedRow] = useState<string | null>(null);
   const matching = KINDS.filter(({ kind }) => filter === "all" || filter === kind).flatMap(({ kind }) =>
     list(kind).filter((r) => period === "all" || r.at >= Date.now() - Number(period) * 86400000).map((r) => ({ kind, r }))).sort((a, b) => b.r.at - a.r.at);
   const entries = matching
@@ -377,16 +405,16 @@ function NewbornLog() {
             </select></label>
           </div>
           {entries.length === 0 ? (
-            <div className="empty"><strong>Belum ada catatan</strong>Pilih aktivitas di atas untuk mulai mencatat.</div>
+            <div className="empty"><strong>{filter !== "all" || period !== "all" ? "Tidak ada catatan yang cocok" : "Belum ada catatan"}</strong>{filter !== "all" || period !== "all" ? <><span>Coba tampilkan semua jenis dan periode.</span><button type="button" className="btn btn-soft" onClick={() => { setFilter("all"); setPeriod("all"); setLimit(30); }}>Reset filter</button></> : "Pilih aktivitas di atas untuk mulai mencatat."}</div>
           ) : (
             <div className="list" style={{ marginTop: 4 }}>
               {entries.map(({ kind, r }) => (
-                <div key={r.id} className="list-row">
+                <div key={r.id} className={savedRow === r.id ? "list-row row-ack" : "list-row"}>
                   <div className="grow">
                     <div className="title">{describe(kind, r)}</div>
                     <div className="sub num">{isToday(r.at) ? "Hari ini" : new Date(r.at).toLocaleDateString("id-ID", { day: "numeric", month: "short" })} · {timeLabel(r.at)}</div>
                   </div>
-                  <button className="icon-btn" aria-label="Hapus" onClick={() => remove(kind, r.id)}><Trash2 size={18} /></button>
+                  <DeleteButton label={describe(kind, r)} onDelete={() => remove(kind, r.id)} />
                 </div>
               ))}
             </div>
@@ -395,11 +423,12 @@ function NewbornLog() {
           <p className="faint" style={{ fontSize: 13, marginTop: 12 }}>{isPlus() ? "Semua riwayat tersimpan · Plus" : "Riwayat menyusu langsung, pumping, dan ganti popok tersedia selama 30 hari. Riwayat minum susu tersedia seluruhnya."}</p>
           {/* Only when the 30-day Free window is actually hiding entries. */}
           {hasHidden() && (
-            <button className="chip" style={{ marginTop: 12 }} aria-haspopup="dialog" onClick={() => setPlus("insights")}>Buka riwayat lengkap di Plus</button>
+            <button className="chip" style={{ marginTop: 12 }} disabled={!PLUS_ENABLED} aria-haspopup={PLUS_ENABLED ? "dialog" : undefined} onClick={() => setPlus("insights")}>{PLUS_ENABLED ? "Buka riwayat lengkap di Plus" : "Segera hadir"}</button>
           )}
         </section>
+        <ReportCard />
       </div>
-      <NewbornSheet kind={open} onClose={() => setOpen(null)} />
+      <NewbornSheet kind={open} onClose={() => setOpen(null)} onSaved={setSavedRow} />
       <PlusSheet variant={plus} onClose={() => setPlus(null)} />
     </>
   );
@@ -410,12 +439,12 @@ function Seg({ value, onChange, options }: { value: string; onChange: (v: string
   const i = Math.max(0, options.findIndex(([v]) => v === value));
   return (
     <div className="segmented" style={{ "--n": options.length, "--i": i } as CSSProperties}>
-      {options.map(([v, l]) => <button key={v} aria-pressed={value === v} onClick={() => onChange(v)}>{l}</button>)}
+      {options.map(([v, l]) => <button type="button" key={v} aria-pressed={value === v} onClick={() => onChange(v)}>{l}</button>)}
     </div>
   );
 }
 
-function NewbornSheet({ kind, onClose }: { kind: Kind | null; onClose: () => void }) {
+function NewbornSheet({ kind, onClose, onSaved }: { kind: Kind | null; onClose: () => void; onSaved: (id: string) => void }) {
   const [last, setLast] = useState<Kind>("bottle");
   const k = kind ?? last;
   useEffect(() => { if (kind) setLast(kind); }, [kind]);
@@ -426,28 +455,41 @@ function NewbornSheet({ kind, onClose }: { kind: Kind | null; onClose: () => voi
   const [type, setType] = useState("pee");
   const title = { bottle: "Catat minum susu", breast: "Catat menyusu langsung (DBF)", pump: "Catat pumping", diaper: "Catat ganti popok" }[k];
 
-  function save() {
+  const saved = useRef(false);
+  const [error, setError] = useState("");
+  useEffect(() => { if (kind) { saved.current = false; setError(""); } }, [kind]);
+  function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (saved.current || !kind) return;
+    if ((k === "bottle" || k === "pump") && (!Number.isFinite(ml) || ml <= 0 || ml > 500)) return;
+    if (k === "breast" && (!Number.isFinite(minutes) || minutes < 0 || minutes > 120)) return;
+    saved.current = true;
     const at = Date.now();
-    if (k === "bottle") put("bottle", { at, ml, milk });
-    if (k === "breast") put("breast", { at, side, minutes });
-    if (k === "pump") put("pump", { at, ml });
-    if (k === "diaper") put("diaper", { at, type });
+    try {
+    let record;
+    if (k === "bottle") record = put("bottle", { at, ml, milk });
+    if (k === "breast") record = put("breast", { at, side, minutes });
+    if (k === "pump") record = put("pump", { at, ml });
+    if (k === "diaper") record = put("diaper", { at, type });
+    if (record) onSaved(record.id);
     onClose();
-    toast("Tersimpan");
+    toast(`${describe(k, { id: "", updatedAt: at, at, ml, milk, side, minutes, type })} dicatat`);
+    } catch { saved.current = false; setError("Catatan belum tersimpan. Coba simpan lagi."); }
   }
 
 
   return (
     <Sheet open={!!kind} onOpenChange={(o) => !o && onClose()} title={title}>
-      <div className="stack" style={{ marginTop: 12 }}>
+      <form className="stack" style={{ marginTop: 12 }} onSubmit={save}>
+        {error && <p role="alert">{error}</p>}
         {(k === "bottle" || k === "pump") && (
           <>
             <label className="field">
               <span>Jumlah (ml)</span>
-              <input className="input num" type="number" inputMode="numeric" min={0} max={500} value={ml} onChange={(e) => setMl(Number(e.target.value))} />
+              <input className="input num" type="number" inputMode="numeric" min={1} max={500} value={ml} onChange={(e) => setMl(Number(e.target.value))} />
             </label>
             <div className="chips">
-              {[30, 60, 90, 120, 150].map((v) => <button key={v} className="chip num" aria-pressed={ml === v} onClick={() => setMl(v)}>{v} ml</button>)}
+              {[30, 60, 90, 120, 150].map((v) => <button key={v} type="button" className="chip num" aria-pressed={ml === v} onClick={() => setMl(v)}>{v} ml</button>)}
             </div>
           </>
         )}
@@ -462,8 +504,8 @@ function NewbornSheet({ kind, onClose }: { kind: Kind | null; onClose: () => voi
           </>
         )}
         {k === "diaper" && <Seg value={type} onChange={setType} options={[["pee", "Pipis"], ["poo", "Pup"], ["both", "Keduanya"]]} />}
-        <button className="btn btn-ink lg block" onClick={save} disabled={(k === "bottle" || k === "pump") && !(ml > 0)}>Simpan</button>
-      </div>
+        <button type="submit" className="btn btn-ink lg block" disabled={(k === "bottle" || k === "pump") && !(ml > 0)}>Simpan</button>
+      </form>
     </Sheet>
   );
 }

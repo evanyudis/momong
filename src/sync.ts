@@ -1,4 +1,6 @@
+import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
+import { PLUS_ENABLED } from "./release";
 import { nameFromEmail, type SignInMode } from "./signin";
 import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData } from "./store";
 
@@ -10,7 +12,7 @@ export const HAS_API = import.meta.env?.PROD || !!API_URL;
 export type Member = { id: string; email: string; name: string; role: "owner" | "member" };
 export type Me = {
   user: { id: string; email: string; name: string };
-  entitlement: { plan: "free" | "trial" | "monthly" | "plus_lifetime"; expiresAt: string | null };
+  entitlement: { plan: "free" | "trial" | "monthly" | "plus_lifetime"; expiresAt: string | null; earlyAccess?: boolean };
   household: { id: string; seats: number; members: Member[] };
 };
 export type SyncStatus = "local" | "offline" | "syncing" | "synced" | "error";
@@ -27,7 +29,7 @@ let state: State = {
   hasSynced: false,
   syncEnabled: false,
 };
-const entitled = (me: Me | null) => me?.entitlement.plan === "plus_lifetime" || ((me?.entitlement.plan === "trial" || me?.entitlement.plan === "monthly") && !!me.entitlement.expiresAt && Date.parse(me.entitlement.expiresAt) > Date.now());
+export const entitled = (me: Me | null) => (PLUS_ENABLED || me?.entitlement.earlyAccess === true && (me.entitlement.plan === "trial" || me.entitlement.plan === "plus_lifetime")) && (me?.entitlement.plan === "plus_lifetime" || ((me?.entitlement.plan === "trial" || me?.entitlement.plan === "monthly") && !!me.entitlement.expiresAt && Date.parse(me.entitlement.expiresAt) > Date.now()));
 setPlusAccess(!!state.token && entitled(state.me));
 let sessionVersion = 0;
 let syncVersion = 0;
@@ -43,7 +45,7 @@ function set(patch: Partial<State>) {
   listeners.forEach((l) => l());
 }
 export const useAccount = () =>
-  useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => state);
+  useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => state, () => state);
 export const account = () => state;
 
 export class ApiError extends Error {
@@ -60,6 +62,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<{ da
   const data = await res.json().catch(() => { if (res.ok) throw new ApiError(502, "invalid_response"); return {}; });
   if (version !== sessionVersion) throw new ApiError(0, "session_changed");
   if (res.status === 401 && state.token) clearSession();
+  if (res.status >= 500) reportError(new Error("API server failure"), "api");
   if (!res.ok) throw new ApiError(res.status, data?.error ?? data?.code ?? "request_failed");
   return { data, res };
 }

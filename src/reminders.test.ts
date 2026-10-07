@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 (globalThis as any).addEventListener = () => {};
+(globalThis as any).matchMedia = () => ({ matches: false, addEventListener() {} });
 const storage = new Map<string, string>();
 Object.defineProperty(globalThis, "localStorage", { value: {
   getItem: (k: string) => storage.get(k) ?? null,

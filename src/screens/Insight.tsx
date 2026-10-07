@@ -1,3 +1,4 @@
+import { PLUS_ENABLED } from "../release";
 import { nextFeed, weeklyTotals } from "../plus";
 import { useState } from "react";
 import type { PlusVariant } from "../content";
@@ -76,24 +77,27 @@ function NewbornInsight() {
   const start = midnight(new Date());
   const days = Array.from({ length: 7 }, (_, i) => start - i * DAY);
   const inDay = (col: Parameters<typeof list>[0], d: number) => list(col).filter((r) => r.at >= d && r.at < d + DAY);
+  const hasRecords = (["bottle", "breast", "pump", "diaper"] as const).some((kind) => list(kind).some((r) => r.at >= days[6]));
+  const hasToday = (["bottle", "breast", "pump", "diaper"] as const).some((kind) => list(kind).some((r) => r.at >= start));
   const [preview, setPreview] = useState(true);
   const [plus, setPlus] = useState<PlusVariant | null>(null);
   return (
     <>
       <Header title="Insight" />
-      {isPlus() && <PlusInsights />}
-      {!isPlus() && preview && (
+      {!hasToday && <section className="card empty"><strong>Belum ada catatan hari ini</strong><p>Catat menyusu, pompa, atau popok untuk melihat ringkasannya.</p><a className="btn btn-ink" href="#/log">Buka Log</a></section>}
+      {isPlus() && hasRecords && <PlusInsights />}
+      {!isPlus() && hasRecords && preview && (
         <section className="card plus-card" style={{ marginBottom: 14 }}>
           <div className="spread">
             <div className="card-title">Pola menyusu 7 hari</div>
             <PlusPill />
           </div>
           <BlurBars />
-          <button className="btn btn-coral block" style={{ marginTop: 16 }} aria-haspopup="dialog" onClick={() => setPlus("insights")}>Coba Plus</button>
+          <button className="btn btn-coral block" style={{ marginTop: 16 }} disabled={!PLUS_ENABLED} aria-haspopup={PLUS_ENABLED ? "dialog" : undefined} onClick={() => setPlus("insights")}>{PLUS_ENABLED ? "Coba Plus" : "Segera hadir"}</button>
           <button className="btn btn-soft block" style={{ marginTop: 10 }} onClick={() => setPreview(false)}>Nanti saja</button>
         </section>
       )}
-      <section className="card">
+      {hasRecords && <section className="card">
         <div className="label">7 hari terakhir</div>
         <div className="list" style={{ marginTop: 4 }}>
           {days.map((d) => {
@@ -111,7 +115,7 @@ function NewbornInsight() {
             );
           })}
         </div>
-      </section>
+      </section>}
       <PlusSheet variant={plus} onClose={() => setPlus(null)} />
     </>
   );

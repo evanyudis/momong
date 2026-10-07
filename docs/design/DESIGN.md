@@ -1,6 +1,6 @@
 # Momong product surfaces
 
-Source of truth: src/styles.css. React components use plain CSS and Geist; no second styling system or invented logo. The shipped geometric icon is unchanged. Public copy says Momong; bb_ storage and record/product identifiers remain stable.
+Source of truth: src/styles.css. React components use plain CSS and self-hosted Geist (/fonts/geist-latin.woff2); no second styling system or invented logo. The shipped geometric icon is unchanged. Public copy says Momong; bb_ storage and record/product identifiers remain stable.
 
 ## Tokens and surfaces
 
@@ -14,13 +14,13 @@ Source of truth: src/styles.css. React components use plain CSS and Geist; no se
 | --plus-pill | --blush-500 | --blush-500 | Activation message |
 | --signin-primary | --sky-500 | --sky-500 | Account CTA |
 
-Actual color change audit: --plus-muted is new: oklch(0.50 0 0) in light and oklch(0.72 0 0) in dark. Supporting copy on coral previously inherited --ink-muted (light 0.556), which falls below 4.5:1 on blush. The new semantic token keeps Plus body copy above 4.5:1. Measured WCAG contrast: Plus supporting text 5.17:1 light and 6.33:1 dark; price text 5.75:1 light and 13.18:1 dark. Other palette values are unchanged. Plus selectors, preview bars and hero reuse the existing OKLCH coral ramp. Blue stays with account/sync. Selection now uses --plus-fill rather than an unconditional light blush. Existing accent hex values remain for older surfaces. Borders separate list rows; --elevation-raised supplies existing elevation.
+Actual color change audit: --plus-muted is new: oklch(0.50 0 0) in light and oklch(0.72 0 0) in dark. Supporting copy on coral previously inherited --ink-muted (light 0.556), which falls below 4.5:1 on blush. The new semantic token keeps Plus body copy above 4.5:1. Measured WCAG contrast: Plus supporting text 5.17:1 light and 6.33:1 dark; price text 5.75:1 light and 13.18:1 dark. Faint text aliases supporting copy in both themes; light success ink is #3e714c, and danger text/fills reuse the accessible field-danger token. Plus selectors, preview bars and hero reuse the existing OKLCH coral ramp. Product cards are opaque with existing elevation. Glass remains on floating navigation, overlay controls and sign-in controls. Plus badges use one border and a flat blush fill; glyph tiles use flat pastel fills with dark semantic ink. Newborn metric tiles contain direct icons without a second colored tile. Blue stays with account/sync. Selection now uses --plus-fill rather than an unconditional light blush. Existing accent hex values remain for older surfaces. Borders separate list rows; --elevation-raised supplies existing elevation.
 
 ## Components and variants
 
 - PlusSheet preserves variant/onClose: overview, insights, perkiraan, pdf. Price and lifetime/monthly radios appear in compact state. Expanded state adds seven benefits. Compact benefits are inert.
 - PlanPicker uses native fieldset/legend/radios. Default lifetime; selection persists in sessionStorage across authentication. It does not create an order.
-- Plus page: non-member plan selection + example preview; active monthly/lifetime feature links; shared entitlement badge; payment status and payer-only history/cancellation. Monthly requires method readiness and explicit recurring consent. Offline checkout is disabled.
+- Phase 1 Plus page: concrete feature heading, one disabled “Segera hadir” CTA, and a numbered benefits list. When Plus is enabled: non-member plan selection + example preview; active monthly/lifetime feature links; shared entitlement badge; payment status and payer-only history/cancellation. Monthly requires method readiness and explicit recurring consent. Offline checkout is disabled.
 - Profil: account identity, membership, baby selection, detail editor sheet, mode, theme, sync/export, install entry, logout or anonymous reset. Only pregnant profiles show HPL; switching modes preserves it.
 - InstallSheet: iOS, Android, computer tutorial; native prompt where available; standalone status. Backup and optional Free sync precede installation.
 - Restore: local file validation, summary, explicit confirmation; anonymous empty database only. JSON import never restores account/payment credentials or enables sync/notifications.

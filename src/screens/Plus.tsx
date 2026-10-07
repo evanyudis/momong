@@ -1,3 +1,4 @@
+import { PLUS_ENABLED } from "../release";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api, refreshMe, useAccount } from "../sync";
 import { reducedMotion } from "../motion";
@@ -13,6 +14,39 @@ export const paymentLabel = (order: PaymentOrder) => order.grantedAt ? order.pla
 export const finishedPayment = (order: PaymentOrder) => !!order.grantedAt || ["deny", "cancel", "expire", "failure"].includes(order.status);
 
 export function Plus() {
+  const acc = useAccount();
+  if (acc.me?.entitlement.earlyAccess && isPlus()) return <>
+    <TopBar title={acc.me.entitlement.plan === "plus_lifetime" ? "Plus · Selamanya" : "Plus · Trial"} back="#/profil" />
+    <div className="stack">
+      <section className="card plus-hero stack"><h1>Early access kamu aktif.</h1>
+        <p>{acc.me.entitlement.plan === "plus_lifetime" ? "Akses Plus gratis tanpa batas waktu." : <>Gratis sampai {new Date(acc.me.entitlement.expiresAt!).toLocaleDateString("id-ID", { dateStyle: "long" })}.</>} Tidak ada tagihan atau perpanjangan otomatis. Akses berlaku untuk household kamu.</p>
+      </section>
+      <section className="card solid stack"><h2>Fitur Plus</h2>
+        <ul className="plus-page-features">{PLUS_FEATURES.map((feature, i) => <li key={feature.title}><div><h3>{feature.title}</h3><p className="muted">{feature.body}</p><a className="link-btn" href={["#/insight", "#/pengingat", "#/insight", "#/log", "#/laporan", "#/kado", "#/profil"][i]}>Buka fitur</a></div></li>)}</ul>
+      </section>
+    </div>
+  </>;
+  if (!PLUS_ENABLED) return <>
+    <TopBar title="Momong Plus" back="#/profil" />
+    <div className="stack">
+      <section className="card plus-hero stack">
+        <h1>Grafik, riwayat lengkap, dan laporan.</h1>
+        <p>Momong Plus sedang disiapkan. Kamu bisa terus memakai fitur gratis, termasuk sinkronisasi dan akses pasangan.</p>
+        <button className="btn btn-coral lg block" disabled>Segera hadir</button>
+      </section>
+      <section className="card solid stack">
+        <h2>Yang sedang kami siapkan</h2>
+        <ul className="plus-page-features">{PLUS_FEATURES.map((feature, i) => <li key={feature.title}>
+          <span className="plus-feature-number" aria-hidden="true">{String(i + 1).padStart(2, "0")}</span>
+          <div><h3>{feature.title}</h3><p className="muted">{feature.body}</p></div>
+        </li>)}</ul>
+      </section>
+    </div>
+  </>;
+  return <PlusEnabled />;
+}
+
+function PlusEnabled() {
   const acc = useAccount();
   const userId = acc.token ? acc.me?.user.id : undefined;
   return <PlusAccount key={userId ?? "guest"} userId={userId} active={isPlus() && !!acc.token} />;

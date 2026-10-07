@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="id"><head><meta charset="UTF-8"><title>Momong responsive checks</title>
+<style>body{font:14px system-ui;margin:16px;background:#eee}#frames{display:flex;gap:16px;align-items:start}iframe{border:1px solid #ccc;height:812px;flex:none}pre{white-space:pre-wrap}</style></head>
+<body><h1>Momong responsive checks</h1><p>Disposable fixtures, light/dark, pregnancy/newborn. No real records.</p><pre id="results">Running…</pre><div id="frames"></div>
+<script type="module">
+const widths=[320,375,430,1280], routes=['/','/log','/insight','/profil','/plus','/tas','/kado','/laporan','/pengingat','/pasangan','/masuk-akun','/masuk-akun?mode=signup','/gabung','/masuk','/kado-bersama'];
+const results=document.querySelector('#results'), frames=document.querySelector('#frames');
+const pause=()=>new Promise(resolve=>setTimeout(resolve,180));
+let checked=0, failures=[];
+for (const theme of ['light','dark']) for (const mode of ['pregnant','postpartum']) {
+  const tabs=widths.map(width=>{const el=document.createElement('iframe');el.style.width=width+'px';frames.append(el);return el;});
+  for (const route of routes) {
+    if(route==='/') await Promise.all(tabs.map(el=>new Promise(resolve=>{el.onload=resolve;el.src='/scripts/refinement-preview.html?theme='+theme+'&mode='+mode+'#'+route;})));
+    else tabs.forEach(el=>{el.contentWindow.location.hash=route;});
+    for (let tries=0;tries<30 && tabs.some(el=>!el.contentDocument.querySelector('main')?.textContent);tries++) await pause();
+    await pause();
+    tabs.forEach((el,i)=>{const doc=el.contentDocument,w=el.contentWindow;checked++;
+      if (!doc.querySelector('main')?.textContent.trim()) failures.push(`${widths[i]} ${theme} ${mode} ${route}: blank`);
+      if (doc.documentElement.scrollWidth>w.innerWidth+1) failures.push(`${widths[i]} ${theme} ${mode} ${route}: overflow ${doc.documentElement.scrollWidth}>${w.innerWidth}`);
+      if (doc.title==='Momong preview') failures.push(`${widths[i]} ${theme} ${mode} ${route}: stale title`);
+    });
+    results.textContent=`Checked ${checked} route/size/theme/mode combinations\n`+failures.join('\n');
+  }
+  tabs.forEach(el=>el.remove());
+}
+results.textContent+=failures.length?'\nFAIL':'\nPASS: no blank screens, horizontal overflow or stale titles';
+for(const width of widths.slice(0,3)){const el=document.createElement('iframe');el.style.width=width+'px';el.src='/scripts/refinement-preview.html?theme=light&mode=postpartum#/';frames.append(el);}
+</script></body></html>

@@ -19,3 +19,7 @@ npm run build
 ```
 
 Deploy on Vercel as a Vite project (build `npm run build`, output `dist`). The current deployment proxies API routes to the VPS through `vercel.json`; local development can set `VITE_API_URL` to its local API.
+
+## Analytics dan error tracking
+
+Panduan konfigurasi PostHog, izin pengguna, dashboard, alert dan verifikasi: [docs/POSTHOG.md](docs/POSTHOG.md). Telemetry default nonaktif sampai project/key dikonfigurasi.
