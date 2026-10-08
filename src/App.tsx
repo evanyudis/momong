@@ -1,3 +1,4 @@
+import NewbornAdd from "./NewbornAdd";
 import { trackScreen } from "./telemetry";
 import { PLUS_ENABLED } from "./release";
 import { Baby, ChartNoAxesColumn, House, UserRound } from "lucide-react";
@@ -86,14 +87,14 @@ export function App() {
       <div className="page-wash" aria-hidden="true" />
       <main className="app">{screen}</main>
       {showTabs && (
-        <nav className="tabbar" aria-label="Navigasi utama" style={{ "--tab": TABS.findIndex((t) => t.path === path) } as CSSProperties}>
+        <div className={s.birthMode === "postpartum" ? "bottom-dock" : undefined}><nav className="tabbar" aria-label="Navigasi utama" style={{ "--tab": TABS.findIndex((t) => t.path === path) } as CSSProperties}>
           {TABS.map(({ href, path: p, label, Icon }) => (
             <a key={p} href={href} aria-current={p === path ? "page" : undefined}>
               <Icon size={24} strokeWidth={1.75} />
               {label}
             </a>
           ))}
-        </nav>
+        </nav>{s.birthMode === "postpartum" && <NewbornAdd key={babyKey} />}</div>
       )}
       <Toaster />
     </>

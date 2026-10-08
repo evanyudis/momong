@@ -1,6 +1,10 @@
-import { Baby, BriefcaseMedical, ChevronRight, Droplet, Gift, Milk, Sprout, Square, Users } from "lucide-react";
+import NewbornActivity from "../NewbornActivity";
+import { newbornAgeLabel, description, totals } from "../newborn";
+import { useEffect, useState } from "react";
+import { PLUS_ENABLED } from "../release";
+import { BriefcaseMedical, ChevronRight, Gift, Sprout, Users } from "lucide-react";
 import { BAG_DEFAULTS, weekNote } from "../content";
-import { agoLabel, babyAge, dateLabel, isToday, pregnancy, timeLabel } from "../dates";
+import { agoLabel, dateLabel, isToday, pregnancy, timeLabel } from "../dates";
 import { initial, useHousehold } from "../household";
 import { nextFeed } from "../plus";
 import { isPlus, getPrefs, get, list, saveSettings, settings, useDB } from "../store";
@@ -127,7 +131,7 @@ function WishlistCard() {
       <div className="row">
         <span className="glyph peach" style={{ width: 40, height: 40 }}><Gift size={20} /></span>
         <div style={{ flex: 1 }}>
-          <div className="card-title" style={{ fontSize: 16 }}>Daftar kado</div>
+          <div className="card-title">Daftar kado</div>
           <div className="card-sub num">{items.length ? `${left} barang masih dibutuhkan` : "Buat daftar kebutuhan si kecil"}</div>
         </div>
         <ChevronRight size={20} className="faint" />
@@ -151,7 +155,7 @@ export function PartnerCard() {
   return (
     <a className="card" href="#/pasangan" data-morph="/pasangan">
       <div className="spread">
-        <span className="row" style={{ gap: 8, fontWeight: 600 }}><Users size={20} color="var(--accent-primary-ink)" />Pasangan</span>
+        <span className="row card-title" style={{ gap: 8 }}><Users size={20} color="var(--accent-primary-ink)" />Pasangan</span>
         <ChevronRight size={18} className="faint" />
       </div>
       <div className="avatars" style={{ marginTop: 12 }}>
@@ -166,69 +170,20 @@ export function PartnerCard() {
   );
 }
 
+function BabyArt() { return <svg className="baby-art" viewBox="0 0 140 140" aria-hidden="true"><path d="M20 85Q4 20 64 15Q127 3 130 68Q140 130 70 131Q21 137 20 85" fill="var(--nb-petal)"/><path d="M37 73Q29 42 69 37Q105 33 108 73L110 106Q73 126 34 102Z" fill="var(--surface)"/><circle cx="70" cy="64" r="25" fill="var(--nb-peach)"/><path d="M54 63q5-6 10 0m12 0q5-6 10 0m-22 12q7 6 14 0M68 40q-4-9 5-9" fill="none" stroke="var(--ink)" strokeWidth="2.5" strokeLinecap="round"/><path d="M38 87q29 3 65 22M103 84q-21 11-51 30" stroke="var(--nb-petal)" strokeWidth="3" fill="none"/><path d="m13 25 3-7 3 7 7 3-7 3-3 7-3-7-7-3Z" fill="var(--nb-mint)"/></svg>; }
 function NewbornHome() {
   const s = settings();
-  const age = s.babyBirth ? babyAge(s.babyBirth) : null;
-  const today = (col: Parameters<typeof list>[0]) => list(col).filter((r) => isToday(r.at));
-  const bottles = today("bottle");
-  const feeds = [...list("bottle"), ...list("breast")].sort((a, b) => b.at - a.at);
-  const lastFeed = feeds[0];
-  const estimate = nextFeed(feeds);
-  return (
-    <>
-      <Header title={`Halo, ${getPrefs().name || "Bunda"}`} />
-      <div className="stack">
-        <section className="card">
-          <div className="row">
-            <span className="glyph peach"><Baby size={24} /></span>
-            <div>
-              <div className="card-title">{s.babyName || "Si kecil"}</div>
-              <div className="card-sub num">
-                {age ? `${age.days} hari · ${age.weeks} minggu` : "Atur tanggal lahir di Profil"}
-              </div>
-            </div>
-          </div>
-          <hr className="divider" style={{ margin: "16px 0" }} />
-          <div className="label">Terakhir minum</div>
-          <div className="stat" style={{ marginTop: 6 }}>
-            {lastFeed ? (Date.now() - lastFeed.at < 60_000 ? "Baru saja" : <>{agoLabel(lastFeed.at)}<small> lalu</small></>) : <small>Belum ada catatan</small>}
-          </div>
-        </section>
-
-        <section className="card newborn-today">
-          <div className="spread">
-            <div><h2 className="card-title">Hari si kecil</h2><p className="card-sub">Ringkasan aktivitas hari ini.</p></div>
-            <a className="link-btn" href="#/log" style={{ color: "inherit" }}>Catat <ChevronRight size={18} /></a>
-          </div>
-          <div className="grid2 newborn-metrics">
-            {[
-              { label: "Minum susu", value: bottles.reduce((n, r) => n + (r.ml || 0), 0), unit: "ml", color: "var(--semantic-feed)", Icon: Milk },
-              { label: "Menyusu langsung", value: today("breast").length, unit: "kali", color: "var(--accent-partner)", Icon: Baby },
-              { label: "Pumping", value: today("pump").reduce((n, r) => n + (r.ml || 0), 0), unit: "ml", color: "var(--sky-500)", Icon: Droplet },
-              { label: "Ganti popok", value: today("diaper").length, unit: "kali", color: "var(--warning)", Icon: Square },
-            ].map(({ label, value, unit, color, Icon }) => (
-              <div key={label} className="newborn-metric" style={{ background: `color-mix(in oklab, ${color} 14%, var(--surface))` }}>
-                <Icon size={20} aria-hidden="true" />
-                <div className="newborn-metric-label">{label}</div>
-                <div className="stat num">{value}<small> {unit}</small></div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {isPlus() && <a className="card feed-estimate" href="#/insight">
-          <div className="feed-estimate-heading"><span className="plus-wave-text">Perkiraan Susu</span><PlusBadge size="small" /></div>
-          <div className="card-title">{estimate ? timeLabel(estimate.at) : "Butuh tiga sesi menyusu"}</div>
-          <p className="card-sub">{estimate ? `Dari ${estimate.samples} sesi dalam tujuh hari.${estimate.at < Date.now() ? " Waktu perkiraan sudah lewat." : ""}` : "Catat minum susu atau menyusu langsung untuk melihat pola."} Perkiraan non-klinis; ikuti kebutuhan si kecil.</p>
-        </a>}
-        <PartnerCard />
-        <WishlistCard />
-        {s.hpl && (
-          <button className="link-btn faint" style={{ justifySelf: "center", fontWeight: 500 }} onClick={() => saveSettings({ birthMode: "pregnant" })}>
-            Kembali ke mode hamil
-          </button>
-        )}
-      </div>
-    </>
-  );
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(id); }, []);
+  const entries = (["bottle", "breast", "pump", "diaper"] as const).flatMap(kind => list(kind).map(r => ({...r, at:r.at as number, kind})));
+  const feeds = entries.filter(e => e.kind === "bottle" || e.kind === "breast").sort((a,b) => b.at-a.at);
+  const last = feeds[0], estimate = nextFeed(feeds);
+  return <><Header title={`Halo, ${getPrefs().name || "Bunda"}`} /><div className="stack newborn-home">
+    <section className="card newborn-hero"><div><p className="eyebrow">Si kecil</p><h2>{s.babyName || "Si kecil"}</h2><p className="muted num">{s.babyBirth ? newbornAgeLabel(s.babyBirth, new Date(now)) : "Atur tanggal lahir di Profil"}</p></div><BabyArt /></section>
+    <NewbornActivity values={totals(entries, new Date(now))} onToday={() => { location.hash = "#/log?day=today"; }} />
+    <section className="card care-card"><div className="spread"><h2 className="card-title">Terakhir minum</h2>{last && <span className="muted num">{timeLabel(last.at)}</span>}</div><div className="elapsed num">{last ? <>{agoLabel(last.at, now)}<small>{agoLabel(last.at, now) !== "baru saja" && " lalu"}</small></> : "Belum ada catatan minum"}</div><p className="card-sub">{last ? `${last.kind === "bottle" ? "Minum susu" : "Menyusu langsung"} · ${description(last)}` : "Ketuk + untuk mencatat susu atau menyusu."}</p></section>
+    {isPlus() ? <a className="card feed-estimate" href="#/insight"><div className="feed-estimate-heading"><h2 className="card-title plus-wave-text">Perkiraan Susu</h2><PlusBadge size="small" /></div><p className="estimate-status">{estimate ? timeLabel(estimate.at) : "Butuh tiga sesi menyusu"}</p><p className="card-sub">{estimate ? `Dari ${estimate.samples} sesi dalam tujuh hari.${estimate.at < now ? " Waktu perkiraan sudah lewat." : ""}` : "Catat minum susu atau menyusu langsung untuk melihat pola."} Perkiraan non-klinis; ikuti kebutuhan si kecil.</p></a> : <section className="card feed-estimate"><div className="feed-estimate-heading"><h2 className="card-title plus-wave-text">Perkiraan Susu</h2><PlusBadge size="small" /></div><p className="estimate-status">{PLUS_ENABLED ? "Tersedia di Plus" : "Segera hadir"}</p><p className="card-sub">Perkiraan waktu minum dari pola catatan susu dan menyusu. Perkiraan non-klinis; ikuti kebutuhan si kecil.</p>{PLUS_ENABLED && <a className="link-btn" href="#/plus">Lihat Plus <ChevronRight size={16} /></a>}</section>}
+    <PartnerCard /><WishlistCard />
+    {s.hpl && <button className="link-btn faint" style={{justifySelf:"center",fontWeight:500}} onClick={() => saveSettings({birthMode:"pregnant"})}>Kembali ke mode hamil</button>}
+  </div></>;
 }
