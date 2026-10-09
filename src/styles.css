@@ -126,6 +126,7 @@ body {
 }
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+:root:not([data-keyboard]) :focus-visible { outline: none; }
 button { cursor: pointer; }
 h1, h2, h3 { text-wrap: balance; margin: 0; }
 p { margin: 0; }
@@ -1055,6 +1056,7 @@ html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::aft
 .agenda-copy strong { font-size:15px; font-weight:600; }
 .agenda-copy .muted { font-size:13px; overflow-wrap:anywhere; }
 .agenda-copy time { font-size:13px; color:var(--ink-muted); }
+.day-view { min-width:0; }
 .day-heading { gap:12px; margin-bottom:12px; }
 .day-heading h2 { font-size:17px; }
 .day-heading .btn { font-size:13px; white-space:nowrap; min-height:44px; }
@@ -1073,12 +1075,12 @@ html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::aft
 .activity-heading { gap:12px; margin-bottom:12px; }
 .newborn-home .today-stamp .activity-heading h2 { margin-bottom:0; }
 .activity-heading .link-btn { font-size:13px; min-height:44px; white-space:nowrap; }
-.week-control { display:flex; position:relative; margin-inline:-20px; gap:0; margin-bottom:24px; }
+.week-control { display:flex; position:relative; gap:0; margin-bottom:24px; }
 .week-control>.icon-btn:first-child,.week-control>.icon-btn:last-child { position:absolute; z-index:1; top:12px; width:44px; height:44px; }
 .week-control>.icon-btn:first-child { left:0; }
 .week-control>.icon-btn:last-child { right:0; }
-.date-viewport { width:100%; overflow:hidden; mask-image:linear-gradient(to right,transparent,black 16%,black 84%,transparent); }
-.day-strip { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); width:100%; gap:0; overflow:visible; padding:4px 0; }
+.date-viewport { display:flex; justify-content:center; width:100%; min-width:0; overflow:hidden; mask-image:linear-gradient(to right,transparent,black 16%,black 84%,transparent); }
+.day-strip { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); width:100%; min-width:308px; flex-shrink:0; gap:0; overflow:visible; padding:4px 0; }
 .day-strip button { min-width:44px; }
 .agenda-heading { margin-bottom:8px; }
 .agenda-period { margin:16px 0 6px; }
