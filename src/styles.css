@@ -1111,3 +1111,16 @@ html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::aft
 [data-theme="dark"] { --nb-upcoming:oklch(0.43 0 0); }
 .day-strip button:disabled { color:var(--nb-upcoming); }
 @media(max-width:380px) { .newborn-hero .baby-art { width:80px; height:80px; } .newborn-hero h2 { font-size:25px; } }
+
+/* Consultation report: numbers stay aligned, long notes remain readable. */
+.report-table-scroll { overflow-x: auto; }
+.report-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.report-table th, .report-table td { padding: 12px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-subtle); white-space: pre-wrap; overflow-wrap: anywhere; min-width: 100px; }
+.report-table th { font-weight: 600; color: var(--ink-muted); }
+.report-table .report-number { text-align: right; }
+.report-details summary { cursor: pointer; min-height: 44px; }
+.report-details .report-table-section { padding: 12px 0 0; }
+.report-chart-row { display: grid; grid-template-columns: 104px 1fr 44px; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; }
+.report-chart-row > div { min-width: 0; }
+.report-chart-row > div > span { display: block; height: 8px; background: var(--accent-primary); }
+.report-chart-row > span:last-child { text-align: right; }

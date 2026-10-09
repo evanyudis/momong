@@ -1,51 +1,33 @@
 import { PLUS_ENABLED } from "../release";
 import { useRef, useState } from "react";
 import { type PlusVariant } from "../content";
-import { dateLabel, durationLabel, pregnancy, timeLabel } from "../dates";
+import { todayISO } from "../dates";
+import { buildReport, type ReportTable } from "../report";
 import { activeBabyId, babyProfiles, setPrefs, isPlus, get, getPrefs, list, put, settings, useDB } from "../store";
 import { toast, PlusSheet, TopBar } from "../ui";
-import { contractionStats, describe } from "./Log";
 
-const DAY = 86_400_000;
 const monthKey = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}`;
 
 /** Free PDF quota is shared through the household settings record. */
 export function Report() {
   useDB();
   const s = settings();
-  const [range, setRange] = useState("14");
+  const [range, setRange] = useState<"7" | "14" | "30" | "all">("14");
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [error, setError] = useState("");
-  const since = isPlus() && range === "all" ? 0 : Date.now() - Number(isPlus() ? range : "14") * DAY;
   const usedThisMonth = !isPlus() && get("settings", "report")?.month === monthKey();
-  const born = s.birthMode === "postpartum";
-  const p = !born && s.hpl ? pregnancy(s.hpl) : null;
   const [plus, setPlus] = useState<PlusVariant | null>(null);
+  const report = buildReport({ settings: s, name: getPrefs().name || "", range: isPlus() ? range : "14", now: Date.now(), records: Object.fromEntries((["bottle", "breast", "pump", "diaper", "contractions", "kicks", "symptoms"] as const).map(kind => [kind, list(kind)])) });
 
-
-  const contractions = list("contractions").filter((c) => c.at >= since && c.end);
-  const cs = contractionStats(contractions);
-  const kicks = list("kicks").filter((k) => k.at >= since);
-  const symptoms = list("symptoms").filter((x) => x.at >= since);
-  const feeds = (["bottle", "breast", "pump", "diaper"] as const).flatMap((k) => list(k).filter((r) => r.at >= since).map((r) => ({ k, r })))
-    .sort((a, b) => b.r.at - a.r.at);
+  const maxBottleMl = Math.max(1, ...report.chart.map(day => day.ml ?? 0));
 
   async function download() {
     if (lock.current || usedThisMonth) return;
     lock.current = true; setBusy(true); setError("");
     try {
       const { downloadReportPDF } = await import("../pdf");
-      const lines = [
-        `Dibuat ${dateLabel(Date.now())}. Profil: ${s.babyName || "Si kecil"}.`,
-        ...(p ? [`HPL ${dateLabel(s.hpl!)}. Minggu ke-${p.week}.`] : []),
-        ...(born ? feeds.map(({ k, r }) => `${dateLabel(r.at)} ${timeLabel(r.at)} - ${describe(k, r)}`) : [
-          "Kontraksi", ...contractions.map((r) => `${dateLabel(r.at)} ${timeLabel(r.at)} - ${durationLabel(r.end - r.at)}`),
-          "Gerakan", ...kicks.map((r) => `${dateLabel(r.at)} ${timeLabel(r.at)} - ${r.count} gerakan`),
-          "Gejala", ...symptoms.map((r) => `${dateLabel(r.at)} ${timeLabel(r.at)} - ${r.name}${r.note ? `: ${r.note}` : ""}`),
-        ]),
-      ];
-      await downloadReportPDF(`Laporan ${isPlus() && range === "all" ? "semua catatan" : `${isPlus() ? range : "14"} hari`} - ${getPrefs().name || "Bunda"}`, lines, `momong-${new Date().toISOString().slice(0, 10)}.pdf`);
+      await downloadReportPDF(report, `momong-${todayISO()}.pdf`);
       if (!isPlus()) put("settings", { id: "report", month: monthKey() });
       toast("PDF siap diunduh");
     } catch { setError("PDF belum bisa dibuat. Coba lagi; kuota belum terpakai."); }
@@ -59,46 +41,29 @@ export function Report() {
         <p className="muted">Profil: {s.babyName || "Si kecil"}. PDF dibuat di perangkat dan dapat diunduh saat offline.</p>
         {isPlus() && <label className="field no-print"><span>Profil laporan</span><select className="input" disabled={busy} value={activeBabyId()} onChange={(e) => setPrefs({ activeBabyId: e.target.value })}>{babyProfiles().map((baby) => <option key={baby.id} value={baby.id}>{baby.babyName || "Si kecil"}</option>)}</select></label>}
         {error && <p role="alert">{error}</p>}
-        <section className="card solid">
-          <div className="card-title">Laporan {isPlus() && range === "all" ? "semua catatan" : `${isPlus() ? range : "14"} hari`} · {getPrefs().name || "Bunda"}</div>
-          <div className="card-sub">
-            Dibuat {dateLabel(Date.now())}{p ? ` · HPL ${dateLabel(s.hpl!)} · minggu ke-${p.week}` : ""}
-          </div>
+        {isPlus() && <label className="field no-print"><span>Periode laporan</span><select className="input" disabled={busy} value={range} onChange={(e) => setRange(e.target.value as typeof range)}><option value="7">7 hari</option><option value="14">14 hari</option><option value="30">30 hari</option><option value="all">Semua catatan</option></select></label>}
+        <section className="card solid stack">
+          <h2 className="card-title">{report.title}</h2>
+          <p className="card-sub">{report.period}</p>
+          {report.context.map(line => <p key={line}>{line}</p>)}
+          <p className="faint">Dibuat {report.generated}</p>
         </section>
-
-        {isPlus() && <label className="field no-print"><span>Periode laporan</span><select className="input" disabled={busy} value={range} onChange={(e) => setRange(e.target.value)}><option value="7">7 hari</option><option value="14">14 hari</option><option value="30">30 hari</option><option value="all">Semua catatan</option></select></label>}
-        {!born && (
-          <>
-            <section className="card solid">
-              <div className="label">Kontraksi</div>
-              <p style={{ marginTop: 6 }} className="num">
-                {cs.count}× tercatat · rata-rata durasi {cs.avgDur ? durationLabel(cs.avgDur) : "–"} · rata-rata jarak {cs.avgGap ? durationLabel(cs.avgGap) : "–"}
-              </p>
-            </section>
-            <section className="card solid">
-              <div className="label">Hitung gerakan</div>
-              {kicks.length === 0 ? <p className="muted" style={{ marginTop: 6 }}>Belum ada sesi.</p> : kicks.map((k) => (
-                <p key={k.id} className="num" style={{ marginTop: 6 }}>{dateLabel(k.at)} {timeLabel(k.at)} · {k.done ? `10 gerakan dalam ${durationLabel(k.last - k.at)}` : `${k.count} gerakan`}</p>
-              ))}
-            </section>
-            <section className="card solid">
-              <div className="label">Gejala</div>
-              {symptoms.length === 0 ? <p className="muted" style={{ marginTop: 6 }}>Belum ada gejala.</p> : symptoms.map((x) => (
-                <p key={x.id} className="num" style={{ marginTop: 6 }}>{dateLabel(x.at)} {timeLabel(x.at)} · {x.name}{x.note ? ` — ${x.note}` : ""}</p>
-              ))}
-            </section>
-          </>
-        )}
-
-        {born && (
-          <section className="card solid">
-            <div className="label">Menyusu, pompa & popok</div>
-            {feeds.length > 80 && <p className="muted">Preview menampilkan 80 catatan terbaru. PDF mencakup seluruh catatan dalam periode yang dipilih.</p>}
-            {feeds.length === 0 ? <p className="muted" style={{ marginTop: 6 }}>Belum ada catatan.</p> : feeds.slice(0, 80).map(({ k, r }) => (
-              <p key={r.id} className="num" style={{ marginTop: 6 }}>{dateLabel(r.at)} {timeLabel(r.at)} · {describe(k, r)}</p>
-            ))}
-          </section>
-        )}
+        <section className="card solid stack">
+          <h2 className="card-title">Cakupan pencatatan</h2><p>{report.coverage}</p>
+          <h2 className="card-title">Ringkasan periode</h2>
+          {report.summary.map(line => <p key={line}>{line}</p>)}
+        </section>
+        <section className="card solid stack"><h2 className="card-title">Cara membaca laporan</h2>{report.notes.map(line => <p className="muted" key={line}>{line}</p>)}</section>
+        {report.chart.some(day => day.ml !== null) && <section className="card solid stack">
+          <h2 className="card-title">Susu botol yang diminum per hari</h2>
+          <p className="muted">Volume tercatat (ml). Tanda - berarti tidak ada volume tercatat, bukan nol konsumsi.</p>
+          <div className="report-chart">{report.chart.map(day => <div className="report-chart-row" key={day.date}><span>{day.date}</span><div>{day.ml !== null && <span style={{ width: `${day.ml / maxBottleMl * 100}%` }} />}</div><span className="num">{day.ml === null ? "-" : day.ml.toLocaleString("id-ID", { maximumFractionDigits: 1 })}</span></div>)}</div>
+        </section>}
+        {report.tables.map(table => <ReportTablePreview key={table.title} table={table} />)}
+        <details className="card solid report-details"><summary>Lampiran catatan · {report.details.rows.length} catatan</summary>
+          {report.details.rows.length > 80 && <p className="muted">Preview menampilkan 80 catatan pertama. PDF mencakup seluruh catatan dalam periode.</p>}
+          <ReportTablePreview table={{ ...report.details, rows: report.details.rows.slice(0, 80) }} />
+        </details>
 
         <div className="no-print stack" style={{ marginTop: 8 }}>
           {/* Free quota used: the button opens the Plus sheet instead of printing. The 1×/bulan rule itself is unchanged. */}
@@ -119,4 +84,10 @@ export function Report() {
       <PlusSheet variant={plus} onClose={() => setPlus(null)} />
     </>
   );
+}
+
+function ReportTablePreview({ table }: { table: ReportTable }) {
+  return <section className="card solid stack report-table-section"><h2 className="card-title">{table.title}</h2>
+    {!table.rows.length ? <p className="muted">Belum ada catatan dalam periode ini.</p> : <div className="report-table-scroll" role="region" aria-label={table.title} tabIndex={0}><table className="report-table"><thead><tr>{table.columns.map(col => <th scope="col" key={col}>{col}</th>)}</tr></thead><tbody>{table.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j} className={table.numeric?.includes(j) ? "num report-number" : ""}>{cell}</td>)}</tr>)}</tbody></table></div>}
+  </section>;
 }
