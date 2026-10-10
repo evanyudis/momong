@@ -334,10 +334,11 @@ button.card:active, a.card:active { scale: 0.97; }
 
 /* Native date/time fields must shrink with their grid column, including iOS's intrinsic control. */
 .input:is([type="date"], [type="time"], [type="datetime-local"]) { display: block; -webkit-appearance: none; appearance: none; }
-.input:is([type="time"], [type="datetime-local"])::-webkit-date-and-time-value { min-width: 0; text-align: left; }
+.input:is([type="date"], [type="time"], [type="datetime-local"])::-webkit-date-and-time-value { min-width: 0; text-align: left; margin: 0; }
+.input:is([type="date"], [type="time"], [type="datetime-local"])::-webkit-datetime-edit { min-width: 0; padding: 0; }
 
 /* DateInput: native picker, but sized like every other .input (iOS gives date inputs an intrinsic width). */
-.date-input { position: relative; display: block; min-width: 0; }
+.date-input { position: relative; display: block; min-width: 0; max-width: 100%; }
 .date-input .input {
   display: block;
   min-width: 0;
@@ -349,8 +350,6 @@ button.card:active, a.card:active { scale: 0.97; }
   line-height: 52px;
   color: var(--ink);
 }
-.date-input .input::-webkit-date-and-time-value { text-align: left; margin: 0; }
-.date-input .input::-webkit-datetime-edit { padding: 0; }
 /* Stretch the native trigger invisibly over the field so any tap opens the picker. */
 .date-input .input::-webkit-calendar-picker-indicator {
   position: absolute; inset: 0;

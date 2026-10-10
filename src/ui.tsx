@@ -14,13 +14,13 @@ import { PLUS_COPY, PLUS_FEATURES, type PlusVariant } from "./content";
 import { dayLabel } from "./dates";
 
 /**
- * Native date picker that fits its container: full width, value left-aligned, calendar glyph on the right.
+ * Native date/time picker that fits its container: full width, value left-aligned, calendar glyph on the right.
  * Every native input prop passes through (value/onChange or defaultValue, min/max, required, aria-*, ref).
  */
-export function DateInput({ className, ...props }: Omit<ComponentProps<"input">, "type">) {
+export function DateInput({ className, type = "date", ...props }: Omit<ComponentProps<"input">, "type"> & { type?: "date" | "time" | "datetime-local" }) {
   return (
     <span className="date-input">
-      <input {...props} type="date" className={className ? `input ${className}` : "input"} />
+      <input {...props} type={type} className={className ? `input ${className}` : "input"} />
       <CalendarDays className="date-input-icon" size={20} aria-hidden="true" />
     </span>
   );

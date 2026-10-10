@@ -11,7 +11,7 @@ import { alertVisible, analyzePattern, clock, distanceTier, durLabel, finished, 
 import { durationLabel, isToday, pregnancy, timeLabel } from "../dates";
 import { animate, reducedMotion } from "../motion";
 import { isPlus, getPrefs, hasHidden, list, put, remove, type Rec, setPrefs, settings, useDB } from "../store";
-import { DeleteButton, Header, PlusSheet, Sheet, toast } from "../ui";
+import { DateInput, DeleteButton, Header, PlusSheet, Sheet, toast } from "../ui";
 
 export function Log() {
   useDB();
@@ -519,7 +519,7 @@ export function NewbornSheet({ kind, record, onClose }: { kind: Kind | null; rec
           </div>}
           <label className="field"><span>Durasi (menit:detik)</span><input className="input num" type="text" inputMode="text" required pattern="[0-9]{1,4}:[0-5][0-9]" placeholder="05:30" aria-describedby="dbf-duration-hint" disabled={running} value={minutes} onChange={(e) => setMinutes(e.target.value)} /></label><p id="dbf-duration-hint" className="card-sub">{running ? "Hentikan timer untuk mengubah durasi." : "Contoh 05:30 = 5 menit 30 detik. Bisa diisi manual atau dari timer."}</p>
         </>}
-        <label className="field"><span>{k === "breast" || k === "pump" ? "Waktu mulai sesi" : "Waktu catatan"}</span><input className="input num" type="datetime-local" required disabled={running} max={localDateTime(Date.now())} value={at} onChange={(e) => setAt(e.target.value)} /></label>
+        <label className="field"><span>{k === "breast" || k === "pump" ? "Waktu mulai sesi" : "Waktu catatan"}</span><DateInput className="num" type="datetime-local" required disabled={running} max={localDateTime(Date.now())} value={at} onChange={(e) => setAt(e.target.value)} /></label>
         {k === "pump" && <div className="pump-tags">
           <div className="label">Tag <span className="faint">(opsional)</span></div>
           <div className="chips" role="group" aria-label="Pilih tag pumping">

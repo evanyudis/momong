@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { DeleteButton, PlusSheet, Sheet } from "../src/ui";
+import { DateInput, DeleteButton, PlusSheet, Sheet } from "../src/ui";
 import { NewbornSheet } from "../src/screens/Log";
 import { RestoreSheet } from "../src/screens/Restore";
 import { InstallSheet } from "../src/screens/Install";
@@ -24,6 +24,7 @@ function Check() {
   </div>
     <Sheet open={open} onOpenChange={setOpen} title="Long form">
       <form className="stack" onSubmit={e => { e.preventDefault(); setOpen(false); }}>
+        {(["date", "time", "datetime-local"] as const).map(type => <label className="field" key={type}><span>Picker {type}</span><DateInput type={type} defaultValue={type === "date" ? "2026-10-01" : type === "time" ? "12:30" : "2026-10-01T12:30"} /></label>)}
         {Array.from({ length: 15 }, (_, i) => <label className="field" key={i}><span>Field {i + 1}</span><input className="input" /></label>)}
         <DeleteButton className="btn" label="fixture" onDelete={() => { setDeleted(true); setOpen(false); }}>Delete fixture</DeleteButton>
         <button type="submit" className="btn">Save fixture</button>

@@ -19,6 +19,21 @@ await Promise.all([['Chrome', chromium], ['WebKit', webkit]].map(async ([name, e
         localStorage.setItem('bb_prefs_v1', JSON.stringify({ guest: true, name: 'Picker test', theme: 'light' }));
         localStorage.setItem('bb_db_v1', JSON.stringify({ settings: { main: { id: 'main', updatedAt: Date.now(), birthMode: 'postpartum', babyName: 'Si kecil', babyBirth: '2026-10-01' } } }));
       });
+      if (!process.argv.includes('--preview')) {
+        await page.goto(new URL('/scripts/sheets-check.html', url).href);
+        await page.getByRole('button', { name: 'Open form', exact: true }).click();
+        await page.waitForTimeout(600);
+        for (const [type, value] of [['date', '2026-10-02'], ['time', '23:45'], ['datetime-local', '2026-10-02T23:45']]) {
+          const input = page.getByLabel(`Picker ${type}`, { exact: true });
+          await input.scrollIntoViewIfNeeded();
+          assert.ok(await input.evaluate(el => {
+            const r = el.getBoundingClientRect(), f = el.closest('.field').getBoundingClientRect();
+            return r.left >= f.left - 1 && r.right <= f.right + 1;
+          }), `${name} ${width}px: ${type} fits its field`);
+          await input.fill(value);
+          assert.equal(await input.inputValue(), value);
+        }
+      }
       await page.goto(url);
       for (const [kind, label] of [['bottle', 'Minum susu'], ['breast', 'Menyusu langsung'], ['pump', 'Pumping'], ['diaper', 'Ganti popok']]) {
         await page.getByRole('button', { name: 'Tambah catatan', exact: true }).click();
@@ -55,7 +70,19 @@ await Promise.all([['Chrome', chromium], ['WebKit', webkit]].map(async ([name, e
         assert.equal(await page.getByRole('dialog').count(), 0);
         assert.ok(await page.evaluate(({ kind, at }) => Object.values(JSON.parse(localStorage.getItem('bb_db_v1'))[kind]).some(record => record.at === new Date(at).getTime()), { kind, at }), 'saved timestamp keeps its local date/time');
       }
+      await page.goto(new URL('/#/profil', url).href);
+      await page.getByRole('button', { name: 'Edit profil', exact: true }).click();
+      await page.waitForTimeout(600);
+      const profileDate = page.locator('input[type="date"]');
+      await profileDate.scrollIntoViewIfNeeded();
+      assert.ok(await profileDate.evaluate(el => {
+        const r = el.getBoundingClientRect(), f = el.closest('.field').getBoundingClientRect();
+        return r.left >= f.left - 1 && r.right <= f.right + 1 && document.documentElement.scrollWidth <= innerWidth;
+      }), 'profile date fits the page');
+      await profileDate.fill('2026-10-02');
       await page.reload();
+      await page.getByRole('button', { name: 'Edit profil', exact: true }).click();
+      assert.equal(await page.locator('input[type="date"]').inputValue(), '2026-10-02', 'profile date persists');
       assert.ok(await page.evaluate(() => ['bottle', 'breast', 'pump', 'diaper'].every(kind => Object.keys(JSON.parse(localStorage.getItem('bb_db_v1'))[kind]).length === 1)), 'all four records survive reload');
       assert.deepEqual(errors, []);
       await context.close();

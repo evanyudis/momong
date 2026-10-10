@@ -1,7 +1,7 @@
 import { PLUS_ENABLED } from "../release";
 import { useRef, useState } from "react";
 import { activeBabyId, settings, getPrefs, isPlus, setPrefs, uid, useDB } from "../store";
-import { toast, TopBar } from "../ui";
+import { DateInput, toast, TopBar } from "../ui";
 
 export function Reminders() {
   useDB();
@@ -36,7 +36,7 @@ export function Reminders() {
           } catch { setError("Pengingat belum tersimpan. Coba lagi."); }
         }}>
           <label className="field"><span>Nama pengingat</span><input ref={labelInput} className="input" name="label" required maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Misal: pompa atau vitamin" /></label>
-          <label className="field"><span>Waktu</span><input className="input" name="at" type="datetime-local" required value={date} onChange={(e) => setDate(e.target.value)} /></label>
+          <label className="field"><span>Waktu</span><DateInput name="at" type="datetime-local" required value={date} onChange={(e) => setDate(e.target.value)} /></label>
           <button className="btn btn-ink block">{editing ? "Simpan perubahan" : "Simpan pengingat"}</button>
           {editing && <button type="button" className="btn btn-soft block" onClick={() => { setEditing(null); setLabel(""); setDate(""); }}>Batal edit</button>}
         </form>
