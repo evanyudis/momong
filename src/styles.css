@@ -482,7 +482,7 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
   border-radius: 26px; /* 32 − 6 */
   background: var(--surface-sunk);
   translate: calc(var(--tab, 0) * 100%) 0;
-  transition: translate 150ms cubic-bezier(0.645, 0.045, 0.355, 1);
+  transition: translate 250ms cubic-bezier(0.645, 0.045, 0.355, 1);
   pointer-events: none;
 }
 
@@ -1021,6 +1021,7 @@ html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::aft
 .newborn-add-option[data-focus-visible],.newborn-filter-option[data-focus-visible] { outline:2px solid var(--ink); outline-offset:2px; }
 .newborn-add-popover[data-entering] { animation:menu-in 180ms cubic-bezier(.23,1,.32,1); }
 .newborn-add-popover[data-exiting] { animation:menu-in 120ms ease-in reverse; }
+@keyframes menu-in { from { opacity: 0; transform: translateY(6px) scale(.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .history-section .entry-row .grow { flex:1; }
 .newborn-filter-popover { border-radius:18px; padding:6px; background:var(--surface); color:var(--ink); box-shadow:var(--elevation-float); min-width:220px; outline:none; z-index:calc(var(--z-tabbar) + 1); }
 .newborn-filter-list { outline:none; }
