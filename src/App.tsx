@@ -96,7 +96,7 @@ export function App() {
           ))}
         </nav>{s.birthMode === "postpartum" && <NewbornAdd key={babyKey} />}</div>
       )}
-      <Toaster />
+      <Toaster aboveNavigation={showTabs} />
     </>
   );
 }

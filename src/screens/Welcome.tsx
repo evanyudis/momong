@@ -31,7 +31,7 @@ export function Welcome({ user }: { user?: { name: string; email: string } }) {
     submitted.current = true;
     try {
       if (saveOnboarding({ mode, name, hpl, babyBirth: birth, babyName })) {
-        toast("Profil siap. Selamat datang di Momong!", true);
+        toast("Profil tersimpan. Selamat datang di Momong!");
         location.hash = "#/";
       } else submitted.current = false;
     } catch { submitted.current = false; setError("Profil belum tersimpan. Coba lagi."); }

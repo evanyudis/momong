@@ -29,7 +29,7 @@ export function Report() {
       const { downloadReportPDF } = await import("../pdf");
       await downloadReportPDF(report, `momong-${todayISO()}.pdf`);
       if (!isPlus()) put("settings", { id: "report", month: monthKey() });
-      toast("PDF siap diunduh");
+      toast("Laporan PDF dibuat. Periksa unduhan di browser.");
     } catch { setError("PDF belum bisa dibuat. Coba lagi; kuota belum terpakai."); }
     finally { lock.current = false; setBusy(false); }
   }

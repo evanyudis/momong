@@ -152,14 +152,16 @@ function Household() {
     if (!invite) return;
     try {
       if (navigator.share) await navigator.share({ title: "Momong", text: message });
-      else { await navigator.clipboard.writeText(invite.url); toast("Tautan disalin"); }
-    } catch { /* user cancelled */ }
+      else { await navigator.clipboard.writeText(invite.url); toast("Tautan undangan disalin. Siap dikirim ke pasangan."); }
+    } catch (e) {
+      if (!(e instanceof DOMException && e.name === "AbortError")) toast("Undangan belum dibagikan. Cek izin berbagi lalu coba lagi.", "error");
+    }
   }
 
   async function revoke(id: string, self: boolean) {
     if (!confirm(self ? "Keluar dari keluarga ini? Catatan di HP ini tetap ada." : `Hapus ${h.partnerName} dari keluarga? Catatan bersama tetap ada.`)) return;
-    try { await removeMember(id); setInvite(null); toast(self ? "Kamu keluar dari keluarga" : "Pasangan dihapus"); }
-    catch { toast("Gagal. Coba lagi."); }
+    try { await removeMember(id); setInvite(null); toast(self ? "Kamu sudah keluar dari keluarga. Catatan di HP ini tetap tersimpan." : "Akses pasangan dihapus. Catatan bersama tetap tersimpan."); }
+    catch { toast(self ? "Belum bisa keluar dari keluarga. Cek koneksi lalu coba lagi." : "Akses pasangan belum dihapus. Cek koneksi lalu coba lagi.", "error"); }
   }
 
   return (
@@ -239,7 +241,7 @@ function Household() {
           <p className="muted" style={{ textAlign: "center", fontSize: 15 }}>Kedua kursi sudah terisi.</p>
         )}
 
-        <button className="link-btn muted" style={{ justifySelf: "center", fontWeight: 500 }} onClick={() => { void signOut(); toast("Keluar dari akun. Catatan tetap di HP ini."); }}>
+        <button className="link-btn muted" style={{ justifySelf: "center", fontWeight: 500 }} onClick={() => { void signOut(); toast("Sudah keluar dari akun. Catatan tetap tersimpan di HP ini."); }}>
           <LogOut size={16} style={{ marginRight: 6 }} />Keluar akun ({h.me?.user.email})
         </button>
       </div>
@@ -260,7 +262,7 @@ export function MagicLanding({ token }: { token: string | null }) {
         if (pendingInvite) {
           go(`#/gabung?invite=${encodeURIComponent(pendingInvite)}`);
           return;
-        } else toast("Berhasil masuk");
+        } else toast("Sudah masuk. Selamat datang kembali!");
         go(authDestination("#/"));
       } catch {
         setState("error");
@@ -295,11 +297,11 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     try {
       await joinHousehold(invite!);
       localStorage.removeItem(PENDING_INVITE);
-      toast("Kamu bergabung dengan pasangan");
+      toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
       go("#/pasangan");
     } catch (e) {
       const code = e instanceof ApiError ? e.code : "";
-      toast(code === "seats_full" ? "Kursi keluarga sudah penuh" : "Undangan sudah tidak berlaku");
+      toast(code === "seats_full" ? "Keluarga sudah memiliki dua anggota. Minta pasangan memeriksa akses keluarga." : code === "invite_invalid" ? "Undangan sudah tidak berlaku. Minta tautan baru dari pasangan." : "Belum bisa bergabung. Cek koneksi lalu coba lagi.", "error");
       setBusy(false);
     }
   }

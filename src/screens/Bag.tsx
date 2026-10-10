@@ -45,7 +45,7 @@ export function Bag() {
     if (!label.trim()) return;
     try {
       put("bag", { custom: true, label: label.trim(), checked: false, at: Date.now() });
-      setLabel(""); setComplete(false); setError(""); toast("Barang ditambahkan ke tas RS");
+      setLabel(""); setComplete(false); setError(""); toast("Barang ditambahkan ke daftar tas RS");
     } catch { setError("Barang belum tersimpan. Coba lagi."); }
   }
 

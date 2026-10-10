@@ -13,7 +13,7 @@ export function startReminders() {
     setPrefs({ reminders: prefs.reminders!.map((r) => ids.has(r.id) ? { ...r, firedAt: Date.now() } : r) });
     const profiles = babyProfiles();
     const message = (r: Reminder) => `${profiles.find((baby) => baby.id === r.babyId)?.babyName || "Si kecil"}: ${r.label}`;
-    toast(`Pengingat: ${due.map(message).join(" · ")}`);
+    toast(`Pengingat untuk ${due.map(message).join(" · ")}`, "info");
     for (const reminder of due) {
       if (prefs.notifyReminders && "Notification" in window && Notification.permission === "granted") {
         try { new Notification("Momong · Pengingat", { body: message(reminder), tag: reminder.id }); } catch { /* in-app reminder remains available */ }

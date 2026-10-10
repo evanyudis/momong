@@ -32,7 +32,7 @@ export function Reminders() {
           setSavedRow(id);
           setEditing(null);
           setLabel(""); setDate(""); setError("");
-          toast(`Pengingat ${title.slice(0, 120)} ${editing ? "diperbarui" : "tersimpan"}`);
+          toast(`Pengingat “${title.slice(0, 120)}” ${editing ? "diperbarui" : "tersimpan"}`);
           } catch { setError("Pengingat belum tersimpan. Coba lagi."); }
         }}>
           <label className="field"><span>Nama pengingat</span><input ref={labelInput} className="input" name="label" required maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Misal: pompa atau vitamin" /></label>

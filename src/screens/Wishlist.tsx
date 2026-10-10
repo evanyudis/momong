@@ -56,7 +56,7 @@ export function Wishlist() {
       const { data } = await api<{ token: string; url: string; expiresAt: string }>("/wishlist/shares", { method: "POST", body: JSON.stringify({ babyId: activeBabyId(), items: items.filter((i) => !i.have).map((i) => ({ id: i.id, label: i.label })) }) });
       if (!alive.current) return;
       localStorage.setItem(key, data.token); setShare(data.token); setExpiresAt(data.expiresAt);
-      setRefresh((n) => n + 1); toast("Daftar dipublikasikan. Pilih cara berbagi di bawah.");
+      setRefresh((n) => n + 1); toast("Tautan daftar kado siap. Pilih cara berbagi di bawah.");
     } catch { if (alive.current) setShareError("Daftar belum dibagikan. Cek koneksi atau izin berbagi, lalu coba lagi."); }
     finally { lock.current = false; if (alive.current) setBusy(false); }
   }
@@ -116,12 +116,12 @@ export function Wishlist() {
             <a className="btn btn-coral block" target="_blank" rel="noopener noreferrer" href={`https://wa.me/?text=${encodeURIComponent("Daftar kado Momong: " + location.origin + "/#/kado-bersama?token=" + encodeURIComponent(share))}`}>Bagikan ke WhatsApp</a>
             <button className="btn btn-soft block" onClick={async () => {
               const url = location.origin + "/#/kado-bersama?token=" + encodeURIComponent(share);
-              try { if (navigator.share) await navigator.share({ title: "Daftar kado Momong", url }); else { await navigator.clipboard.writeText(url); toast("Tautan disalin"); } }
-              catch { toast("Berbagi dibatalkan atau belum tersedia."); }
+              try { if (navigator.share) await navigator.share({ title: "Daftar kado Momong", url }); else { await navigator.clipboard.writeText(url); toast("Tautan daftar kado disalin. Siap dibagikan."); } }
+              catch (e) { if (!(e instanceof DOMException && e.name === "AbortError")) toast("Daftar kado belum dibagikan. Coba salin tautannya.", "error"); }
             }}>Bagikan</button>
             <button className="btn btn-soft block" onClick={async () => {
-              try { await navigator.clipboard.writeText(location.origin + "/#/kado-bersama?token=" + encodeURIComponent(share)); toast("Tautan disalin"); }
-              catch { toast("Salin tautan belum diizinkan browser."); }
+              try { await navigator.clipboard.writeText(location.origin + "/#/kado-bersama?token=" + encodeURIComponent(share)); toast("Tautan daftar kado disalin. Siap dibagikan."); }
+              catch { toast("Tautan belum disalin. Coba lagi atau gunakan tombol Bagikan.", "error"); }
             }}>Salin tautan</button>
             <a className="link-btn" href={`#/kado-bersama?token=${encodeURIComponent(share)}`}>Lihat daftar yang dibagikan</a>
             </>}
@@ -129,7 +129,7 @@ export function Wishlist() {
             <button className="btn btn-soft block" disabled={busy || !online} onClick={async () => {
               if (lock.current) return;
               lock.current = true; setBusy(true);
-              try { await api(`/wishlist/shares/${encodeURIComponent(share)}`, { method: "DELETE" }); localStorage.removeItem(key); if (!alive.current) return; setShare(null); setClaims([]); setExpiresAt(null); setShareError(""); toast("Tautan dinonaktifkan"); }
+              try { await api(`/wishlist/shares/${encodeURIComponent(share)}`, { method: "DELETE" }); localStorage.removeItem(key); if (!alive.current) return; setShare(null); setClaims([]); setExpiresAt(null); setShareError(""); toast("Tautan daftar kado dinonaktifkan. Tautan lama tidak bisa dibuka lagi."); }
               catch { if (alive.current) setShareError("Tautan belum bisa dinonaktifkan. Coba lagi saat online."); }
               finally { lock.current = false; if (alive.current) setBusy(false); }
             }}>Nonaktifkan tautan</button>
@@ -177,7 +177,7 @@ export function SharedWishlist({ token }: { token: string | null }) {
         lock.current = true; setBusy(true); setError("");
         try { await api(`/wishlist/shared/${encodeURIComponent(token!)}/claims`, { method: "POST", body: JSON.stringify({ itemId: item.id, name: name.trim() }) }); setSavedItem(item.id); setRound((r) => r + 1); toast(`${item.label} dipilih sebagai kado`); }
         catch (e) {
-          if (e instanceof ApiError && e.status === 409) { toast("Barang sudah dipilih orang lain. Daftar diperbarui."); setRound((r) => r + 1); }
+          if (e instanceof ApiError && e.status === 409) { toast("Kado ini sudah dipilih orang lain. Pilih barang lain dari daftar.", "info"); setRound((r) => r + 1); }
           else setError("Barang belum bisa dipilih. Cek koneksi atau minta tautan baru.");
         }
         finally { lock.current = false; setBusy(false); }

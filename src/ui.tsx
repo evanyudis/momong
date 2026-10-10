@@ -3,9 +3,12 @@ export { PlusBadge } from "./PlusBadge";
 import { PlusMesh } from "./PlusMesh";
 import { PLUS_ENABLED } from "./release";
 import { PlanPicker, selectedPlan } from "./billing";
-import { Baby, Bell, CalendarDays, ChartNoAxesColumn, Check, ChevronLeft, FileText, Gift, History, Sparkles, Timer, Trash2, X } from "lucide-react";
-import { type ComponentProps, type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Baby, Bell, CalendarDays, ChartNoAxesColumn, CircleCheck, CircleAlert, Info, Check, ChevronLeft, FileText, Gift, History, Sparkles, Timer, Trash2, X } from "lucide-react";
+import { type ComponentProps, type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Toaster as SonnerToaster } from "sonner";
+import { toast } from "./toast";
+export { toast } from "./toast";
 import { usePreventScroll } from "react-aria/usePreventScroll";
 import { PLUS_COPY, PLUS_FEATURES, type PlusVariant } from "./content";
 import { dayLabel } from "./dates";
@@ -423,47 +426,16 @@ export function Ring({ value, size = 150, stroke = 12, knob, children }: { value
   );
 }
 
-// Tiny global toast.
-let toastMsg: { message: string; celebrate: boolean } | null = null;
-const toastListeners = new Set<() => void>();
-let toastTimer: ReturnType<typeof setTimeout> | undefined;
-let toastRemaining = 0;
-let toastStarted = 0;
-function resumeToast() {
-  if (!toastMsg || document.hidden) return;
-  toastStarted = Date.now();
-  toastTimer = setTimeout(() => { toastMsg = null; toastListeners.forEach((l) => l()); }, toastRemaining);
-}
-export function toast(msg: string, celebrate = false) {
-  toastMsg = msg ? { message: msg, celebrate } : null;
-  toastListeners.forEach((l) => l());
-  clearTimeout(toastTimer);
-  toastRemaining = Math.max(3000, msg.split(/\s+/).length * 300);
-  resumeToast();
-}
-export function Toaster() {
-  const msg = useSyncExternalStore((l) => { toastListeners.add(l); return () => toastListeners.delete(l); }, () => toastMsg);
-  // Stays mounted so the exit can play; visibility is an interruptible transition.
-  const [text, setText] = useState<typeof toastMsg>(null);
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const changed = () => {
-      if (document.hidden) {
-        clearTimeout(toastTimer);
-        toastRemaining = Math.max(0, toastRemaining - (Date.now() - toastStarted));
-      } else resumeToast();
-    };
-    document.addEventListener("visibilitychange", changed);
-    return () => document.removeEventListener("visibilitychange", changed);
-  }, []);
-  useEffect(() => {
-    if (!msg) { setVisible(false); return; }
-    setText(msg);
-    const raf = requestAnimationFrame(() => setVisible(true));
-    return () => cancelAnimationFrame(raf);
-  }, [msg]);
-  return <>
-    <div role="status" className="visually-hidden">{msg?.message ?? ""}</div>
-    <div className="toast" aria-hidden="true" data-instant={instantMotion()} data-visible={visible}>{text?.celebrate && <Check className="success-check" size={22} />}{text?.message}</div>
-  </>;
+export function Toaster({ aboveNavigation = false }: { aboveNavigation?: boolean }) {
+  const offset = {
+    bottom: `calc(env(safe-area-inset-bottom) + ${aboveNavigation ? 104 : 24}px)`,
+    left: "max(16px, env(safe-area-inset-left))",
+    right: "max(16px, env(safe-area-inset-right))",
+  };
+  return createPortal(<SonnerToaster
+    className="momong-toaster" position="bottom-center" offset={offset} mobileOffset={offset}
+    closeButton visibleToasts={3} gap={10} containerAriaLabel="Notifikasi" customAriaLabel="Notifikasi (Alt+T)"
+    toastOptions={{ classNames: { toast: "momong-toast" }, closeButtonAriaLabel: "Tutup notifikasi" }}
+    icons={{ success: <CircleCheck size={20} aria-hidden="true" />, error: <CircleAlert size={20} aria-hidden="true" />, info: <Info size={20} aria-hidden="true" />, close: <X size={18} aria-hidden="true" /> }}
+  />, document.body);
 }

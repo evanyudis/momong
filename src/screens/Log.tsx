@@ -66,12 +66,12 @@ function PregnancyLog() {
       // Start-to-start, like v1: this start minus the previous finished start.
       put("contractions", { id: running.id, end, interval: intervalFor(running.at, contractions) });
       setSaved(end - running.at);
-      toast(`Kontraksi ${durLabel(end - running.at)} dicatat`);
+      toast(`Kontraksi ${durLabel(end - running.at)} tersimpan`);
     } else {
       setSaved(null);
       put("contractions", { at: Date.now() });
     }
-    } catch { toast("Kontraksi belum tersimpan. Coba lagi."); }
+    } catch { toast("Kontraksi belum tersimpan. Coba simpan lagi.", "error"); }
   }
 
   function addKick() {
@@ -84,8 +84,8 @@ function PregnancyLog() {
     const count = kick.count + 1;
     const done = count >= 10;
     put("kicks", { id: kick.id, count, last: Date.now(), done });
-    if (done) toast(`10 gerakan dalam ${durationLabel(Date.now() - kick.at)}`);
-    } catch { changedKick.current = false; toast("Gerakan belum tersimpan. Coba lagi."); }
+    if (done) toast(`10 gerakan bayi tercatat dalam ${durationLabel(Date.now() - kick.at)}`);
+    } catch { changedKick.current = false; toast("Gerakan bayi belum tersimpan. Coba catat lagi.", "error"); }
   }
 
   return (
@@ -335,7 +335,7 @@ function SymptomSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o:
         savedNames.current.add(name);
       }
       onOpenChange(false);
-      toast(`${picked.length} gejala dicatat`);
+      toast(`${picked.length} gejala tersimpan`);
     } catch { saving.current = false; setError("Catatan belum lengkap tersimpan. Coba simpan lagi."); }
   }
   return (
@@ -464,7 +464,7 @@ export function NewbornSheet({ kind, record, onClose }: { kind: Kind | null; rec
       }
 
       onClose();
-      toast(`${describe(k, result)} ${record ? "diperbarui" : "dicatat"}`);
+      toast(`${describe(k, result)} ${record ? "diperbarui" : "tersimpan"}`);
     } catch (e) { saved.current = false; setError(e instanceof Error && !(e instanceof DOMException) ? e.message : "Catatan belum tersimpan. Coba simpan lagi."); }
   }
 

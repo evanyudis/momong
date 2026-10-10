@@ -605,29 +605,40 @@ textarea.input { padding: 12px 16px; min-height: 88px; resize: vertical; }
 .plus-chip { padding: 3px 10px; font-size: 13px; background: var(--surface); color: var(--accent-partner-ink); }
 
 /* ---------- Toast ---------- */
-.toast {
-  position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 12px);
+[data-sonner-toaster].momong-toaster {
   z-index: var(--z-toast);
-  translate: -50% 0;
-  padding: 12px 18px;
-  max-width: calc(100vw - 2 * max(16px, env(safe-area-inset-left), env(safe-area-inset-right)));
-  overflow-wrap: anywhere;
-  text-align: center;
-  border-radius: var(--radius-pill);
-  background: var(--ink); color: var(--on-ink);
-  font-size: 15px; font-weight: 500;
+  font-family: inherit;
+}
+[data-sonner-toaster] .momong-toast[data-styled="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
   box-shadow: var(--elevation-float);
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(-8px) scale(0.97);
-  /* Exit: quieter and faster, ease-in. */
-  transition: opacity 150ms cubic-bezier(0.55, 0, 1, 0.45), transform 150ms cubic-bezier(0.55, 0, 1, 0.45);
+  padding: 16px 56px 16px 16px;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
-.toast[data-visible="true"] {
-  opacity: 1;
-  transform: none;
-  transition: opacity 220ms var(--ease-out), transform 220ms var(--ease-out);
+.momong-toast [data-content] { min-width: 0; }
+.momong-toast [data-title] { font-weight: 500; }
+.momong-toast [data-icon] { width: 20px; height: 20px; margin: 0; flex: none; }
+.momong-toast[data-type="error"] [data-icon] { color: var(--field-danger); }
+[data-sonner-toaster] .momong-toast[data-styled="true"] [data-close-button] {
+  left: auto;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-muted);
 }
+[data-sonner-toaster] .momong-toast[data-styled="true"] [data-close-button]:hover { background: var(--surface-sunk); color: var(--ink); }
+[data-sonner-toaster] .momong-toast [data-close-button]:focus-visible { outline: 2px solid var(--ink); outline-offset: -4px; }
 
 /* Contraction running state: one pulse to show the timer is live */
 .live { animation: live 1.6s ease-in-out infinite; }
@@ -820,13 +831,7 @@ button, [role="button"], .check-label, .tabbar a, .btn, .link-btn { user-select:
 .onboarding-progress span { flex: 1; height: 4px; border-radius: 4px; background: var(--surface-sunk); }
 .onboarding-progress [data-complete="true"] { background: var(--accent-primary); }
 .completion { color: var(--success-ink); display: flex; align-items: center; gap: 8px; }
-html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::after,
-.toast[data-instant="true"] { animation: none !important; transition: none !important; }
-
-.toast { display: flex; align-items: center; gap: 8px; }
-.success-check { flex: none; animation: check-settle 480ms var(--ease-out); }
-@keyframes check-settle { 0% { opacity: 0; transform: scale(.97) rotate(-12deg); } 65% { opacity: 1; transform: scale(1.08) rotate(4deg); } 100% { transform: none; } }
-@media (prefers-reduced-motion: reduce) { .success-check { animation: none; } }
+html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::after { animation: none !important; transition: none !important; }
 
 .sync-busy { animation: sync-spin 900ms linear infinite; }
 @keyframes sync-spin { to { transform: rotate(360deg); } }

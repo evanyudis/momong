@@ -7,6 +7,7 @@ const element = () => ({ isConnected: true, focus() { active = this; }, getClien
 const previous = element(), heading = element(), first = element(), last = element(), explicit = element();
 const background = [{ inert: false }, { inert: true }];
 const doc = {
+  head: { appendChild() {} }, createElement: () => ({ appendChild() {} }), createTextNode: (text: string) => text,
   get activeElement() { return active; },
   documentElement: { style: { overflow: "auto" }, dataset: {} }, body: { style: { overflow: "" } },
   querySelectorAll: () => background,

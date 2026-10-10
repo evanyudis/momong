@@ -150,7 +150,7 @@ export function Profil() {
           <div className="card-title">Akun</div>
           <p className="muted">{h.me?.user.email}</p>
           <button className="btn btn-danger-soft block" onClick={() => {
-            void signOut(); toast("Keluar dari akun. Catatan tetap di HP ini.");
+            void signOut(); toast("Sudah keluar dari akun. Catatan tetap tersimpan di HP ini.");
           }}>Keluar akun</button>
         </section>}
         <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>Momong · Catatan, bukan saran medis.</p>
@@ -203,7 +203,7 @@ function PregnantSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
     try {
       saveSettings({ birthMode: "pregnant", hpl: settings().hpl || hpl });
       onOpenChange(false);
-      toast("Mode kehamilan aktif. Catatan newborn tetap tersimpan.");
+      toast("Mode kehamilan aktif. Catatan bayi tetap tersimpan.");
       location.hash = "#/";
     } catch { setError("Mode belum berubah. Coba lagi."); }
   }
@@ -238,7 +238,7 @@ function BornSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: bo
           onClick={() => {
             try {
               saveSettings({ birthMode: "postpartum", babyBirth: date, babyName: name.trim() || undefined });
-              onOpenChange(false); toast("Mode newborn aktif. Catatan kehamilan tetap tersimpan."); location.hash = "#/";
+              onOpenChange(false); toast("Mode bayi aktif. Catatan kehamilan tetap tersimpan."); location.hash = "#/";
             } catch { setError("Mode belum berubah. Coba lagi."); }
           }}
         >
