@@ -28,11 +28,10 @@ export function acknowledge(el: Element | null, duration = 180) {
   return animate(el, [{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], duration);
 }
 
-const tabs = new Set(["/", "/log", "/insight", "/profil"]);
 /** Commit immediately; animate only the new detail surface, never overlapping page snapshots. */
 export function navigate(from: string, to: string, update: () => void, back = false) {
   stopMotion();
-  enter = from !== to && !instantMotion() && !(tabs.has(from) && tabs.has(to));
+  enter = from !== to && !instantMotion();
   document.documentElement.dataset.direction = back ? "back" : "forward";
   update();
 }

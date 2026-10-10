@@ -25,7 +25,12 @@ test("tabs and details commit immediately without native snapshots; obsolete ent
   motion.navigate("/", "/log", () => { count++; });
   motion.navigate("/log", "/laporan", () => { count += 10; });
   assert.equal(count, 11);
+  let entered = 0;
+  Object.assign(heading, { animate: () => { entered++; return { cancel() {}, finished: new Promise(() => {}) }; } });
   motion.navigate("/log", "/profil", () => { count++; });
+  const stop = motion.afterNavigate();
+  assert.equal(entered, 1);
+  stop?.();
   assert.equal(motion.afterNavigate(), undefined);
   assert.equal(count, 12);
   assert.equal(snapshots, 0);

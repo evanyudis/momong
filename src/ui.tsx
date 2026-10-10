@@ -74,7 +74,7 @@ export function Sheet({ open, onOpenChange, title, children, initialFocus }: {
 }) {
   const root = useRef<HTMLDivElement>(null);
   const instant = useRef(false), previousOpen = useRef(false);
-  if (open && !previousOpen.current) instant.current = !!document.activeElement?.matches(":focus-visible") || reducedMotion();
+  if (open && !previousOpen.current) instant.current = instantMotion();
   previousOpen.current = open;
   const [mounted, setMounted] = useState(open);
   useDialogFocus(open && mounted, root, () => onOpenChange(false), initialFocus);
@@ -95,6 +95,7 @@ export function Sheet({ open, onOpenChange, title, children, initialFocus }: {
       <div className="sheet-backdrop" data-open={shown} data-instant={instant.current || reducedMotion()} onClick={() => onOpenChange(false)} />
       <div ref={root} tabIndex={-1} className="sheet" inert={!open} aria-hidden={!open} data-open={shown} data-instant={instant.current || reducedMotion()}
         onKeyDownCapture={() => { instant.current = true; root.current!.dataset.instant = "true"; }}
+        onPointerDownCapture={() => { instant.current = reducedMotion(); root.current!.dataset.instant = String(instant.current); }}
         role="dialog" aria-modal="true" aria-label={title}>
         <div className="sheet-heading"><h3 tabIndex={-1}>{title}</h3><button type="button" className="icon-btn" aria-label="Tutup" onClick={() => onOpenChange(false)}><X size={20} /></button></div>
         {children}
@@ -207,7 +208,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
 
   useLayoutEffect(() => {
     if (!mounted) return;
-    keyboard.current = !!document.activeElement?.matches(":focus-visible");
+    keyboard.current = instantMotion();
     measureCompact();
     place(geo().H, "none");
     panel.current!.getBoundingClientRect(); // commit the off-screen pose so the enter transitions from it
