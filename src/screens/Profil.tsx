@@ -9,7 +9,7 @@ import type { PlusVariant } from "../content";
 import { todayISO } from "../dates";
 import { useHousehold } from "../household";
 import { addBaby, babyProfiles, activeBabyId, isPlus, exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
-import { resetGuestData, signOut } from "../sync";
+import { resetGuestData, signOut, updateDisplayName } from "../sync";
 import { SyncDot } from "./Partner";
 import { DateInput, Header, PlusBadge, PlusSheet, Sheet, toast } from "../ui";
 
@@ -41,6 +41,13 @@ export function Profil() {
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [plus, setPlus] = useState<PlusVariant | null>(null);
+
+  function publishName() {
+    if (!h.signedIn) return;
+    const next = getPrefs().name ?? "";
+    if (!next.trim()) return;
+    void updateDisplayName(next).catch(() => toast("Nama tersimpan di HP ini. Pasangan belum melihat nama baru. Cek koneksi lalu coba lagi.", "error"));
+  }
 
   function download() {
     const blob = new Blob([exportJSON()], { type: "application/json" });
@@ -156,7 +163,7 @@ export function Profil() {
         <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>Momong · Catatan, bukan saran medis.</p>
       </div>
 
-          <Sheet open={editingProfile} onOpenChange={setEditingProfile} title="Edit profil"><div className="stack">
+          <Sheet open={editingProfile} onOpenChange={(open) => { setEditingProfile(open); if (!open) publishName(); }} title="Edit profil"><div className="stack">
             <label className="field">
               <span>Nama panggilan</span>
               <input className="input" maxLength={120} value={prefs.name ?? ""} placeholder="Bunda" onChange={(e) => setPrefs({ name: e.target.value })} />
@@ -169,9 +176,7 @@ export function Profil() {
               <span>{born ? "Tanggal lahir" : "HPL (hari perkiraan lahir)"}</span>
               <DateInput max={born ? todayISO() : undefined} value={(born ? s.babyBirth : s.hpl) ?? ""} onChange={(e) => e.target.value && e.target.validity.valid && saveSettings(born ? { babyBirth: e.target.value } : { hpl: e.target.value })} />
             </label>
-            <button className="btn btn-ink block" onClick={(e) => {
-              setEditingProfile(false);
-            }}>Selesai</button>
+            <button className="btn btn-ink block" onClick={() => { setEditingProfile(false); publishName(); }}>Selesai</button>
           </div></Sheet>
       <RestoreSheet open={restoreOpen} onOpenChange={setRestoreOpen} />
       <InstallSheet open={installOpen} onOpenChange={setInstallOpen} />
