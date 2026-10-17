@@ -1,5 +1,6 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
+import { clearInvite, inviteReturnHash, isInviteToken, isSafeInviteReturn, readInvite } from "./invite";
 import { PLUS_ENABLED } from "./release";
 import { nameFromEmail, type SignInMode } from "./signin";
 import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
@@ -70,7 +71,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<{ da
 export function authDestination(fallback = "#/profil") {
   const target = sessionStorage.getItem("bb_auth_return");
   sessionStorage.removeItem("bb_auth_return");
-  return target === "#/plus" || target === "#/pasangan" ? target : fallback;
+  if (target === "#/plus" || target === "#/pasangan") return target;
+  if (target && isSafeInviteReturn(target)) return target;
+  return fallback;
 }
 
 function clearSession() {
@@ -162,20 +165,36 @@ export async function restoreAccount() {
 
 // Set while the browser is away at Google. Success returns to #/profil, cancel/deny to #/masuk-akun (errorCallbackURL).
 const GOOGLE_AWAY = "bb_google";
+let googleLeave: Promise<void> | null = null;
 
-/** Better Auth social sign-in: the API answers with Google's URL (and sets its OAuth state cookie on this origin), then we leave. */
-export async function startGoogle() {
-  const { data } = await api<{ url?: string }>("/api/auth/sign-in/social", {
-    method: "POST",
-    body: JSON.stringify({
-      provider: "google",
-      callbackURL: `${location.origin}/#/profil`,
-      errorCallbackURL: `${location.origin}/#/masuk-akun`,
-    }),
-  });
-  if (!data.url) throw new ApiError(502, "no_url");
-  sessionStorage.setItem(GOOGLE_AWAY, "away");
-  location.assign(data.url);
+export function googlePhase(): "away" | "finishing" | null {
+  const value = sessionStorage.getItem(GOOGLE_AWAY);
+  return value === "away" || value === "finishing" ? value : null;
+}
+
+/** Better Auth social sign-in: the API answers with Google's URL (and sets its OAuth state cookie on this origin), then we leave.
+ *  callbackURL stays `#/profil`. An invite token lives in storage, not in the OAuth request. */
+export function startGoogle() {
+  if (googleLeave) return googleLeave;
+  googleLeave = (async () => {
+    try {
+      const { data } = await api<{ url?: string }>("/api/auth/sign-in/social", {
+        method: "POST",
+        body: JSON.stringify({
+          provider: "google",
+          callbackURL: `${location.origin}/#/profil`,
+          errorCallbackURL: `${location.origin}/#/masuk-akun`,
+        }),
+      });
+      if (!data.url) throw new ApiError(502, "no_url");
+      sessionStorage.setItem(GOOGLE_AWAY, "away");
+      location.assign(data.url);
+    } catch (error) {
+      googleLeave = null;
+      throw error;
+    }
+  })();
+  return googleLeave;
 }
 
 /** True once per Google round trip that came back without signing in; clears the marker. SignIn shows "Masuk Google dibatalkan". */
@@ -186,24 +205,35 @@ export function takeGoogleReturn() {
 }
 
 /** Boot after Google: the callback left a Better Auth session cookie on this origin. Trade it for the bearer, then the email path.
- *  No session (cancelled, closed, denied): send them to the sign-in screen, which reads the marker and says so. */
+ *  A stored invite is joined before the next screen, with no extra tap. No session: sign-in reads the marker. */
 export async function finishGoogle() {
   if (sessionStorage.getItem(GOOGLE_AWAY) !== "away") return;
   if (state.token) return sessionStorage.removeItem(GOOGLE_AWAY);
   if (location.hash.startsWith("#/masuk-akun")) return; // error landing: SignIn takes the marker itself
   sessionStorage.setItem(GOOGLE_AWAY, "finishing");
+  const pending = readInvite();
+  if (pending) {
+    const dest = inviteReturnHash(pending);
+    if (isSafeInviteReturn(dest) && location.hash !== dest) location.hash = dest;
+  }
   try {
     const { data, res } = await api<{ session?: { token?: string } } | null>("/api/auth/get-session");
     const token = res.headers.get("set-auth-token") ?? data?.session?.token;
     if (!token) throw new ApiError(401, "no_session");
     establishSession(token);
     await signedIn();
-    sessionStorage.removeItem(GOOGLE_AWAY);
-    location.hash = authDestination();
   } catch {
     sessionStorage.setItem(GOOGLE_AWAY, "away");
     location.hash = "#/masuk-akun";
+    return;
   }
+  sessionStorage.removeItem(GOOGLE_AWAY);
+  let result: InviteConsume = { ok: "skipped" };
+  try { result = await consumePendingInvite(pending); } catch { result = { ok: "failed", code: "" }; }
+  const next = authDestination();
+  if (result.ok === "joined") location.hash = "#/pasangan";
+  else if (result.ok === "failed" && pending && isInviteToken(pending)) location.hash = inviteReturnHash(pending);
+  else location.hash = next;
 }
 
 export async function refreshMe() {
@@ -233,7 +263,7 @@ export async function signOut() {
   const token = state.token;
   sessionStorage.removeItem("bb_auth_return");
   sessionStorage.removeItem("bb_google");
-  localStorage.removeItem("bb_pending_invite");
+  clearInvite();
   clearSession();
   if (token && HAS_API && navigator.onLine) {
     await fetch(API_URL + "/api/auth/sign-out", {
@@ -249,9 +279,46 @@ export function resetGuestData() {
   return true;
 }
 
+export type HouseholdInvite = { token: string; url: string; expiresAt: string; code?: string };
+
 export async function createInvite() {
-  const { data } = await api<{ token: string; url: string; expiresAt: string }>("/household/invite", { method: "POST", body: "{}" });
+  const { data } = await api<HouseholdInvite>("/household/invite", { method: "POST", body: "{}" });
   return data;
+}
+
+export type InviteConsume = { ok: "joined" | "skipped" } | { ok: "failed"; code: string };
+
+const inviteFlight = new Map<string, Promise<InviteConsume>>();
+
+/** Enable sync if needed, join, and clear the stored invite. Already-paired households skip the request. */
+export async function acceptInvite(token: string): Promise<"joined" | "skipped"> {
+  if (!isInviteToken(token)) throw new ApiError(400, "invite_invalid");
+  if (!state.token || !state.me) throw new ApiError(401, "not_ready");
+  if (state.me.household.members.some((member) => member.id !== state.me!.user.id)) {
+    clearInvite();
+    return "skipped";
+  }
+  if (!state.syncEnabled) setSyncEnabled(true);
+  await joinHousehold(token);
+  clearInvite();
+  return "joined";
+}
+
+/** One join per token while the request is in flight, including a React remount during OAuth return. */
+export function consumePendingInvite(fallback?: string | null): Promise<InviteConsume> {
+  const token = readInvite() || (fallback && isInviteToken(fallback) ? fallback : null);
+  if (!token) return Promise.resolve({ ok: "skipped" });
+  const existing = inviteFlight.get(token);
+  if (existing) return existing;
+  let run!: Promise<InviteConsume>;
+  run = acceptInvite(token).then((ok) => ({ ok })).catch((error: unknown): InviteConsume => {
+    if (error instanceof ApiError && error.code === "not_ready") return { ok: "skipped" };
+    return { ok: "failed", code: error instanceof ApiError ? error.code : "" };
+  }).finally(() => {
+    if (inviteFlight.get(token) === run) inviteFlight.delete(token);
+  });
+  inviteFlight.set(token, run);
+  return run;
 }
 
 export async function joinHousehold(token: string) {

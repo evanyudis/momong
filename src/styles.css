@@ -1136,6 +1136,29 @@ html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::aft
   .add-log[data-pressed] { transform: none; }
 }
 
+/* Partner invite: WhatsApp handoff, code, and the three sync steps. */
+.wa-banner {
+  display: grid; gap: 12px; margin-bottom: 20px; padding: 16px;
+  border-radius: var(--radius-card); background: var(--warning-soft); color: var(--ink);
+}
+.wa-banner p { font-size: 15px; line-height: 1.45; }
+.pair-steps { list-style: none; margin: 12px 0 0; padding: 0; }
+.pair-steps li { display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 10px 0; }
+.pair-steps li + li { border-top: var(--border-hairline) solid var(--border-subtle); }
+.pair-steps .mark {
+  width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: var(--surface-sunk); color: var(--ink-muted); font-size: 13px; font-weight: 700;
+}
+.pair-steps li[data-state="done"] .mark { background: var(--success-soft); color: var(--success-ink); }
+.pair-steps li[data-state="current"] .mark { background: var(--accent-primary-soft); color: var(--accent-primary-ink); }
+.pair-steps li[data-state="error"] .mark { background: var(--danger-soft); color: var(--field-danger); }
+.pair-steps .title { display: block; font-weight: 600; }
+.pair-steps .sub { display: block; font-size: 14px; color: var(--ink-muted); }
+.pair-steps li[data-state="pending"] .title { color: var(--ink-muted); }
+.invite-qr { display: block; width: min(220px, 70%); height: auto; margin: 4px auto; background: #fff; border-radius: 12px; }
+.invite-code { margin: 0; text-align: center; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.qr-video { width: 100%; max-height: 220px; border-radius: 16px; background: #141414; object-fit: cover; }
+
 @media (prefers-contrast: more) {
   :root { --ink: oklch(0.22 0 0); --ink-muted: oklch(0.38 0 0); --border-subtle: oklch(0.58 0 0); --nb-muted: var(--ink-muted); }
   :root[data-theme="dark"] { --ink: oklch(1 0 0); --ink-muted: oklch(0.88 0 0); --border-subtle: oklch(0.64 0 0); }
