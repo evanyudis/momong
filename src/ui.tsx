@@ -85,11 +85,7 @@ function revealFocusedField(drawer: HTMLElement) {
   else if (rect.top < limitTop) scroller.scrollTop -= limitTop - rect.top;
 }
 
-/**
- * Vaul's repositionInputs sets bottom to innerHeight - visualViewport.height.
- * On iOS that ignores offsetTop, so the sheet rises twice and the name field leaves the screen.
- * Place the sheet on the visual viewport's bottom and cap its height to that band.
- */
+/** Sit the sheet on the visual viewport's bottom. Vaul must not also write `bottom`. */
 function placeSheetAboveKeyboard(drawer: HTMLElement) {
   const viewport = window.visualViewport;
   if (!viewport) return;
@@ -112,26 +108,35 @@ function useSheetKeyboard(open: boolean, drawer: RefObject<HTMLDivElement | null
   useLayoutEffect(() => {
     if (!open) return;
     const viewport = window.visualViewport;
-    const el = drawer.current;
-    if (!viewport || !el) return;
+    if (!viewport) return;
     let frame = 0;
+    let stopped = false;
     const place = () => {
-      placeSheetAboveKeyboard(el);
+      const el = drawer.current;
+      if (el) placeSheetAboveKeyboard(el);
+    };
+    // The portal ref is often still empty in this layout effect. Read it when the viewport event fires.
+    const schedule = () => {
+      if (stopped) return;
+      place();
       cancelAnimationFrame(frame);
-      // Vaul may scroll the field on a later frame. Place again after that.
       frame = requestAnimationFrame(() => {
-        placeSheetAboveKeyboard(el);
-        frame = requestAnimationFrame(() => placeSheetAboveKeyboard(el));
+        place();
+        frame = requestAnimationFrame(place);
       });
     };
-    viewport.addEventListener("resize", place);
-    viewport.addEventListener("scroll", place);
-    el.addEventListener("focusin", place);
+    viewport.addEventListener("resize", schedule);
+    viewport.addEventListener("scroll", schedule);
+    document.addEventListener("focusin", schedule);
+    schedule();
     return () => {
+      stopped = true;
       cancelAnimationFrame(frame);
-      viewport.removeEventListener("resize", place);
-      viewport.removeEventListener("scroll", place);
-      el.removeEventListener("focusin", place);
+      viewport.removeEventListener("resize", schedule);
+      viewport.removeEventListener("scroll", schedule);
+      document.removeEventListener("focusin", schedule);
+      const el = drawer.current;
+      if (!el) return;
       el.style.bottom = "";
       el.style.maxHeight = "";
       el.style.height = "";
@@ -148,7 +153,7 @@ export function Sheet({ open, onOpenChange, title, children, initialFocus }: {
   const cancelledDrag = useCancelledDrag();
   const drawer = useRef<HTMLDivElement>(null);
   useSheetKeyboard(open, drawer);
-  return <Root open={open} onOpenChange={onOpenChange} handleOnly repositionInputs>
+  return <Root open={open} onOpenChange={onOpenChange} handleOnly repositionInputs={false}>
     <SheetContext.Provider value={depth + 1}>
       <Drawer.Portal>
         <Drawer.Overlay className="sheet-backdrop" style={{ zIndex: `calc(var(--z-sheet) + ${depth * 2})` }} />
