@@ -162,6 +162,15 @@ export function joinConfirmCopy(name: string) {
   return house ? `Gabung ke rumah ${house}?` : "Gabung ke rumah ini?";
 }
 
+/** Shown only when this account already has notes on the phone or a sync cursor. */
+export const JOIN_DATA_WARNING = "Catatan di HP ini akan ikut. Catatan yang hanya ada di server untuk rumah lama mungkin tidak muncul lagi.";
+
+export function joinDataWarning(input: { localRecords: number; syncCursor: number }) {
+  const records = Number.isFinite(input.localRecords) && input.localRecords > 0;
+  const cursor = Number.isFinite(input.syncCursor) && input.syncCursor > 0;
+  return records || cursor ? JOIN_DATA_WARNING : null;
+}
+
 /** Owner name carried on a shared link. The API invite payload has no household name. */
 export function inviteOwnerName(input: string) {
   const read = (query: string) => {

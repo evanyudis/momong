@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   clearInvite, displayInviteCode, externalBrowserHref, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
-  isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinFailureMessage, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
+  isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "./invite.ts";
 
 const bag = () => {
@@ -72,6 +72,18 @@ test("saved invite expires after seven days and drops for a different account", 
   assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: "user-b", name: "Sari" }), true);
   assert.equal(readInvite(local.storage, session.storage, now + 8 * day), null);
   assert.equal(local.storage.getItem("bb_pending_invite"), null);
+});
+
+test("join warning only when this account already has notes or a sync cursor", () => {
+  assert.equal(joinDataWarning({ localRecords: 0, syncCursor: 0 }), null);
+  const withRecords = joinDataWarning({ localRecords: 1, syncCursor: 0 });
+  const withCursor = joinDataWarning({ localRecords: 0, syncCursor: 3 });
+  const withBoth = joinDataWarning({ localRecords: 2, syncCursor: 3 });
+  assert.ok(withRecords);
+  assert.equal(withCursor, withRecords);
+  assert.equal(withBoth, withRecords);
+  assert.match(withRecords, /HP ini akan ikut/);
+  assert.match(withRecords, /hanya ada di server/);
 });
 
 test("confirm step names the household from the shared link", () => {

@@ -6,7 +6,7 @@ import { agoLabel } from "../dates";
 import { initial, useHousehold } from "../household";
 import {
   clearInvite, displayInviteCode, externalBrowserHref, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
-  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinFailureMessage, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteName, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
+  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteName, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "../invite";
 import { go } from "../route";
 import { getPrefs } from "../store";
@@ -18,6 +18,22 @@ import { Sheet, toast, TopBar } from "../ui";
 
 // A magic-link token is single-use; dedupe so a re-run effect can't burn it twice.
 const verifying = new Map<string, Promise<void>>();
+
+function localRecordCount() {
+  try {
+    const db = JSON.parse(localStorage.getItem("bb_db_v1") || "{}") as Record<string, Record<string, unknown>>;
+    return Object.values(db).reduce((sum, records) => sum + (records && typeof records === "object" ? Object.keys(records).length : 0), 0);
+  } catch {
+    return 0;
+  }
+}
+
+function JoinDataNote() {
+  const cursor = Number(localStorage.getItem("bb_cursor") ?? 0);
+  const note = joinDataWarning({ localRecords: localRecordCount(), syncCursor: Number.isFinite(cursor) ? cursor : 0 });
+  if (!note) return null;
+  return <p className="wa-banner" role="status" style={{ margin: 0 }}>{note}</p>;
+}
 
 export function SyncDot() {
   const acc = useAccount();
@@ -446,6 +462,7 @@ function JoinCodeSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
       <Sheet open={!!confirmToken} onOpenChange={(next) => { if (!next && !busy) setConfirmToken(null); }} title={joinConfirmCopy(confirmName)}>
         <div className="stack" style={{ marginTop: 16 }}>
           <p>Catatan di HP ini ikut ke rumah itu.</p>
+          <JoinDataNote />
           <button type="button" className="btn btn-blue block" disabled={busy} onClick={() => void confirmJoin()}>{busy ? "Menggabungkan…" : "Gabung"}</button>
           <button type="button" className="btn btn-soft block" disabled={busy} onClick={() => setConfirmToken(null)}>Nanti</button>
         </div>
@@ -602,6 +619,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
         <Sheet open={phase === "ask" || phase === "joining"} onOpenChange={(open) => { if (!open && phase !== "joining") setPhase("declined"); }} title={joinConfirmCopy(houseName)}>
           <div className="stack" style={{ marginTop: 16 }}>
             <p>Catatan di HP ini ikut ke rumah itu. Kamu tetap di akun ini kalau memilih nanti.</p>
+            <JoinDataNote />
             <button type="button" className="btn btn-blue lg block" disabled={phase === "joining"} onClick={() => void confirmJoin()}>{phase === "joining" ? "Menggabungkan…" : "Gabung"}</button>
             <button type="button" className="btn btn-soft block" disabled={phase === "joining"} onClick={() => setPhase("declined")}>Nanti</button>
           </div>
