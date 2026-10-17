@@ -5,8 +5,8 @@ import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, useHousehold } from "../household";
 import {
-  displayInviteCode, externalBrowserHref, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
-  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinFailureMessage, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, rememberInvite, shouldClearStaleGoogle,
+  clearInvite, displayInviteCode, externalBrowserHref, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinFailureMessage, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteName, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "../invite";
 import { go } from "../route";
 import { getPrefs } from "../store";
@@ -197,8 +197,9 @@ function Household({ onJoin }: { onJoin: () => void }) {
   }, [full, h.isOwner, invite, inviteAttempt]);
 
   const code = invite ? displayInviteCode(invite) : "";
+  const shareUrl = invite ? inviteLinkWithOwner(invite.url, h.myName) : "";
   const message = invite
-    ? `Yuk catat kehamilan & si kecil bareng di Momong. Gabung lewat tautan ini (berlaku 7 hari): ${invite.url}\n\nAtau buka aplikasi Momong, masuk, lalu tempel kode: ${code}`
+    ? `Yuk catat kehamilan & si kecil bareng di Momong. Gabung lewat tautan ini (berlaku 7 hari): ${shareUrl}\n\nAtau buka aplikasi Momong, masuk, lalu tempel kode: ${code}`
     : "";
 
   function noteSent() {
@@ -211,7 +212,7 @@ function Household({ onJoin }: { onJoin: () => void }) {
     if (!invite) return;
     try {
       if (navigator.share) await navigator.share({ title: "Momong", text: message });
-      else { await navigator.clipboard.writeText(invite.url); toast("Tautan undangan disalin. Siap dikirim ke pasangan."); }
+      else { await navigator.clipboard.writeText(shareUrl); toast("Tautan undangan disalin. Siap dikirim ke pasangan."); }
       noteSent();
     } catch (e) {
       if (!(e instanceof DOMException && e.name === "AbortError")) toast("Undangan belum dibagikan. Cek izin berbagi lalu coba lagi.", "error");
@@ -301,7 +302,7 @@ function Household({ onJoin }: { onJoin: () => void }) {
               <section className="card solid stack">
                 <div className="card-title" style={{ fontSize: 16 }}>Kode undangan</div>
                 <p className="muted">Pasangan membuka Momong, masuk, lalu menempel kode ini atau memindai QR.</p>
-                <InviteQr value={invite.url} />
+                <InviteQr value={shareUrl} />
                 <p className="invite-code">{code}</p>
                 <button className="btn btn-soft block" onClick={() => void copyCode()}>Salin kode</button>
               </section>
@@ -389,47 +390,66 @@ function JoinCodeSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [confirmToken, setConfirmToken] = useState<string | null>(null);
+  const [confirmName, setConfirmName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (open) return;
     setScanning(false);
     setError("");
     setBusy(false);
+    setConfirmToken(null);
   }, [open]);
 
-  async function submit(raw: string) {
+  function stage(raw: string) {
     const token = inviteTokenFromInput(raw);
     if (!token) { setError("Kode tidak dikenali. Tempel kode atau tautan undangan."); return; }
+    setError("");
+    setConfirmName(inviteOwnerName(raw));
+    setConfirmToken(token);
+  }
+
+  async function confirmJoin() {
+    const token = confirmToken;
+    if (!token) return;
     setBusy(true);
     setError("");
     try {
-      rememberInvite(token);
+      rememberInvite(token, localStorage, sessionStorage, { name: confirmName });
       const result = await acceptInvite(token);
-      if (result === "skipped") { setError(joinFailureMessage("seats_full")); setBusy(false); return; }
+      if (result === "skipped") { setError(joinFailureMessage("seats_full")); setBusy(false); setConfirmToken(null); return; }
       toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
       onOpenChange(false);
       go("#/pasangan");
     } catch (e) {
       setError(joinFailureMessage(e instanceof ApiError ? e.code : ""));
       setBusy(false);
+      setConfirmToken(null);
     }
   }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title="Gabung dengan kode" initialFocus={inputRef}>
-      <Form className="stack" onSubmit={(event) => { event.preventDefault(); void submit(code); }}>
+      <Form className="stack" onSubmit={(event) => { event.preventDefault(); stage(code); }}>
         <p className="muted">Tempel kode dari pasangan, tautan undangannya, atau pindai QR. Hasilnya sama dengan membuka tautan.</p>
         <TextField className="field" value={code} onChange={setCode} isInvalid={!!error} autoFocus>
           <Label>Kode undangan</Label>
           <Input ref={inputRef} className="input" placeholder="Tempel kode atau tautan" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
         </TextField>
         {error && <p role="alert" style={{ color: "var(--field-danger)" }}>{error}</p>}
-        <Button type="submit" className="btn btn-blue block" isDisabled={busy}>{busy ? "Menggabungkan…" : "Gabung"}</Button>
+        <Button type="submit" className="btn btn-blue block" isDisabled={busy}>Lanjut</Button>
         <Button type="button" className="btn btn-soft block" isDisabled={busy} onPress={() => setScanning((value) => !value)}>
           <QrCode size={18} />{scanning ? "Tutup kamera" : "Pindai QR"}
         </Button>
-        {scanning && <QrScanner active={scanning && open} onText={(value) => { setCode(value); void submit(value); }} />}
+        {scanning && <QrScanner active={scanning && open && !confirmToken} onText={(value) => { setCode(value); stage(value); }} />}
       </Form>
+      <Sheet open={!!confirmToken} onOpenChange={(next) => { if (!next && !busy) setConfirmToken(null); }} title={joinConfirmCopy(confirmName)}>
+        <div className="stack" style={{ marginTop: 16 }}>
+          <p>Catatan di HP ini ikut ke rumah itu.</p>
+          <button type="button" className="btn btn-blue block" disabled={busy} onClick={() => void confirmJoin()}>{busy ? "Menggabungkan…" : "Gabung"}</button>
+          <button type="button" className="btn btn-soft block" disabled={busy} onClick={() => setConfirmToken(null)}>Nanti</button>
+        </div>
+      </Sheet>
     </Sheet>
   );
 }
@@ -480,7 +500,7 @@ export function MagicLanding({ token }: { token: string | null }) {
   );
 }
 
-/** #/gabung?invite=… — partner invite landing. Logged-out visits go to Google, then join with no extra tap. */
+/** #/gabung?invite=… — partner invite landing. Logged-out visits go to Google, then confirm before joining. */
 export function JoinLanding({ invite }: { invite: string | null }) {
   const h = useHousehold();
   const inApp = isWhatsAppBrowser(navigator.userAgent);
@@ -496,16 +516,29 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   });
   const [startFailed, setStartFailed] = useState(false);
   const [googleTick, setGoogleTick] = useState(0);
-  const [phase, setPhase] = useState<"idle" | "joining" | "error">("idle");
+  const [phase, setPhase] = useState<"ask" | "joining" | "declined" | "error">("ask");
   const [joinCode, setJoinCode] = useState("");
-  const [attempt, setAttempt] = useState(0);
+  const houseName = (invite ? inviteOwnerName(location.hash) : "") || readInviteName();
 
   useEffect(() => {
-    if (!valid || !invite || h.signedIn || inApp) return;
-    rememberInvite(invite);
-    const back = inviteReturnHash(invite);
-    if (isSafeInviteReturn(back)) sessionStorage.setItem("bb_auth_return", back);
-  }, [invite, valid, h.signedIn, inApp]);
+    if (!valid || !invite || inApp) return;
+    rememberInvite(invite, localStorage, sessionStorage, {
+      name: inviteOwnerName(location.hash),
+      accountId: h.me?.user.id ?? null,
+    });
+    if (!h.signedIn) {
+      const back = inviteReturnHash(invite);
+      if (isSafeInviteReturn(back)) sessionStorage.setItem("bb_auth_return", back);
+      return;
+    }
+    reconcilePendingInvite(h.me?.user.id ?? null);
+  }, [invite, valid, inApp, h.signedIn, h.me?.user.id]);
+
+  useEffect(() => {
+    if (!valid || !h.signedIn || inApp || !h.partner) return;
+    clearInvite();
+    go("#/pasangan");
+  }, [valid, h.signedIn, inApp, h.partner]);
 
   useEffect(() => {
     const onShow = (event: PageTransitionEvent) => { if (event.persisted && takeGoogleReturn()) setReturned(true); };
@@ -521,24 +554,18 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     return () => { cancel = true; };
   }, [valid, h.signedIn, inApp, startFailed, returned, googleTick]);
 
-  useEffect(() => {
-    if (!valid || !invite || !h.signedIn || h.acc.checking || inApp) return;
-    let cancel = false;
+  async function confirmJoin() {
+    if (!invite) return;
     setPhase("joining");
-    void consumePendingInvite(invite).then((result) => {
-      if (cancel) return;
-      if (result.ok === "failed") { setJoinCode(result.code); setPhase("error"); }
-      else {
-        if (result.ok === "joined") toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
-        go("#/pasangan");
-      }
-    });
-    return () => { cancel = true; };
-  }, [valid, invite, h.signedIn, h.acc.checking, inApp, attempt]);
+    const result = await consumePendingInvite(invite);
+    if (result.ok === "failed") { setJoinCode(result.code); setPhase("error"); return; }
+    if (result.ok === "joined") toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
+    go("#/pasangan");
+  }
 
   if (!HAS_API) return <><TopBar title="Gabung" /><NoServer /></>;
   if (!valid) return <><TopBar title="Gabung" /><div className="card solid empty"><strong>Tautan tidak lengkap</strong>Minta pasangan kirim ulang undangan.</div></>;
-  if (inApp) return <><TopBar title="Gabung" back="#/" /><WhatsAppBanner invite={invite!} /><Hero title="Kamu diundang mencatat bersama" body="Masuk dengan Google di Safari atau Chrome. Setelah itu kamu langsung tergabung." /></>;
+  if (inApp) return <><TopBar title="Gabung" back="#/" /><WhatsAppBanner invite={invite!} /><Hero title="Kamu diundang mencatat bersama" body="Masuk dengan Google di Safari atau Chrome. Setelah masuk, konfirmasi sebelum bergabung." /></>;
 
   const phaseNow = googlePhase();
   const showGoogleError = inviteShowsGoogleError({ returnedWithoutSession: returned, startFailed });
@@ -546,7 +573,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     return (
       <>
         <TopBar title="Gabung" />
-        <Hero title="Kamu diundang mencatat bersama" body="Masuk dengan Google. Setelah itu kamu langsung tergabung, tanpa langkah tambahan." />
+        <Hero title="Kamu diundang mencatat bersama" body="Masuk dengan Google. Setelah masuk, konfirmasi sebelum bergabung." />
         <div className="stack">
           {showGoogleError && <p role="alert" style={{ color: "var(--field-danger)" }}>Masuk Google belum selesai. Coba lagi dari browser ini.</p>}
           <button className="btn btn-blue lg block" onClick={() => { sessionStorage.removeItem("bb_google"); setReturned(false); setStartFailed(false); setGoogleTick((n) => n + 1); }}>Lanjut dengan Google</button>
@@ -562,18 +589,34 @@ export function JoinLanding({ invite }: { invite: string | null }) {
         <Hero title="Gabung mencatat bersama" body="Catatan di HP ini akan digabung dengan catatan pasangan. Kalian berdua bisa menambah dan mengedit." />
         <div className="stack">
           <p role="alert" style={{ color: "var(--field-danger)" }}>{joinFailureMessage(joinCode)}</p>
-          <button className="btn btn-blue lg block" onClick={() => { setPhase("idle"); setAttempt((n) => n + 1); }}>Coba lagi</button>
+          <button className="btn btn-blue lg block" onClick={() => setPhase("ask")}>Coba lagi</button>
         </div>
       </>
     );
   }
-  const status = h.signedIn || phaseNow === "finishing" ? "Menyambungkan akun…" : "Membuka masuk Google…";
+  if (h.signedIn && !h.partner) {
+    return (
+      <>
+        <TopBar title="Gabung" />
+        <Hero title="Kamu diundang mencatat bersama" body="Cek dulu rumah yang kamu ikuti. Gabung setelah kamu yakin." />
+        <Sheet open={phase === "ask" || phase === "joining"} onOpenChange={(open) => { if (!open && phase !== "joining") setPhase("declined"); }} title={joinConfirmCopy(houseName)}>
+          <div className="stack" style={{ marginTop: 16 }}>
+            <p>Catatan di HP ini ikut ke rumah itu. Kamu tetap di akun ini kalau memilih nanti.</p>
+            <button type="button" className="btn btn-blue lg block" disabled={phase === "joining"} onClick={() => void confirmJoin()}>{phase === "joining" ? "Menggabungkan…" : "Gabung"}</button>
+            <button type="button" className="btn btn-soft block" disabled={phase === "joining"} onClick={() => setPhase("declined")}>Nanti</button>
+          </div>
+        </Sheet>
+        {phase === "declined" && <button type="button" className="btn btn-blue lg block" onClick={() => setPhase("ask")}>Gabung</button>}
+      </>
+    );
+  }
+  const status = phaseNow === "finishing" ? "Menyambungkan akun…" : "Membuka masuk Google…";
   return (
     <>
       <TopBar title="Gabung" />
       <div className="card solid empty" role="status" aria-busy="true">
-        <strong>{h.signedIn ? "Menggabungkan…" : status}</strong>
-        Kamu langsung tergabung setelah masuk.
+        <strong>{status}</strong>
+        Setelah masuk, konfirmasi sebelum bergabung.
       </div>
     </>
   );

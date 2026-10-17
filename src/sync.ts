@@ -1,6 +1,6 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
-import { clearInvite, inviteReturnHash, isInviteToken, isSafeInviteReturn, navigationType, readInvite, shouldClearStaleGoogle } from "./invite";
+import { clearInvite, inviteReturnHash, isInviteToken, isSafeInviteReturn, navigationType, readInvite, reconcilePendingInvite, shouldClearStaleGoogle } from "./invite";
 import { PLUS_ENABLED } from "./release";
 import { nameFromEmail, type SignInMode } from "./signin";
 import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
@@ -129,6 +129,7 @@ async function signedIn() {
     clearSession();
     throw new ApiError(502, "invalid_account");
   }
+  reconcilePendingInvite(state.me.user.id);
 }
 
 /** Restore saved household data before offering setup. Uploads still require sync consent. */
@@ -205,7 +206,7 @@ export function takeGoogleReturn() {
 }
 
 /** Boot after Google: the callback left a Better Auth session cookie on this origin. Trade it for the bearer, then the email path.
- *  A stored invite is joined before the next screen, with no extra tap. No session: sign-in reads the marker. */
+ *  A stored invite returns to the confirm step. It is not joined until that tap. No session: sign-in reads the marker. */
 export async function finishGoogle() {
   const marker = sessionStorage.getItem(GOOGLE_AWAY);
   const nav = navigationType();
@@ -236,12 +237,13 @@ export async function finishGoogle() {
     return;
   }
   sessionStorage.removeItem(GOOGLE_AWAY);
-  let result: InviteConsume = { ok: "skipped" };
-  try { result = await consumePendingInvite(pending); } catch { result = { ok: "failed", code: "" }; }
-  const next = authDestination();
-  if (result.ok === "joined") location.hash = "#/pasangan";
-  else if (result.ok === "failed" && pending && isInviteToken(pending)) location.hash = inviteReturnHash(pending);
-  else location.hash = next;
+  const pendingNow = readInvite();
+  if (pendingNow && isInviteToken(pendingNow)) {
+    sessionStorage.removeItem("bb_auth_return");
+    location.hash = inviteReturnHash(pendingNow);
+    return;
+  }
+  location.hash = authDestination();
 }
 
 export async function refreshMe() {

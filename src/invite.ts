@@ -1,6 +1,11 @@
 /** Household invite parsing and partner-step state. No network. */
 
 export const PENDING_INVITE = "bb_pending_invite";
+export const PENDING_INVITE_AT = "bb_pending_invite_at";
+export const PENDING_INVITE_USER = "bb_pending_invite_user";
+export const PENDING_INVITE_NAME = "bb_pending_invite_name";
+/** Matches the server invite lifetime. A saved link does not outlive that. */
+export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const INVITE_SENT = "bb_invite_sent";
 
 /** Opaque invite tokens and server-issued codes. No spaces, slashes, or query breaks. */
@@ -75,14 +80,38 @@ export function externalBrowserHref(pageUrl: string, ua: string) {
   return `intent://${path}#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${fallback};end`;
 }
 
-export function rememberInvite(token: string, storage: Bag = localStorage, session: Bag = sessionStorage) {
+export function rememberInvite(
+  token: string,
+  storage: Bag = localStorage,
+  session: Bag = sessionStorage,
+  meta: { at?: number; accountId?: string | null; name?: string | null } = {},
+) {
   if (!isInviteToken(token)) return false;
+  const at = String(meta.at ?? Date.now());
+  const name = meta.name?.trim().slice(0, 80) ?? "";
+  const previous = storedToken(storage, session);
   storage.setItem(PENDING_INVITE, token);
   session.setItem(PENDING_INVITE, token);
+  storage.setItem(PENDING_INVITE_AT, at);
+  session.setItem(PENDING_INVITE_AT, at);
+  if (name) {
+    storage.setItem(PENDING_INVITE_NAME, name);
+    session.setItem(PENDING_INVITE_NAME, name);
+  } else if (previous !== token) {
+    storage.removeItem(PENDING_INVITE_NAME);
+    session.removeItem(PENDING_INVITE_NAME);
+  }
+  if (meta.accountId) {
+    storage.setItem(PENDING_INVITE_USER, meta.accountId);
+    session.setItem(PENDING_INVITE_USER, meta.accountId);
+  } else {
+    storage.removeItem(PENDING_INVITE_USER);
+    session.removeItem(PENDING_INVITE_USER);
+  }
   return true;
 }
 
-export function readInvite(storage: Bag = localStorage, session: Bag = sessionStorage) {
+function storedToken(storage: Bag, session: Bag) {
   const first = session.getItem(PENDING_INVITE);
   const second = storage.getItem(PENDING_INVITE);
   if (first && isInviteToken(first)) return first;
@@ -90,9 +119,94 @@ export function readInvite(storage: Bag = localStorage, session: Bag = sessionSt
   return null;
 }
 
+function storedAt(storage: Bag, session: Bag) {
+  const raw = session.getItem(PENDING_INVITE_AT) || storage.getItem(PENDING_INVITE_AT);
+  const at = Number(raw);
+  return Number.isFinite(at) ? at : null;
+}
+
+export function readInvite(storage: Bag = localStorage, session: Bag = sessionStorage, now = Date.now()) {
+  const token = storedToken(storage, session);
+  if (!token) return null;
+  const at = storedAt(storage, session);
+  if (at === null || now > at + INVITE_TTL_MS) {
+    clearInvite(storage, session);
+    return null;
+  }
+  return token;
+}
+
+export function readInviteName(storage: Bag = localStorage, session: Bag = sessionStorage) {
+  return (session.getItem(PENDING_INVITE_NAME) || storage.getItem(PENDING_INVITE_NAME) || "").trim().slice(0, 80);
+}
+
+/** Drop a saved invite that belongs to someone else. A link opened before login is claimed by the account that signs in. */
+export function reconcilePendingInvite(currentAccountId: string | null, now = Date.now(), storage: Bag = localStorage, session: Bag = sessionStorage) {
+  const token = readInvite(storage, session, now);
+  if (!token) return "cleared" as const;
+  const stored = session.getItem(PENDING_INVITE_USER) || storage.getItem(PENDING_INVITE_USER);
+  if (currentAccountId && stored && stored !== currentAccountId) {
+    clearInvite(storage, session);
+    return "cleared" as const;
+  }
+  if (currentAccountId && !stored) {
+    storage.setItem(PENDING_INVITE_USER, currentAccountId);
+    session.setItem(PENDING_INVITE_USER, currentAccountId);
+    return "claimed" as const;
+  }
+  return "kept" as const;
+}
+
+export function joinConfirmCopy(name: string) {
+  const house = name.trim();
+  return house ? `Gabung ke rumah ${house}?` : "Gabung ke rumah ini?";
+}
+
+/** Owner name carried on a shared link. The API invite payload has no household name. */
+export function inviteOwnerName(input: string) {
+  const read = (query: string) => {
+    const name = new URLSearchParams(query).get("dari")?.trim() ?? "";
+    if (!name || name.length > 80 || /[\u0000-\u001f]/.test(name)) return "";
+    return name;
+  };
+  const raw = input.trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    const hash = url.hash.replace(/^#/, "");
+    const hashQuery = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+    return read(hashQuery) || read(url.search.replace(/^\?/, ""));
+  } catch {
+    const query = raw.includes("?") ? raw.slice(raw.indexOf("?") + 1) : "";
+    return read(query);
+  }
+}
+
+/** Shared link includes the owner name so the confirm step can name the household. */
+export function inviteLinkWithOwner(url: string, ownerName: string) {
+  const name = ownerName.trim();
+  if (!name) return url;
+  try {
+    const parsed = new URL(url);
+    const hash = parsed.hash.replace(/^#/, "");
+    const qIndex = hash.indexOf("?");
+    if (qIndex === -1) return url;
+    const params = new URLSearchParams(hash.slice(qIndex + 1));
+    params.set("dari", name.slice(0, 80));
+    parsed.hash = `${hash.slice(0, qIndex)}?${params.toString()}`;
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 export function clearInvite(storage: Bag = localStorage, session: Bag = sessionStorage) {
-  storage.removeItem(PENDING_INVITE);
-  session.removeItem(PENDING_INVITE);
+  for (const bag of [storage, session]) {
+    bag.removeItem(PENDING_INVITE);
+    bag.removeItem(PENDING_INVITE_AT);
+    bag.removeItem(PENDING_INVITE_USER);
+    bag.removeItem(PENDING_INVITE_NAME);
+  }
 }
 
 export function markInviteSent(householdId: string, storage: Bag = localStorage) {
@@ -132,11 +246,12 @@ export function pairSteps(input: {
   ];
 }
 
-export type PageNavigation = "navigate" | "reload" | "back_forward" | "prerender";
+export type PageNavigation = "navigate" | "reload" | "back_forward";
 
 export function navigationType(): PageNavigation {
   const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-  return nav?.type === "reload" || nav?.type === "back_forward" || nav?.type === "prerender" ? nav.type : "navigate";
+  const type = nav?.type;
+  return type === "reload" || type === "back_forward" ? type : "navigate";
 }
 
 /** A leftover bb_google on a fresh invite open is not a cancelled Google return. Back/forward keeps it. */

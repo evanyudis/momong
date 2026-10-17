@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  clearInvite, displayInviteCode, externalBrowserHref, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
-  isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinFailureMessage, markInviteSent, pairSteps, readInvite, rememberInvite, shouldClearStaleGoogle,
+  clearInvite, displayInviteCode, externalBrowserHref, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinFailureMessage, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "./invite.ts";
 
 const bag = () => {
@@ -50,6 +50,37 @@ test("WhatsApp opens Chrome on Android and keeps the https link on iPhone", () =
   assert.match(intent, /^intent:\/\/momong\.evanyudis\.com\/%23\/gabung\?invite=inviteTok1#Intent;scheme=https;package=com\.android\.chrome;/);
   assert.match(intent, /browser_fallback_url=https%3A%2F%2Fmomong\.evanyudis\.com%2F%23%2Fgabung%3Finvite%3DinviteTok1;end$/);
   assert.equal(intent.includes("#/gabung"), false);
+});
+
+test("saved invite expires after seven days and drops for a different account", () => {
+  const local = bag();
+  const session = bag();
+  const now = Date.parse("2026-10-01T00:00:00Z");
+  const day = 24 * 60 * 60 * 1000;
+  assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: "user-a", name: "Sari" }), true);
+  assert.equal(readInvite(local.storage, session.storage, now + 6 * day), "inviteTok1");
+  assert.equal(reconcilePendingInvite("user-a", now + 6 * day, local.storage, session.storage), "kept");
+  assert.equal(readInvite(local.storage, session.storage, now + 6 * day), "inviteTok1");
+  assert.equal(reconcilePendingInvite("user-b", now + day, local.storage, session.storage), "cleared");
+  assert.equal(readInvite(local.storage, session.storage, now + day), null);
+
+  assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, name: "Sari" }), true);
+  assert.equal(reconcilePendingInvite("user-b", now, local.storage, session.storage), "claimed");
+  assert.equal(readInvite(local.storage, session.storage, now), "inviteTok1");
+  assert.equal(local.storage.getItem("bb_pending_invite_user"), "user-b");
+
+  assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: "user-b", name: "Sari" }), true);
+  assert.equal(readInvite(local.storage, session.storage, now + 8 * day), null);
+  assert.equal(local.storage.getItem("bb_pending_invite"), null);
+});
+
+test("confirm step names the household from the shared link", () => {
+  const link = inviteLinkWithOwner("https://momong.evanyudis.com/#/gabung?invite=inviteTok1", "Sari");
+  assert.equal(inviteOwnerName(link), "Sari");
+  assert.equal(inviteTokenFromInput(link), "inviteTok1");
+  assert.equal(joinConfirmCopy("Sari"), "Gabung ke rumah Sari?");
+  assert.equal(joinConfirmCopy("  "), "Gabung ke rumah ini?");
+  assert.equal(isSafeInviteReturn("#/gabung?invite=inviteTok1&dari=Sari"), false);
 });
 
 test("invite token survives in both storages and a sent flag is per household", () => {
