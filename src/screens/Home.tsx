@@ -5,6 +5,7 @@ import { PLUS_ENABLED } from "../release";
 import { BriefcaseMedical, ChevronRight, Gift, Sprout, Users } from "lucide-react";
 import { BAG_DEFAULTS, weekNote } from "../content";
 import { agoLabel, dateLabel, isToday, pregnancy, timeLabel } from "../dates";
+import { homeGreeting } from "../greeting";
 import { initial, useHousehold } from "../household";
 import { nextFeed } from "../plus";
 import { isPlus, getPrefs, get, list, saveSettings, settings, useDB } from "../store";
@@ -17,16 +18,22 @@ export function Home() {
   return s.birthMode === "postpartum" ? <NewbornHome /> : <PregnancyHome />;
 }
 
+function useHomeTitle() {
+  const { me } = useHousehold();
+  return homeGreeting(me, getPrefs().name);
+}
+
 function PregnancyHome() {
   const s = settings();
   const p = pregnancy(s.hpl!);
+  const title = useHomeTitle();
   const today = (col: Parameters<typeof list>[0]) => list(col).filter((r) => isToday(r.at));
   const kickSession = list("kicks")[0];
   const kickToday = kickSession && isToday(kickSession.at) ? kickSession.count : 0;
 
   return (
     <>
-      <Header title={`Halo, ${getPrefs().name || "Bunda"}`} />
+      <Header title={title} />
       <div className="stack">
         {p.daysLeft <= 0 && (
           <a className="card" href="#/profil" data-morph="/profil" style={{ background: "var(--accent-partner-soft)" }}>
@@ -173,12 +180,13 @@ export function PartnerCard() {
 function BabyArt() { return <svg className="baby-art" viewBox="0 0 140 140" aria-hidden="true"><path d="M20 85Q4 20 64 15Q127 3 130 68Q140 130 70 131Q21 137 20 85" fill="var(--nb-petal)"/><path d="M37 73Q29 42 69 37Q105 33 108 73L110 106Q73 126 34 102Z" fill="var(--surface)"/><circle cx="70" cy="64" r="25" fill="var(--nb-peach)"/><path d="M54 63q5-6 10 0m12 0q5-6 10 0m-22 12q7 6 14 0M68 40q-4-9 5-9" fill="none" stroke="var(--ink)" strokeWidth="2.5" strokeLinecap="round"/><path d="M38 87q29 3 65 22M103 84q-21 11-51 30" stroke="var(--nb-petal)" strokeWidth="3" fill="none"/><path d="m13 25 3-7 3 7 7 3-7 3-3 7-3-7-7-3Z" fill="var(--nb-mint)"/></svg>; }
 function NewbornHome() {
   const s = settings();
+  const title = useHomeTitle();
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 15000); return () => clearInterval(id); }, []);
   const entries = (["bottle", "breast", "pump", "diaper"] as const).flatMap(kind => list(kind).map(r => ({...r, at:r.at as number, kind})));
   const feeds = entries.filter(e => e.kind === "bottle" || e.kind === "breast").sort((a,b) => b.at-a.at);
   const last = feeds[0], estimate = nextFeed(feeds);
-  return <><Header title={`Halo, ${getPrefs().name || "Bunda"}`} /><div className="stack newborn-home">
+  return <><Header title={title} /><div className="stack newborn-home">
     <section className="card newborn-hero"><div><p className="eyebrow">Si kecil</p><h2>{s.babyName || "Si kecil"}</h2><p className="muted num">{s.babyBirth ? newbornAgeLabel(s.babyBirth, new Date(now)) : "Atur tanggal lahir di Profil"}</p></div><BabyArt /></section>
     <NewbornActivity values={totals(entries, new Date(now))} onToday={() => { location.hash = "#/log?day=today"; }} />
     <section className="card care-card"><div className="spread"><h2 className="card-title">Terakhir minum</h2>{last && <span className="muted num">{timeLabel(last.at)}</span>}</div><div className="elapsed num">{last ? <>{agoLabel(last.at, now)}<small>{agoLabel(last.at, now) !== "baru saja" && " lalu"}</small></> : "Belum ada catatan minum"}</div><p className="card-sub">{last ? `${last.kind === "bottle" ? "Minum susu" : "Menyusu langsung"} · ${description(last)}` : "Ketuk + untuk mencatat susu atau menyusu."}</p></section>
