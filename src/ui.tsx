@@ -12,6 +12,7 @@ export { toast } from "./toast";
 import { Drawer } from "vaul";
 import { PLUS_COPY, PLUS_FEATURES, type PlusVariant } from "./content";
 import { dayLabel } from "./dates";
+import { keyboardInset, sheetKeyboardMaxHeight } from "./sheet-keyboard";
 
 /**
  * Native date/time picker that fits its container: full width, value left-aligned, calendar glyph on the right.
@@ -67,6 +68,77 @@ function useCancelledDrag() {
   };
 }
 
+const FIELD = "input, textarea, select, [contenteditable='true']";
+
+/** Keep the focused control inside the sheet body. Scrolling the window is what hides it on iOS. */
+function revealFocusedField(drawer: HTMLElement) {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || !drawer.contains(active) || !active.matches(FIELD)) return;
+  const scroller = active.closest(".sheet-body");
+  if (!(scroller instanceof HTMLElement)) return;
+  const body = scroller.getBoundingClientRect();
+  const rect = active.getBoundingClientRect();
+  const viewBottom = window.visualViewport?.height ?? window.innerHeight;
+  const limitTop = Math.max(body.top, 0) + 12;
+  const limitBottom = Math.min(body.bottom, viewBottom) - 12;
+  if (rect.bottom > limitBottom) scroller.scrollTop += rect.bottom - limitBottom;
+  else if (rect.top < limitTop) scroller.scrollTop -= limitTop - rect.top;
+}
+
+/**
+ * Vaul's repositionInputs sets bottom to innerHeight - visualViewport.height.
+ * On iOS that ignores offsetTop, so the sheet rises twice and the name field leaves the screen.
+ * Place the sheet on the visual viewport's bottom and cap its height to that band.
+ */
+function placeSheetAboveKeyboard(drawer: HTMLElement) {
+  const viewport = window.visualViewport;
+  if (!viewport) return;
+  const inset = keyboardInset(window.innerHeight, viewport.height, viewport.offsetTop);
+  if (inset > 0) {
+    const max = sheetKeyboardMaxHeight(viewport.height);
+    drawer.style.bottom = `${inset}px`;
+    drawer.style.maxHeight = `${max}px`;
+    drawer.style.height = "auto";
+    if (drawer.scrollHeight > max) drawer.style.height = `${max}px`;
+  } else {
+    drawer.style.bottom = "";
+    drawer.style.maxHeight = "";
+    drawer.style.height = "";
+  }
+  revealFocusedField(drawer);
+}
+
+function useSheetKeyboard(open: boolean, drawer: RefObject<HTMLDivElement | null>) {
+  useLayoutEffect(() => {
+    if (!open) return;
+    const viewport = window.visualViewport;
+    const el = drawer.current;
+    if (!viewport || !el) return;
+    let frame = 0;
+    const place = () => {
+      placeSheetAboveKeyboard(el);
+      cancelAnimationFrame(frame);
+      // Vaul may scroll the field on a later frame. Place again after that.
+      frame = requestAnimationFrame(() => {
+        placeSheetAboveKeyboard(el);
+        frame = requestAnimationFrame(() => placeSheetAboveKeyboard(el));
+      });
+    };
+    viewport.addEventListener("resize", place);
+    viewport.addEventListener("scroll", place);
+    el.addEventListener("focusin", place);
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport.removeEventListener("resize", place);
+      viewport.removeEventListener("scroll", place);
+      el.removeEventListener("focusin", place);
+      el.style.bottom = "";
+      el.style.maxHeight = "";
+      el.style.height = "";
+    };
+  }, [open, drawer]);
+}
+
 export function Sheet({ open, onOpenChange, title, children, initialFocus }: {
   open: boolean; onOpenChange: (open: boolean) => void; title: string; children: ReactNode; initialFocus?: RefObject<HTMLElement | null>;
 }) {
@@ -74,11 +146,13 @@ export function Sheet({ open, onOpenChange, title, children, initialFocus }: {
   const Root = depth ? Drawer.NestedRoot : Drawer.Root;
   const focus = useSheetFocus(initialFocus);
   const cancelledDrag = useCancelledDrag();
+  const drawer = useRef<HTMLDivElement>(null);
+  useSheetKeyboard(open, drawer);
   return <Root open={open} onOpenChange={onOpenChange} handleOnly repositionInputs>
     <SheetContext.Provider value={depth + 1}>
       <Drawer.Portal>
         <Drawer.Overlay className="sheet-backdrop" style={{ zIndex: `calc(var(--z-sheet) + ${depth * 2})` }} />
-        <Drawer.Content className="sheet" style={{ zIndex: `calc(var(--z-sheet) + ${depth * 2 + 1})` }} aria-describedby={undefined} {...cancelledDrag} {...focus}>
+        <Drawer.Content ref={drawer} className="sheet" style={{ zIndex: `calc(var(--z-sheet) + ${depth * 2 + 1})` }} aria-describedby={undefined} {...cancelledDrag} {...focus}>
           <Drawer.Handle className="sheet-grip" />
           <div className="sheet-heading"><Drawer.Title asChild><h3 tabIndex={-1}>{title}</h3></Drawer.Title><Drawer.Close asChild><button type="button" className="icon-btn" aria-label="Tutup"><X size={20} /></button></Drawer.Close></div>
           <div className="sheet-body">{children}</div>
