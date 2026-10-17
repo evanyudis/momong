@@ -228,6 +228,7 @@ button.card, a.card { display: block; width: 100%; text-align: left; border: 0; 
   border: 0;
   border-radius: var(--radius-pill);
   font-size: 1.0625rem; font-weight: 600; line-height: 1.35;
+  color: inherit;
   text-decoration: none;
   transition-property: scale, background-color, box-shadow, opacity;
   transition-duration: 150ms;
@@ -241,8 +242,8 @@ button.card, a.card { display: block; width: 100%; text-align: left; border: 0; 
 .btn-ink { background: var(--ink); color: var(--on-ink); box-shadow: 0 8px 20px -8px rgb(0 0 0 / 0.3); }
 .btn-blue { background: var(--accent-primary); color: #FFFFFF; box-shadow: 0 8px 20px -8px rgb(0 0 0 / 0.25); }
 .btn-coral { background: var(--accent-partner); color: #4a2228; }
-.btn-ghost { background: var(--surface); box-shadow: var(--elevation-raised); }
-.btn-soft { background: var(--surface-sunk); }
+.btn-ghost { background: var(--surface); color: var(--ink); box-shadow: var(--elevation-raised); }
+.btn-soft { background: var(--surface-sunk); color: var(--ink); }
 .btn-danger { background: var(--danger-soft); color: var(--danger); }
 .btn-danger-soft { background: var(--danger-soft); color: var(--field-danger); }
 .reset-actions { margin-top: 20px; }
@@ -283,6 +284,7 @@ button.card:active, a.card:active { scale: 0.97; }
   background: var(--surface);
   font-size: 1.0625rem;
 }
+.input::placeholder { color: var(--ink-faint); }
 .input:focus { outline: 2px solid var(--ink-faint); outline-offset: 1px; }
 .input[aria-invalid="true"] { border-color: var(--field-danger); box-shadow: inset 0 0 0 1px var(--field-danger); }
 
@@ -1155,9 +1157,15 @@ html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::aft
 .pair-steps .title { display: block; font-weight: 600; }
 .pair-steps .sub { display: block; font-size: 14px; color: var(--ink-muted); }
 .pair-steps li[data-state="pending"] .title { color: var(--ink-muted); }
-.invite-qr { display: block; width: min(220px, 70%); height: auto; margin: 4px auto; background: #fff; border-radius: 12px; }
-.invite-code { margin: 0; text-align: center; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
-.qr-video { width: 100%; max-height: 220px; border-radius: 16px; background: #141414; object-fit: cover; }
+.invite-qr {
+  display: block; width: min(220px, 70%); height: auto; margin: 4px auto; border-radius: 12px;
+  /* Quiet zone stays the light surface; modules stay the dark canvas. A theme flip would invert the code. */
+  --surface: oklch(1 0 0);
+  --ink: oklch(0.191 0 0);
+  background: var(--surface); color: var(--ink);
+}
+.invite-code { margin: 0; text-align: center; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; color: var(--ink); }
+.qr-video { width: 100%; max-height: 220px; border-radius: 16px; background: var(--bg); object-fit: cover; }
 
 @media (prefers-contrast: more) {
   :root { --ink: oklch(0.22 0 0); --ink-muted: oklch(0.38 0 0); --border-subtle: oklch(0.58 0 0); --nb-muted: var(--ink-muted); }

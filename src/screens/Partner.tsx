@@ -155,8 +155,8 @@ function InviteQr({ value }: { value: string }) {
   const n = qr.size;
   return (
     <svg className="invite-qr" viewBox={`0 0 ${n} ${n}`} role="img" aria-label="Kode QR undangan">
-      <rect width={n} height={n} fill="#ffffff" />
-      {qr.data.flatMap((row, y) => row.map((on, x) => on ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="#141414" /> : null))}
+      <rect width={n} height={n} fill="var(--surface)" />
+      {qr.data.flatMap((row, y) => row.map((on, x) => on ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="currentColor" /> : null))}
     </svg>
   );
 }
