@@ -214,6 +214,21 @@ export async function refreshMe() {
   return data;
 }
 
+let publishingName: string | null = null;
+/** Save the name this person typed. A blank value is "never set", so the Google account name on the user row stays. */
+export async function updateDisplayName(name: string) {
+  const next = name.trim().slice(0, 120);
+  if (!next || !state.token || !state.me) return state.me;
+  if (next === state.me.user.name.trim() || publishingName === next) return state.me;
+  publishingName = next;
+  try {
+    await api("/api/auth/update-user", { method: "POST", body: JSON.stringify({ name: next }) });
+    return await refreshMe().catch(() => state.me);
+  } finally {
+    if (publishingName === next) publishingName = null;
+  }
+}
+
 export async function signOut() {
   const token = state.token;
   sessionStorage.removeItem("bb_auth_return");

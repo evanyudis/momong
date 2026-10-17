@@ -5,7 +5,7 @@ import { initial, useHousehold } from "../household";
 import { go } from "../route";
 import { getPrefs } from "../store";
 import {
-  HAS_API, setSyncEnabled, ApiError, createInvite, joinHousehold, removeMember, requestMagicLink, signOut, syncNow, useAccount, authDestination, verifyMagicLink,
+  HAS_API, setSyncEnabled, ApiError, createInvite, joinHousehold, refreshMe, removeMember, requestMagicLink, signOut, syncNow, useAccount, authDestination, verifyMagicLink,
 } from "../sync";
 import { toast, TopBar } from "../ui";
 
@@ -119,6 +119,7 @@ function SignIn({ invite }: { invite?: boolean }) {
 
 function Household() {
   const h = useHousehold();
+  useEffect(() => { void refreshMe().catch(() => {}); }, []);
   const previousPartner = useRef(h.partner?.id);
   const [joinedPartner, setJoinedPartner] = useState<string | null>(null);
   useEffect(() => {
