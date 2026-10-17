@@ -132,6 +132,25 @@ export function pairSteps(input: {
   ];
 }
 
+export type PageNavigation = "navigate" | "reload" | "back_forward" | "prerender";
+
+export function navigationType(): PageNavigation {
+  const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+  return nav?.type === "reload" || nav?.type === "back_forward" || nav?.type === "prerender" ? nav.type : "navigate";
+}
+
+/** A leftover bb_google on a fresh invite open is not a cancelled Google return. Back/forward keeps it. */
+export function shouldClearStaleGoogle(hash: string, marker: string | null, navigation: string) {
+  if (marker !== "away" && marker !== "finishing") return false;
+  if (!hash.startsWith("#/gabung?")) return false;
+  return navigation !== "back_forward";
+}
+
+/** The red "Masuk Google belum selesai" line. A failed start (403, offline) is not a return. */
+export function inviteShowsGoogleError(input: { returnedWithoutSession: boolean; startFailed: boolean }) {
+  return input.returnedWithoutSession;
+}
+
 export function joinFailureMessage(code: string) {
   if (code === "seats_full") return "Keluarga sudah memiliki dua anggota. Minta pasangan memeriksa akses keluarga.";
   if (code === "invite_invalid") return "Undangan sudah tidak berlaku. Minta tautan baru dari pasangan.";

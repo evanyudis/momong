@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  clearInvite, displayInviteCode, externalBrowserHref, inviteReturnHash, inviteTokenFromInput, inviteWasSent,
-  isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinFailureMessage, markInviteSent, pairSteps, readInvite, rememberInvite,
+  clearInvite, displayInviteCode, externalBrowserHref, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinFailureMessage, markInviteSent, pairSteps, readInvite, rememberInvite, shouldClearStaleGoogle,
 } from "./invite.ts";
 
 const bag = () => {
@@ -89,6 +89,17 @@ test("partner steps move from invite sent to login to synced", () => {
   assert.deepEqual(pairSteps({ ...paired, syncStatus: "error" }).map((step) => step.state), ["done", "done", "error"]);
   assert.deepEqual(pairSteps({ ...paired, syncStatus: "offline" }).map((step) => step.state), ["done", "done", "error"]);
   assert.equal(pairSteps({ ...base, hasPartner: true, inviteSent: false }).map((step) => step.state)[0], "done");
+});
+
+test("Google cancelled copy only after a real return, not a failed start or a stale marker", () => {
+  assert.equal(inviteShowsGoogleError({ returnedWithoutSession: false, startFailed: true }), false);
+  assert.equal(inviteShowsGoogleError({ returnedWithoutSession: false, startFailed: false }), false);
+  assert.equal(inviteShowsGoogleError({ returnedWithoutSession: true, startFailed: false }), true);
+  assert.equal(shouldClearStaleGoogle("#/gabung?invite=TEST123", "away", "navigate"), true);
+  assert.equal(shouldClearStaleGoogle("#/gabung?invite=TEST123", "finishing", "reload"), true);
+  assert.equal(shouldClearStaleGoogle("#/gabung?invite=TEST123", "away", "back_forward"), false);
+  assert.equal(shouldClearStaleGoogle("#/profil", "away", "navigate"), false);
+  assert.equal(shouldClearStaleGoogle("#/gabung?invite=TEST123", null, "navigate"), false);
 });
 
 test("join errors stay in Indonesian", () => {

@@ -5,13 +5,13 @@ import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, useHousehold } from "../household";
 import {
-  displayInviteCode, externalBrowserHref, inviteReturnHash, inviteTokenFromInput, inviteWasSent,
-  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinFailureMessage, markInviteSent, pairStepLabel, pairSteps, readInvite, rememberInvite,
+  displayInviteCode, externalBrowserHref, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinFailureMessage, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, rememberInvite, shouldClearStaleGoogle,
 } from "../invite";
 import { go } from "../route";
 import { getPrefs } from "../store";
 import {
-  HAS_API, setSyncEnabled, ApiError, acceptInvite, consumePendingInvite, createInvite, googlePhase, removeMember,
+  HAS_API, setSyncEnabled, ApiError, acceptInvite, consumePendingInvite, createInvite, googlePhase, removeMember, takeGoogleReturn,
   requestMagicLink, signOut, startGoogle, syncNow, refreshMe, useAccount, authDestination, verifyMagicLink, type HouseholdInvite,
 } from "../sync";
 import { Sheet, toast, TopBar } from "../ui";
@@ -485,7 +485,16 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   const h = useHousehold();
   const inApp = isWhatsAppBrowser(navigator.userAgent);
   const valid = !!invite && isInviteToken(invite);
-  const [googleFailed, setGoogleFailed] = useState(false);
+  const [returned, setReturned] = useState(() => {
+    const nav = navigationType();
+    const marker = sessionStorage.getItem("bb_google");
+    if (shouldClearStaleGoogle(location.hash, marker, nav)) {
+      sessionStorage.removeItem("bb_google");
+      return false;
+    }
+    return nav === "back_forward" && takeGoogleReturn();
+  });
+  const [startFailed, setStartFailed] = useState(false);
   const [googleTick, setGoogleTick] = useState(0);
   const [phase, setPhase] = useState<"idle" | "joining" | "error">("idle");
   const [joinCode, setJoinCode] = useState("");
@@ -499,12 +508,18 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   }, [invite, valid, h.signedIn, inApp]);
 
   useEffect(() => {
-    if (!valid || h.signedIn || inApp || googleFailed) return;
+    const onShow = (event: PageTransitionEvent) => { if (event.persisted && takeGoogleReturn()) setReturned(true); };
+    addEventListener("pageshow", onShow);
+    return () => removeEventListener("pageshow", onShow);
+  }, []);
+
+  useEffect(() => {
+    if (!valid || h.signedIn || inApp || startFailed || returned) return;
     if (googlePhase() !== null) return;
     let cancel = false;
-    startGoogle().catch(() => { if (!cancel) setGoogleFailed(true); });
+    startGoogle().catch(() => { if (!cancel) setStartFailed(true); });
     return () => { cancel = true; };
-  }, [valid, h.signedIn, inApp, googleFailed, googleTick]);
+  }, [valid, h.signedIn, inApp, startFailed, returned, googleTick]);
 
   useEffect(() => {
     if (!valid || !invite || !h.signedIn || h.acc.checking || inApp) return;
@@ -526,14 +541,15 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   if (inApp) return <><TopBar title="Gabung" back="#/" /><WhatsAppBanner invite={invite!} /><Hero title="Kamu diundang mencatat bersama" body="Masuk dengan Google di Safari atau Chrome. Setelah itu kamu langsung tergabung." /></>;
 
   const phaseNow = googlePhase();
-  if (!h.signedIn && (googleFailed || phaseNow === "away")) {
+  const showGoogleError = inviteShowsGoogleError({ returnedWithoutSession: returned, startFailed });
+  if (!h.signedIn && (showGoogleError || startFailed)) {
     return (
       <>
         <TopBar title="Gabung" />
         <Hero title="Kamu diundang mencatat bersama" body="Masuk dengan Google. Setelah itu kamu langsung tergabung, tanpa langkah tambahan." />
         <div className="stack">
-          <p role="alert" style={{ color: "var(--field-danger)" }}>Masuk Google belum selesai. Coba lagi dari browser ini.</p>
-          <button className="btn btn-blue lg block" onClick={() => { sessionStorage.removeItem("bb_google"); setGoogleFailed(false); setGoogleTick((n) => n + 1); }}>Lanjut dengan Google</button>
+          {showGoogleError && <p role="alert" style={{ color: "var(--field-danger)" }}>Masuk Google belum selesai. Coba lagi dari browser ini.</p>}
+          <button className="btn btn-blue lg block" onClick={() => { sessionStorage.removeItem("bb_google"); setReturned(false); setStartFailed(false); setGoogleTick((n) => n + 1); }}>Lanjut dengan Google</button>
           <a className="btn btn-soft block" href="#/masuk-akun">Masuk dengan email</a>
         </div>
       </>

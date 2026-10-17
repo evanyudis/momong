@@ -1,6 +1,6 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
-import { clearInvite, inviteReturnHash, isInviteToken, isSafeInviteReturn, readInvite } from "./invite";
+import { clearInvite, inviteReturnHash, isInviteToken, isSafeInviteReturn, navigationType, readInvite, shouldClearStaleGoogle } from "./invite";
 import { PLUS_ENABLED } from "./release";
 import { nameFromEmail, type SignInMode } from "./signin";
 import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
@@ -207,7 +207,15 @@ export function takeGoogleReturn() {
 /** Boot after Google: the callback left a Better Auth session cookie on this origin. Trade it for the bearer, then the email path.
  *  A stored invite is joined before the next screen, with no extra tap. No session: sign-in reads the marker. */
 export async function finishGoogle() {
-  if (sessionStorage.getItem(GOOGLE_AWAY) !== "away") return;
+  const marker = sessionStorage.getItem(GOOGLE_AWAY);
+  const nav = navigationType();
+  if (shouldClearStaleGoogle(location.hash, marker, nav)) {
+    sessionStorage.removeItem(GOOGLE_AWAY);
+    return;
+  }
+  // Back onto the invite page: leave the marker for that screen. Do not send them to sign-in.
+  if (marker === "away" && nav === "back_forward" && location.hash.startsWith("#/gabung?")) return;
+  if (marker !== "away") return;
   if (state.token) return sessionStorage.removeItem(GOOGLE_AWAY);
   if (location.hash.startsWith("#/masuk-akun")) return; // error landing: SignIn takes the marker itself
   sessionStorage.setItem(GOOGLE_AWAY, "finishing");
