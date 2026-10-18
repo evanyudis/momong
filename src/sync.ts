@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react";
 import { clearInvite, googleReturnAction, inviteReturnHash, isInviteToken, isSafeInviteReturn, navigationType, readInvite, reconcilePendingInvite } from "./invite";
 import { PLUS_ENABLED } from "./release";
 import { nameFromEmail, type SignInMode } from "./signin";
-import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
+import { setPlusAccess, isPlus, applyRemote, clearAccountRecords, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
  *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
@@ -22,14 +22,45 @@ type State = { checking?: boolean; restoreError?: boolean; verifiedAt?: number; 
 const load = <T,>(k: string, d: T): T => {
   try { return JSON.parse(localStorage.getItem(k) ?? "") ?? d; } catch { return d; }
 };
+const DATA_USER = "bb_data_user";
+
+function syncFlagKey(userId: string) {
+  return `bb_sync_enabled:${userId}`;
+}
+
+function writeSyncEnabled(userId: string, enabled: boolean) {
+  localStorage.setItem(syncFlagKey(userId), JSON.stringify(enabled));
+}
+
 function storedSyncEnabled(me: Me | null) {
   const userId = me?.user?.id;
   if (!userId) return false;
-  const raw = localStorage.getItem(`bb_sync_enabled:${userId}`);
+  const raw = localStorage.getItem(syncFlagKey(userId));
   if (raw === "true") return true;
   if (raw === "false") return false;
   const cursor = Number(localStorage.getItem("bb_cursor") ?? 0);
   return Number.isFinite(cursor) && cursor > 0;
+}
+
+/** Local notes belong to the account that wrote them. A different login starts clean. Sync flags stay. */
+function adoptAccountData(userId: string) {
+  const previous = localStorage.getItem(DATA_USER);
+  if (previous && previous !== userId) clearAccountRecords();
+  localStorage.setItem(DATA_USER, userId);
+}
+
+/** Cache Storage and IndexedDB can keep a previous account after a wipe. */
+export function clearBrowserCaches() {
+  const cacheStore = (globalThis as { caches?: { keys: () => Promise<string[]>; delete: (key: string) => Promise<boolean> } }).caches;
+  if (cacheStore?.keys) {
+    void Promise.resolve(cacheStore.keys()).then((keys) => Promise.all(keys.map((key) => cacheStore.delete(key)))).catch(() => {});
+  }
+  const idb = (globalThis as { indexedDB?: { databases?: () => Promise<{ name?: string | null }[]>; deleteDatabase: (name: string) => void } }).indexedDB;
+  if (idb?.databases && idb.deleteDatabase) {
+    void Promise.resolve(idb.databases()).then((dbs) => {
+      for (const db of dbs) if (db?.name) idb.deleteDatabase(db.name);
+    }).catch(() => {});
+  }
 }
 
 const cachedMe = load<Me | null>("bb_me", null);
@@ -100,7 +131,7 @@ function clearSession() {
 export function setSyncEnabled(enabled: boolean) {
   if (!state.me || !state.token) return;
   syncVersion++;
-  localStorage.setItem(`bb_sync_enabled:${state.me.user.id}`, JSON.stringify(enabled));
+  writeSyncEnabled(state.me.user.id, enabled);
   set({ syncEnabled: enabled, status: "local", hasSynced: false });
   if (enabled) {
     localStorage.removeItem("bb_cursor");
@@ -125,11 +156,23 @@ export async function verifyMagicLink(token: string) {
   await signedIn();
 }
 
+export const AUTH_TIMEOUT_MS = 15_000;
+
+function isTimeout(error: unknown) {
+  return !!error && typeof error === "object" && "name" in error && ((error as { name?: string }).name === "TimeoutError" || (error as { name?: string }).name === "AbortError");
+}
+
 /** Better Auth email + password. Sign-up signs in at once; both hand the bearer back on set-auth-token. */
 export async function authEmail(mode: SignInMode, email: string, password: string) {
   const path = mode === "daftar" ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email";
   const body = mode === "daftar" ? { name: nameFromEmail(email), email, password } : { email, password };
-  const { data, res } = await api<{ token?: string }>(path, { method: "POST", body: JSON.stringify(body) });
+  let data: { token?: string }, res: Response;
+  try {
+    ({ data, res } = await api<{ token?: string }>(path, { method: "POST", body: JSON.stringify(body), signal: AbortSignal.timeout(AUTH_TIMEOUT_MS) }));
+  } catch (error) {
+    if (isTimeout(error)) throw new ApiError(408, "timeout");
+    throw error;
+  }
   establishSession(res.headers.get("set-auth-token") ?? data.token);
   await signedIn();
 }
@@ -152,8 +195,10 @@ export async function restoreAccount() {
   try {
     await refreshMe();
     if (version !== sessionVersion) return;
+    adoptAccountData(state.me!.user.id);
     // Read the flag and cursor first. Deleting the cursor is a full pull, not a consent reset.
     const keepSync = storedSyncEnabled(state.me);
+    if (keepSync) writeSyncEnabled(state.me!.user.id, true);
     localStorage.removeItem("bb_cursor");
     set({ syncEnabled: keepSync, status: "local" });
     if (settings().birthMode !== "postpartum" && !settings().hpl) {
@@ -299,9 +344,9 @@ export async function updateDisplayName(name: string) {
 
 export async function signOut() {
   const token = state.token;
+  if (state.syncEnabled && state.me?.user.id) writeSyncEnabled(state.me.user.id, true);
   sessionStorage.removeItem("bb_auth_return");
   sessionStorage.removeItem("bb_google");
-  clearInvite();
   clearSession();
   if (token && HAS_API && navigator.onLine) {
     await fetch(API_URL + "/api/auth/sign-out", {
@@ -314,13 +359,21 @@ export function resetGuestData() {
   if (state.token) return false;
   clearSession();
   resetDeviceData();
+  clearBrowserCaches();
   return true;
 }
 
 export type HouseholdInvite = { token: string; url: string; expiresAt: string; code?: string };
 
+let publishedInvite: { householdId: string; invite: HouseholdInvite } | null = null;
+
+export function inviteReadyFor(householdId: string) {
+  return publishedInvite?.householdId === householdId ? publishedInvite.invite : null;
+}
+
 export async function createInvite() {
   const { data } = await api<HouseholdInvite>("/household/invite", { method: "POST", body: "{}" });
+  if (data?.token && data?.url && state.me?.household.id) publishedInvite = { householdId: state.me.household.id, invite: data };
   return data;
 }
 

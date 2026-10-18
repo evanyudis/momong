@@ -1,7 +1,7 @@
 /** Sign-in screen state. Pure: the network calls live in sync.ts (authEmail, startGoogle); this only decides what the screen shows. */
 export type SignInMode = "masuk" | "daftar";
 /** Shown under the button. "Email tidak cocok" is not here: it sits on the email field (emailError). */
-export type SignInFailure = "network" | "daftar" | "other";
+export type SignInFailure = "network" | "daftar" | "other" | "timeout";
 export type SignInState = {
   mode: SignInMode;
   email: string;
@@ -27,10 +27,43 @@ export const FAILURE_TEXT: Record<SignInFailure, string> = {
   network: "Tidak bisa terhubung ke server. Data tetap tersimpan di perangkat ini.",
   daftar: "Akun tidak bisa dibuat. Email mungkin sudah terdaftar, atau kata sandi kurang dari 8 karakter.",
   other: "Server sedang bermasalah. Coba lagi nanti.",
+  timeout: "Sambungan terlalu lama. Coba lagi.",
 };
+
+export const SIGNIN_DRAFT_KEY = "bb_signin_draft";
+
+export type SignInDraft = { mode: SignInMode; email: string; password: string; failure: SignInFailure | null };
+
+export function parseSignInDraft(raw: string | null): SignInDraft | null {
+  try {
+    const value = JSON.parse(raw ?? "");
+    if (!value || (value.mode !== "masuk" && value.mode !== "daftar")) return null;
+    if (typeof value.email !== "string" || typeof value.password !== "string") return null;
+    const failure = value.failure === "network" || value.failure === "daftar" || value.failure === "other" || value.failure === "timeout" ? value.failure : null;
+    return { mode: value.mode, email: value.email, password: value.password, failure };
+  } catch {
+    return null;
+  }
+}
+
+/** URL `mode=signup` wins. A remount during loading keeps the typed email and password. */
+export function signInInitial(signup: boolean, draft: SignInDraft | null): SignInState {
+  return {
+    ...SIGNIN_EMPTY,
+    mode: signup ? "daftar" : draft?.mode ?? "masuk",
+    email: draft?.email ?? "",
+    password: draft?.password ?? "",
+    failure: draft?.failure ?? null,
+  };
+}
+
+export function signInDraft(s: Pick<SignInState, "mode" | "email" | "password" | "failure">): SignInDraft {
+  return { mode: s.mode, email: s.email, password: s.password, failure: s.failure };
+}
 
 /** Better Auth answers a wrong email or password on sign-in with 401. Status 0 = the request never got an answer. */
 export function failureFor(mode: SignInMode, status: number): Pick<SignInState, "emailError" | "failure"> {
+  if (status === 408) return { emailError: false, failure: "timeout" };
   if (status === 0) return { emailError: false, failure: "network" };
   if (mode === "masuk" && status === 401) return { emailError: true, failure: null };
   if (mode === "daftar" && status >= 400 && status < 500) return { emailError: false, failure: "daftar" };

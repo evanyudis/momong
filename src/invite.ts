@@ -140,21 +140,34 @@ export function readInviteName(storage: Bag = localStorage, session: Bag = sessi
   return (session.getItem(PENDING_INVITE_NAME) || storage.getItem(PENDING_INVITE_NAME) || "").trim().slice(0, 80);
 }
 
-/** Drop a saved invite that belongs to someone else. A link opened before login is claimed by the account that signs in. */
+/**
+ * A link opened before login is claimed by the account that signs in.
+ * An invite saved for a different account stays until that person chooses.
+ */
 export function reconcilePendingInvite(currentAccountId: string | null, now = Date.now(), storage: Bag = localStorage, session: Bag = sessionStorage) {
   const token = readInvite(storage, session, now);
   if (!token) return "cleared" as const;
   const stored = session.getItem(PENDING_INVITE_USER) || storage.getItem(PENDING_INVITE_USER);
-  if (currentAccountId && stored && stored !== currentAccountId) {
-    clearInvite(storage, session);
-    return "cleared" as const;
-  }
+  if (currentAccountId && stored && stored !== currentAccountId) return "foreign" as const;
   if (currentAccountId && !stored) {
     storage.setItem(PENDING_INVITE_USER, currentAccountId);
     session.setItem(PENDING_INVITE_USER, currentAccountId);
     return "claimed" as const;
   }
   return "kept" as const;
+}
+
+/** Use a saved invite on the account that is signed in now. */
+export function claimForeignInvite(currentAccountId: string, storage: Bag = localStorage, session: Bag = sessionStorage, now = Date.now()) {
+  if (!currentAccountId || !readInvite(storage, session, now)) return false;
+  storage.setItem(PENDING_INVITE_USER, currentAccountId);
+  session.setItem(PENDING_INVITE_USER, currentAccountId);
+  return true;
+}
+
+/** A successful join opens Pasangan. A skipped or failed join stays on Gabung. */
+export function joinResultRoute(result: "joined" | "skipped" | "failed"): "pasangan" | "stay" {
+  return result === "joined" ? "pasangan" : "stay";
 }
 
 export function joinConfirmCopy(name: string) {
@@ -216,6 +229,19 @@ export function googleChoiceResume(input: {
   if (!cameBack) return "keep";
   if (input.busy || input.marker === "away") return "reset";
   return "keep";
+}
+
+/** Log rows that would move with a join. Profile setup is not an entry. */
+const LOG_COLLECTIONS = ["contractions", "kicks", "symptoms", "bag", "bottle", "breast", "pump", "diaper", "wishlist"] as const;
+
+export function localLogCount(db: unknown) {
+  if (!db || typeof db !== "object") return 0;
+  const data = db as Record<string, unknown>;
+  return LOG_COLLECTIONS.reduce((sum, col) => {
+    const rows = data[col];
+    if (!rows || typeof rows !== "object") return sum;
+    return sum + Object.values(rows as Record<string, { deleted?: boolean }>).filter((row) => !!row && !row.deleted).length;
+  }, 0);
 }
 
 /** Shown only when this account already has notes on the phone or a sync cursor. */
@@ -331,9 +357,11 @@ export function inviteShowsGoogleError(input: { returnedWithoutSession: boolean;
   return input.returnedWithoutSession;
 }
 
+export const INVITE_INVALID_TITLE = "Tautan tidak valid atau sudah kedaluwarsa";
+
 export function joinFailureMessage(code: string) {
   if (code === "seats_full") return "Keluarga sudah memiliki dua anggota. Minta pasangan memeriksa akses keluarga.";
-  if (code === "invite_invalid") return "Undangan sudah tidak berlaku. Minta tautan baru dari pasangan.";
+  if (code === "invite_invalid") return `${INVITE_INVALID_TITLE}. Minta tautan baru dari pasangan.`;
   if (code === "not_ready") return "Masuk dulu, lalu tempel kode undangan.";
   return "Belum bisa bergabung. Cek koneksi lalu coba lagi.";
 }

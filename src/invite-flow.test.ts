@@ -119,8 +119,9 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     memory.set("bb_google", "away");
     loc.hash = "#/profil";
     await sync.finishGoogle();
-    assert.equal(memory.has("bb_pending_invite"), false, "a different account drops the saved invite");
-    assert.equal(loc.hash, "#/profil");
+    assert.equal(memory.get("bb_pending_invite"), "inviteTok1", "a different account keeps the saved invite");
+    assert.equal(memory.get("bb_pending_invite_user"), "someone-else");
+    assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "a different account opens the invite so they can choose");
     assert.equal(calls.filter((call) => call.path === "/household/join").length, 1);
     await sync.signOut();
     me = structuredClone(solo);

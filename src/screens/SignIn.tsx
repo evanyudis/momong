@@ -4,7 +4,7 @@ import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
 import { Button, FieldError, Form, Input, Label, TextField } from "react-aria-components";
 import { deviceHasData, setPrefs } from "../store";
 import { reducedMotion } from "../motion";
-import { FAILURE_TEXT, SIGNIN_EMPTY, signIn } from "../signin";
+import { FAILURE_TEXT, SIGNIN_DRAFT_KEY, parseSignInDraft, signIn, signInDraft, signInInitial } from "../signin";
 import { ApiError, authEmail, startGoogle, takeGoogleReturn, authDestination } from "../sync";
 
 const EXIT_MS = 150; // matches the quiet exit in styles.css; enter (settle-in) is 200ms
@@ -42,7 +42,12 @@ function GoogleMark() {
 export function SignIn({ onboarding = false, plus = false, signup = false }: { onboarding?: boolean; plus?: boolean; signup?: boolean }) {
   const [restoreOpen, setRestoreOpen] = useState(false);
   const forPlus = plus || sessionStorage.getItem("bb_auth_return") === "#/plus";
-  const [s, dispatch] = useReducer(signIn, { ...SIGNIN_EMPTY, mode: signup ? "daftar" : "masuk" });
+  const [s, dispatch] = useReducer(signIn, undefined, () => signInInitial(signup, parseSignInDraft(sessionStorage.getItem(SIGNIN_DRAFT_KEY))));
+  const [seenSignup, setSeenSignup] = useState(signup);
+  if (signup !== seenSignup) {
+    setSeenSignup(signup);
+    dispatch({ type: "mode", mode: signup ? "daftar" : "masuk" });
+  }
   // Last input was a key: messages appear and leave without motion (emil-animations: keyboard actions never animate).
   const [still, setStill] = useState(false);
   const errLeaving = useLeaving(s.emailError, still);
@@ -63,12 +68,17 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
     dispatch({ type: "submit" });
     try {
       await authEmail(s.mode, email, s.password);
+      sessionStorage.removeItem(SIGNIN_DRAFT_KEY);
       location.hash = authDestination(onboarding ? "#/" : "#/profil");
     } catch (err) {
       // Status 0 covers fetch rejecting (offline, firewall, CORS, mixed content): never shown as success.
       dispatch({ type: "fail", status: err instanceof ApiError ? err.status : 0 });
     }
   }
+
+  useEffect(() => {
+    sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify(signInDraft(s)));
+  }, [s.mode, s.email, s.password, s.failure]);
 
   // Came back from Google without a session: reload or errorCallbackURL lands here; Back may restore this page from bfcache.
   useEffect(() => {

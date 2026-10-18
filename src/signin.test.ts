@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { SIGNIN_EMPTY, failureFor, nameFromEmail, signIn, type SignInState } from "./signin.ts";
+import { SIGNIN_EMPTY, failureFor, nameFromEmail, parseSignInDraft, signIn, signInDraft, signInInitial, type SignInState } from "./signin.ts";
 
 const filled = (mode: SignInState["mode"] = "masuk") =>
   signIn(signIn({ ...SIGNIN_EMPTY, mode }, { type: "email", value: "a@b.co" }), { type: "password", value: "rahasia123" });
@@ -23,6 +23,24 @@ test("Email tidak cocok only for a failed Masuk (401), and both fields stay fill
 test("unreachable server is an honest network failure, never success", () => {
   assert.deepEqual(failureFor("masuk", 0), { emailError: false, failure: "network" });
   assert.deepEqual(failureFor("daftar", 0), { emailError: false, failure: "network" });
+  assert.equal(failureFor("masuk", 408).failure, "timeout");
+  assert.equal(failureFor("daftar", 408).failure, "timeout");
+});
+
+test("signup url wins, and a reload during submit keeps the typed fields", () => {
+  const draft = signInDraft({ mode: "masuk", email: "qa@example.com", password: "rahasia123", failure: "timeout" });
+  const saved = parseSignInDraft(JSON.stringify(draft));
+  const again = signInInitial(true, saved);
+  assert.equal(again.mode, "daftar");
+  assert.equal(again.email, "qa@example.com");
+  assert.equal(again.password, "rahasia123");
+  assert.equal(again.failure, "timeout");
+  assert.equal(signInInitial(false, saved).mode, "masuk");
+  const pending = signIn(again, { type: "submit" });
+  assert.equal(pending.pending, true);
+  assert.equal(pending.email, "qa@example.com");
+  assert.equal(signIn(pending, { type: "fail", status: 408 }).failure, "timeout");
+  assert.equal(signIn(pending, { type: "fail", status: 408 }).password, "rahasia123");
 });
 
 test("Daftar rejections and server errors get their own message", () => {
