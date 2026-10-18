@@ -66,6 +66,18 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     assert.equal(memory.has("bb_google"), false, "a stale Google marker on home is dropped");
     assert.equal(socialCalls(), 0);
 
+    loc.hash = "#/gabung?invite=inviteTok1";
+    loc.assigned = "";
+    for (const marker of [null, "away", "finishing"]) {
+      if (marker) memory.set("bb_google", marker);
+      else memory.delete("bb_google");
+      await sync.finishGoogle();
+    }
+    assert.equal(loc.assigned, "", "loading or reloading the invite does not leave for Google");
+    assert.equal(socialCalls(), 0, "loading the invite does not start Google");
+    memory.delete("bb_google");
+    loc.hash = "#/";
+
     memory.set("bb_google", "away");
     loc.hash = "#/masuk-akun";
     await sync.finishGoogle();

@@ -575,7 +575,6 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   useEffect(() => {
     if (!valid || !h.signedIn || inApp || !h.partner) return;
     clearInvite();
-    go("#/pasangan");
   }, [valid, h.signedIn, inApp, h.partner]);
 
   useEffect(() => {
@@ -642,7 +641,17 @@ export function JoinLanding({ invite }: { invite: string | null }) {
 
   const phaseNow = googlePhase();
   const showGoogleError = inviteShowsGoogleError({ returnedWithoutSession: returned, startFailed });
-  if (inviteEntry({ signedIn: h.signedIn, validInvite: valid }) === "choose") {
+  const entry = inviteEntry({ signedIn: h.signedIn, validInvite: valid, hasPartner: !!h.partner });
+  if (entry === "connected") {
+    return (
+      <>
+        <TopBar title="Gabung" />
+        <Hero title="Kamu sudah terhubung di rumah ini" body="Akun ini sudah bersama pasangan. Undangan ini tidak mengubah rumahmu." />
+        <a className="btn btn-soft block" href="#/pasangan">Ke halaman Pasangan</a>
+      </>
+    );
+  }
+  if (entry === "choose") {
     if (phaseNow === "finishing") {
       return (
         <>

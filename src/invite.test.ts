@@ -137,11 +137,23 @@ test("partner steps move from invite sent to login to synced", () => {
 test("logged-out invite stays on the choice screen and a saved invite never starts Google", () => {
   assert.equal(inviteEntry({ signedIn: false, validInvite: true }), "choose");
   assert.equal(inviteEntry({ signedIn: true, validInvite: true }), "confirm");
+  assert.equal(inviteEntry({ signedIn: true, validInvite: true, hasPartner: true }), "connected");
+  assert.equal(inviteEntry({ signedIn: false, validInvite: true, hasPartner: true }), "choose");
   assert.equal(inviteEntry({ signedIn: false, validInvite: false }), "ignore");
   assert.equal(googleReturnAction({ marker: null, navigation: "navigate", hash: "#/gabung?invite=inviteTok1", signedIn: false }), "stay");
   assert.equal(googleReturnAction({ marker: "away", navigation: "navigate", hash: "#/", signedIn: false }), "clear");
   assert.equal(googleReturnAction({ marker: "away", navigation: "reload", hash: "/", signedIn: false }), "clear");
   assert.equal(googleReturnAction({ marker: "away", navigation: "reload", hash: "#/gabung?invite=inviteTok1", signedIn: false }), "clear");
+});
+
+test("hard reload of a logged-out invite does not continue Google", () => {
+  const hashes = ["#/gabung?invite=inviteTok1", "#/gabung?invite=inviteTok1&dari=Sari", "#/"];
+  for (const hash of hashes) {
+    for (const marker of [null, "away", "finishing", "other"]) {
+      assert.notEqual(googleReturnAction({ marker, navigation: "reload", hash, signedIn: false }), "finish");
+    }
+  }
+  assert.equal(inviteEntry({ signedIn: false, validInvite: true }), "choose");
 });
 
 test("cancelled Google does not loop into another redirect", () => {
