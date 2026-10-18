@@ -170,6 +170,12 @@ export function joinResultRoute(result: "joined" | "skipped" | "failed"): "pasan
   return result === "joined" ? "pasangan" : "stay";
 }
 
+/** Nanti leaves the confirm sheet for Beranda. The saved invite stays. An invite return is dropped so this visit is not sent back. */
+export function declineJoin(input: { authReturn: string | null }): { hash: "#/"; authReturn: string | null } {
+  const authReturn = input.authReturn && isSafeInviteReturn(input.authReturn) ? null : input.authReturn;
+  return { hash: "#/", authReturn };
+}
+
 export function joinConfirmCopy(name: string) {
   const house = name.trim();
   return house ? `Gabung ke rumah ${house}?` : "Gabung ke rumah ini?";

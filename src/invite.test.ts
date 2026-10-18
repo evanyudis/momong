@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, googleChoiceResume, googleReturnAction, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, googleChoiceResume, googleReturnAction, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
   claimForeignInvite, isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "./invite.ts";
 
@@ -208,4 +208,18 @@ test("join errors stay in Indonesian", () => {
   assert.equal(joinResultRoute("skipped"), "stay");
   assert.match(joinFailureMessage("not_ready"), /Masuk dulu/);
   assert.match(joinFailureMessage(""), /Cek koneksi/);
+});
+
+test("Nanti leaves Gabung for Beranda and keeps the saved invite", () => {
+  const local = bag();
+  const session = bag();
+  const now = Date.parse("2026-10-01T00:00:00Z");
+  rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: "user-a", name: "Sari" });
+  const next = declineJoin({ authReturn: "#/gabung?invite=inviteTok1" });
+  assert.equal(next.hash, "#/");
+  assert.equal(next.authReturn, null);
+  assert.equal(readInvite(local.storage, session.storage, now), "inviteTok1");
+  assert.equal(session.memory.get("bb_pending_invite"), "inviteTok1");
+  assert.equal(declineJoin({ authReturn: "#/plus" }).authReturn, "#/plus");
+  assert.equal(declineJoin({ authReturn: null }).authReturn, null);
 });

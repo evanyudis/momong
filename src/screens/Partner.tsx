@@ -5,7 +5,7 @@ import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, partnerSyncScreen, useHousehold } from "../household";
 import {
-  claimForeignInvite, claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, googleChoiceResume, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, googleChoiceResume, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
   isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteName, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "../invite";
 import { go } from "../route";
@@ -559,7 +559,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   const [googleBusy, setGoogleBusy] = useState(false);
   const googleBusyRef = useRef(false);
   googleBusyRef.current = googleBusy;
-  const [phase, setPhase] = useState<"ask" | "joining" | "declined" | "error">("ask");
+  const [phase, setPhase] = useState<"ask" | "joining" | "error">("ask");
   const [foreignInvite, setForeignInvite] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const joinLock = useRef({ held: false });
@@ -627,6 +627,13 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     sessionStorage.removeItem("bb_auth_return");
     sessionStorage.removeItem("bb_google");
     go("#/");
+  }
+
+  function leaveJoinConfirm() {
+    const next = declineJoin({ authReturn: sessionStorage.getItem("bb_auth_return") });
+    if (next.authReturn) sessionStorage.setItem("bb_auth_return", next.authReturn);
+    else sessionStorage.removeItem("bb_auth_return");
+    location.replace(`${location.pathname}${location.search}#/`);
   }
 
   async function confirmJoin() {
@@ -718,15 +725,14 @@ export function JoinLanding({ invite }: { invite: string | null }) {
       <>
         <TopBar title="Gabung" />
         <Hero title="Kamu diundang mencatat bersama" body="Cek dulu rumah yang kamu ikuti. Gabung setelah kamu yakin." />
-        <Sheet open={phase === "ask" || phase === "joining"} onOpenChange={(open) => { if (!open && phase !== "joining") setPhase("declined"); }} title={joinConfirmCopy(houseName)}>
+        <Sheet open={phase === "ask" || phase === "joining"} onOpenChange={(open) => { if (!open && phase !== "joining") leaveJoinConfirm(); }} title={joinConfirmCopy(houseName)}>
           <div className="stack" style={{ marginTop: 16 }}>
             <p>Catatan di HP ini ikut ke rumah itu. Kamu tetap di akun ini kalau memilih nanti.</p>
             <JoinDataNote />
             <button type="button" className="btn btn-blue lg block" disabled={phase === "joining"} aria-busy={phase === "joining"} onClick={() => void confirmJoin()}>{phase === "joining" ? "Menggabungkan…" : "Gabung"}</button>
-            <button type="button" className="btn btn-soft block" disabled={phase === "joining"} onClick={() => setPhase("declined")}>Nanti</button>
+            <button type="button" className="btn btn-soft block" disabled={phase === "joining"} onClick={leaveJoinConfirm}>Nanti</button>
           </div>
         </Sheet>
-        {phase === "declined" && <button type="button" className="btn btn-blue lg block" onClick={() => setPhase("ask")}>Gabung</button>}
       </>
     );
   }
