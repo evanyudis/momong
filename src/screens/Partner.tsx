@@ -63,6 +63,8 @@ export function Partner() {
     userId,
     enabledFlag: h.acc.syncEnabled ? true : storedFlag,
     syncCursor: Number(localStorage.getItem("bb_cursor") ?? 0),
+    paired: !!h.partner,
+    checking: !!h.acc.checking,
   });
   return (
     <>

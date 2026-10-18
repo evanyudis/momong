@@ -361,7 +361,7 @@ async function signedIn() {
   reconcilePendingInvite(state.me.user.id);
 }
 
-/** Restore saved household data before offering setup. Uploads still require sync consent. */
+/** Restore saved household data before offering setup. A solo account still needs sync consent. A paired account does not. */
 export async function restoreAccount() {
   const version = sessionVersion;
   set({ checking: true, restoreError: false });
@@ -370,7 +370,9 @@ export async function restoreAccount() {
     if (version !== sessionVersion) return;
     adoptAccountData(state.me!.user.id);
     // Read the flag and cursor first. Deleting the cursor is a full pull, not a consent reset.
-    const keepSync = storedSyncEnabled(state.me);
+    // A second member on /me is already paired. A fresh device has no local flag, so turn sync on and pull.
+    const paired = state.me!.household.members.some((member) => member.id !== state.me!.user.id);
+    const keepSync = storedSyncEnabled(state.me) || paired;
     if (keepSync) writeSyncEnabled(state.me!.user.id, true);
     localStorage.removeItem("bb_cursor");
     set({ syncEnabled: keepSync, status: "local" });

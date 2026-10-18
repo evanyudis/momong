@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "vite";
+import { inviteEntry } from "./invite.ts";
 import type { Me } from "./sync.ts";
 
 const memory = new Map<string, string>();
@@ -14,16 +15,19 @@ Object.assign(globalThis, {
   },
 });
 
-const { partnerSyncScreen, seatNameFromMember, seatNames } = await import("./household.ts");
+const { householdHasPartner, partnerSyncScreen, seatNameFromMember, seatNames } = await import("./household.ts");
 
-test("pasangan sync prompt follows the local flag or cursor, not /me", () => {
+test("pasangan sync prompt follows the local flag, the cursor, or a partner already on /me", () => {
   assert.equal(partnerSyncScreen({ hasToken: false, userId: null, enabledFlag: null, syncCursor: 0 }), "signin");
-  assert.equal(partnerSyncScreen({ hasToken: true, userId: null, enabledFlag: null, syncCursor: 0 }), "wait");
-  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: true, syncCursor: 0 }), "household");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: null, enabledFlag: null, syncCursor: 0, paired: true, checking: true }), "wait");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: true, syncCursor: 0, checking: true }), "household");
   assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: false, syncCursor: 0 }), "consent");
-  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: false, syncCursor: 4 }), "household");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: false, syncCursor: 4, checking: true }), "household");
   assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: null, syncCursor: 2 }), "household");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: null, syncCursor: 0, checking: true }), "wait");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: null, syncCursor: 0, paired: true }), "household");
   assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: null, syncCursor: 0 }), "consent");
+  assert.equal(householdHasPartner(null), false);
 });
 const store = await import("./store.ts");
 
@@ -148,6 +152,62 @@ test("restore keeps sync when the cursor is the only local evidence", async () =
       userId: "qa-a",
       enabledFlag: sync.account().syncEnabled ? true : null,
       syncCursor: Number(memory.get("bb_cursor") ?? 0),
+    }), "household");
+  } finally {
+    globalThis.fetch = realFetch;
+    Object.assign(globalThis, { localStorage: previousLocal, sessionStorage: previousSession });
+    await server.close();
+  }
+});
+
+test("a paired account on a fresh device leaves Gabung for Pasangan without the sync prompt", async () => {
+  const previousLocal = globalThis.localStorage;
+  const previousSession = globalThis.sessionStorage;
+  const memory = new Map<string, string>();
+  const me = {
+    user: { id: "qa-fresh", email: "qa-fresh@example.com", name: "Qa Fresh" },
+    entitlement: { plan: "free", expiresAt: null },
+    household: {
+      id: "house-fresh",
+      seats: 2,
+      members: [
+        { id: "qa-fresh", email: "qa-fresh@example.com", name: "Qa Fresh", role: "owner" },
+        { id: "partner", email: "partner@example.com", name: "Pasangan", role: "member" },
+      ],
+    },
+  };
+  memory.set("bb_token", "fresh-token");
+  Object.assign(globalThis, { localStorage: storageFrom(memory), sessionStorage: storageFrom(memory) });
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+  const server = await createServer({ server: { middlewareMode: true }, define: { "import.meta.env.VITE_API_URL": JSON.stringify("http://test.local") } });
+  const realFetch = globalThis.fetch;
+  const syncs: unknown[] = [];
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    const path = new URL(url).pathname;
+    if (path === "/me") return Response.json(me);
+    if (path === "/sync") {
+      syncs.push(init?.body ? JSON.parse(String(init.body)) : null);
+      return Response.json({ cursor: 3, changes: [] });
+    }
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  try {
+    assert.equal(memory.has("bb_sync_enabled:qa-fresh"), false);
+    assert.equal(memory.has("bb_cursor"), false);
+    assert.equal(inviteEntry({ signedIn: true, validInvite: true, hasPartner: householdHasPartner(me) }), "connected");
+    const sync = await server.ssrLoadModule("/src/sync.ts");
+    assert.equal(sync.account().syncEnabled, false, "a fresh device has not opted in locally");
+    await sync.restoreAccount();
+    assert.equal(sync.account().syncEnabled, true, "a second member on /me turns sync on");
+    assert.equal(memory.get("bb_sync_enabled:qa-fresh"), "true");
+    assert.ok(syncs.length >= 1, "the first sync runs");
+    assert.equal(partnerSyncScreen({
+      hasToken: true,
+      userId: sync.account().me.user.id,
+      enabledFlag: sync.account().syncEnabled ? true : null,
+      syncCursor: Number(memory.get("bb_cursor") ?? 0),
+      paired: householdHasPartner(sync.account().me),
+      checking: !!sync.account().checking,
     }), "household");
   } finally {
     globalThis.fetch = realFetch;
