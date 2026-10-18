@@ -5,13 +5,13 @@ import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, partnerSyncScreen, useHousehold } from "../household";
 import {
-  claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, googleChoiceResume, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
-  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteName, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
+  claimForeignInvite, claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, googleChoiceResume, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteName, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "../invite";
 import { go } from "../route";
 import { getPrefs, setPrefs } from "../store";
 import {
-  HAS_API, setSyncEnabled, abandonGoogleStart, ApiError, acceptInvite, consumePendingInvite, createInvite, googlePhase, removeMember, takeGoogleReturn,
+  HAS_API, setSyncEnabled, abandonGoogleStart, ApiError, acceptInvite, consumePendingInvite, createInvite, googlePhase, inviteReadyFor, removeMember, takeGoogleReturn,
   requestMagicLink, signOut, startGoogle, syncNow, refreshMe, useAccount, authDestination, verifyMagicLink, type HouseholdInvite,
 } from "../sync";
 import { Sheet, toast, TopBar } from "../ui";
@@ -21,8 +21,7 @@ const verifying = new Map<string, Promise<void>>();
 
 function localRecordCount() {
   try {
-    const db = JSON.parse(localStorage.getItem("bb_db_v1") || "{}") as Record<string, Record<string, unknown>>;
-    return Object.values(db).reduce((sum, records) => sum + (records && typeof records === "object" ? Object.keys(records).length : 0), 0);
+    return localLogCount(JSON.parse(localStorage.getItem("bb_db_v1") || "{}"));
   } catch {
     return 0;
   }
@@ -210,16 +209,23 @@ function Household({ onJoin }: { onJoin: () => void }) {
   const full = h.seatsUsed >= h.seats;
 
   useEffect(() => {
-    if (full || !h.isOwner || invite) return;
-    let cancelled = false;
+    if (full || !h.isOwner) return;
+    const ready = inviteReadyFor(householdId);
+    if (ready) { setInvite(ready); setInviteLoading(false); return; }
+    if (invite) return;
     setInviteLoading(true); setInviteError(false);
+    let dropped = false;
     createInvite().then((value) => {
-      if (!cancelled) { setInvite(value); setInviteLoading(false); }
+      // A cleanup must not throw away a 200. The link comes from this response.
+      setInvite(value);
+      setInviteLoading(false);
     }).catch(() => {
-      if (!cancelled) { setInviteError(true); setInviteLoading(false); }
+      if (dropped) return;
+      setInviteError(true);
+      setInviteLoading(false);
     });
-    return () => { cancelled = true; };
-  }, [full, h.isOwner, invite, inviteAttempt]);
+    return () => { dropped = true; };
+  }, [full, h.isOwner, invite, inviteAttempt, householdId]);
 
   const code = invite ? displayInviteCode(invite) : "";
   const shareUrl = invite ? inviteLinkWithOwner(invite.url, h.myName) : "";
@@ -453,7 +459,7 @@ function JoinCodeSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
       }
       toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
       onOpenChange(false);
-      go("#/pasangan");
+      if (joinResultRoute("joined") === "pasangan") go("#/pasangan");
     } catch (e) {
       joinLock.current.held = false;
       setError(joinFailureMessage(e instanceof ApiError ? e.code : ""));
@@ -554,6 +560,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   const googleBusyRef = useRef(false);
   googleBusyRef.current = googleBusy;
   const [phase, setPhase] = useState<"ask" | "joining" | "declined" | "error">("ask");
+  const [foreignInvite, setForeignInvite] = useState(false);
   const [joinCode, setJoinCode] = useState("");
   const joinLock = useRef({ held: false });
   const houseName = (invite ? inviteOwnerName(location.hash) : "") || readInviteName();
@@ -569,7 +576,8 @@ export function JoinLanding({ invite }: { invite: string | null }) {
       if (isSafeInviteReturn(back)) sessionStorage.setItem("bb_auth_return", back);
       return;
     }
-    reconcilePendingInvite(h.me?.user.id ?? null);
+    const result = reconcilePendingInvite(h.me?.user.id ?? null);
+    setForeignInvite(result === "foreign");
   }, [invite, valid, inApp, h.signedIn, h.me?.user.id]);
 
   useEffect(() => {
@@ -631,8 +639,12 @@ export function JoinLanding({ invite }: { invite: string | null }) {
       setPhase("error");
       return;
     }
-    if (result.ok === "joined") toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
-    go("#/pasangan");
+    if (result.ok === "joined") {
+      toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
+      if (joinResultRoute("joined") === "pasangan") go("#/pasangan");
+      return;
+    }
+    setPhase("ask");
   }
 
   if (!HAS_API) return <><TopBar title="Gabung" /><NoServer /></>;
@@ -642,11 +654,23 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   const phaseNow = googlePhase();
   const showGoogleError = inviteShowsGoogleError({ returnedWithoutSession: returned, startFailed });
   const entry = inviteEntry({ signedIn: h.signedIn, validInvite: valid, hasPartner: !!h.partner });
+  if (foreignInvite && h.signedIn) {
+    return (
+      <>
+        <TopBar title="Gabung" />
+        <Hero title="Undangan ini untuk akun lain" body="Undangan ini tersimpan untuk akun yang lain. Pakai undangan ini di akun yang sekarang?" />
+        <div className="stack">
+          <button type="button" className="btn btn-blue lg block" onClick={() => { if (h.me && claimForeignInvite(h.me.user.id)) setForeignInvite(false); }}>Pakai undangan ini</button>
+          <button type="button" className="btn btn-soft block" onClick={() => { clearInvite(); setForeignInvite(false); go("#/"); }}>Abaikan</button>
+        </div>
+      </>
+    );
+  }
   if (entry === "connected") {
     return (
       <>
         <TopBar title="Gabung" />
-        <Hero title="Kamu sudah terhubung di rumah ini" body="Akun ini sudah bersama pasangan. Undangan ini tidak mengubah rumahmu." />
+        <Hero title="Kamu sudah terhubung dengan pasangan" body="Kamu sudah terhubung di rumah ini. Undangan ini tidak mengubah rumahmu." />
         <a className="btn btn-soft block" href="#/pasangan">Ke halaman Pasangan</a>
       </>
     );
@@ -677,13 +701,14 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     );
   }
   if (phase === "error") {
+    const invalid = joinCode === "invite_invalid";
     return (
       <>
         <TopBar title="Gabung" />
-        <Hero title="Gabung mencatat bersama" body="Catatan di HP ini akan digabung dengan catatan pasangan. Kalian berdua bisa menambah dan mengedit." />
+        <Hero title={invalid ? INVITE_INVALID_TITLE : "Gabung belum berhasil"} body={invalid ? "Minta pasangan kirim tautan yang baru." : joinFailureMessage(joinCode)} />
         <div className="stack">
-          <p role="alert" style={{ color: "var(--field-danger)" }}>{joinFailureMessage(joinCode)}</p>
-          <button className="btn btn-blue lg block" onClick={() => setPhase("ask")}>Coba lagi</button>
+          {!invalid && <p role="alert" style={{ color: "var(--field-danger)" }}>{joinFailureMessage(joinCode)}</p>}
+          {invalid ? <a className="btn btn-soft block" href="#/">Kembali</a> : <button className="btn btn-blue lg block" onClick={() => setPhase("ask")}>Coba lagi</button>}
         </div>
       </>
     );

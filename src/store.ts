@@ -194,6 +194,18 @@ export function resetDeviceData() {
   listeners.forEach((l) => l());
 }
 
+/** Drop this phone's profile and entries. Per-account sync flags stay. */
+export function clearAccountRecords() {
+  db = {}; dirty.clear(); prefs = {};
+  persistedDB = db; persistedDirty = new Set(dirty);
+  localStorage.removeItem(DB_KEY);
+  localStorage.removeItem(DIRTY_KEY);
+  localStorage.removeItem(PREFS_KEY);
+  localStorage.removeItem("bb_cursor");
+  version++;
+  listeners.forEach((l) => l());
+}
+
 export type Backup = { data: DB; preferences: Prefs; records: number };
 export const deviceHasData = () => Object.values(db).some((rows) => Object.keys(rows ?? {}).length > 0);
 const collections: Collection[] = ["baby", "settings", "contractions", "kicks", "symptoms", "bag", "bottle", "breast", "pump", "diaper", "wishlist"];

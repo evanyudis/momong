@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, googleChoiceResume, googleReturnAction, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
-  isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
+  claimForeignInvite, isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "./invite.ts";
 
 const bag = () => {
@@ -61,8 +61,10 @@ test("saved invite expires after seven days and drops for a different account", 
   assert.equal(readInvite(local.storage, session.storage, now + 6 * day), "inviteTok1");
   assert.equal(reconcilePendingInvite("user-a", now + 6 * day, local.storage, session.storage), "kept");
   assert.equal(readInvite(local.storage, session.storage, now + 6 * day), "inviteTok1");
-  assert.equal(reconcilePendingInvite("user-b", now + day, local.storage, session.storage), "cleared");
-  assert.equal(readInvite(local.storage, session.storage, now + day), null);
+  assert.equal(reconcilePendingInvite("user-b", now + day, local.storage, session.storage), "foreign");
+  assert.equal(readInvite(local.storage, session.storage, now + day), "inviteTok1", "a different account does not drop the invite");
+  assert.equal(claimForeignInvite("user-b", local.storage, session.storage, now + day), true);
+  assert.equal(reconcilePendingInvite("user-b", now + day, local.storage, session.storage), "kept");
 
   assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, name: "Sari" }), true);
   assert.equal(reconcilePendingInvite("user-b", now, local.storage, session.storage), "claimed");
@@ -72,6 +74,13 @@ test("saved invite expires after seven days and drops for a different account", 
   assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: "user-b", name: "Sari" }), true);
   assert.equal(readInvite(local.storage, session.storage, now + 8 * day), null);
   assert.equal(local.storage.getItem("bb_pending_invite"), null);
+});
+
+test("a profile with no log entries does not warn on join", () => {
+  const db = { settings: { main: { id: "main", babyName: "Bayi A", birthMode: "postpartum" } }, kicks: { old: { id: "old", deleted: true } } };
+  assert.equal(localLogCount(db), 0);
+  assert.equal(joinDataWarning({ localRecords: localLogCount(db), syncCursor: 0 }), null);
+  assert.equal(localLogCount({ kicks: { a: { id: "a" } } }), 1);
 });
 
 test("join warning only when this account already has notes or a sync cursor", () => {
@@ -193,7 +202,10 @@ test("Google cancelled copy only after a real return, not a failed start or a st
 
 test("join errors stay in Indonesian", () => {
   assert.match(joinFailureMessage("seats_full"), /dua anggota/);
-  assert.match(joinFailureMessage("invite_invalid"), /tidak berlaku/);
+  assert.match(joinFailureMessage("invite_invalid"), /Tautan tidak valid atau sudah kedaluwarsa/);
+  assert.equal(joinResultRoute("joined"), "pasangan");
+  assert.equal(joinResultRoute("failed"), "stay");
+  assert.equal(joinResultRoute("skipped"), "stay");
   assert.match(joinFailureMessage("not_ready"), /Masuk dulu/);
   assert.match(joinFailureMessage(""), /Cek koneksi/);
 });
