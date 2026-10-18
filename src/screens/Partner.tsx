@@ -3,15 +3,15 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Form, Input, Label, TextField } from "react-aria-components";
 import { encode } from "uqr";
 import { agoLabel } from "../dates";
-import { initial, useHousehold } from "../household";
+import { initial, partnerSyncScreen, useHousehold } from "../household";
 import {
-  claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, googleChoiceResume, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
   isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteName, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "../invite";
 import { go } from "../route";
 import { getPrefs, setPrefs } from "../store";
 import {
-  HAS_API, setSyncEnabled, ApiError, acceptInvite, consumePendingInvite, createInvite, googlePhase, removeMember, takeGoogleReturn,
+  HAS_API, setSyncEnabled, abandonGoogleStart, ApiError, acceptInvite, consumePendingInvite, createInvite, googlePhase, removeMember, takeGoogleReturn,
   requestMagicLink, signOut, startGoogle, syncNow, refreshMe, useAccount, authDestination, verifyMagicLink, type HouseholdInvite,
 } from "../sync";
 import { Sheet, toast, TopBar } from "../ui";
@@ -56,10 +56,19 @@ export function SyncDot() {
 export function Partner() {
   const h = useHousehold();
   const [joinOpen, setJoinOpen] = useState(false);
+  const userId = h.me?.user.id ?? null;
+  const rawFlag = userId ? localStorage.getItem(`bb_sync_enabled:${userId}`) : null;
+  const storedFlag = rawFlag === "true" ? true : rawFlag === "false" ? false : null;
+  const view = !HAS_API ? "no-server" : partnerSyncScreen({
+    hasToken: !!h.acc.token,
+    userId,
+    enabledFlag: h.acc.syncEnabled ? true : storedFlag,
+    syncCursor: Number(localStorage.getItem("bb_cursor") ?? 0),
+  });
   return (
     <>
       <TopBar title="Pasangan" />
-      {!HAS_API ? <NoServer /> : h.signedIn ? h.acc.syncEnabled ? <Household onJoin={() => setJoinOpen(true)} /> : <SyncConsent paired={!!h.partner} onJoin={() => setJoinOpen(true)} /> : <SignIn />}
+      {view === "no-server" ? <NoServer /> : view === "signin" ? <SignIn /> : view === "wait" ? <div className="card solid empty" role="status" aria-busy="true"><strong>Memeriksa sesi…</strong></div> : view === "household" ? <Household onJoin={() => setJoinOpen(true)} /> : <SyncConsent paired={!!h.partner} onJoin={() => setJoinOpen(true)} />}
       {h.signedIn && <JoinCodeSheet open={joinOpen} onOpenChange={setJoinOpen} />}
     </>
   );
@@ -542,6 +551,8 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   });
   const [startFailed, setStartFailed] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const googleBusyRef = useRef(false);
+  googleBusyRef.current = googleBusy;
   const [phase, setPhase] = useState<"ask" | "joining" | "declined" | "error">("ask");
   const [joinCode, setJoinCode] = useState("");
   const joinLock = useRef({ held: false });
@@ -568,9 +579,28 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   }, [valid, h.signedIn, inApp, h.partner]);
 
   useEffect(() => {
-    const onShow = (event: PageTransitionEvent) => { if (event.persisted && takeGoogleReturn()) setReturned(true); };
+    const release = (marker: string | null) => {
+      const away = marker === "away";
+      abandonGoogleStart();
+      setGoogleBusy(false);
+      if (away) setReturned(true);
+    };
+    const onShow = (event: PageTransitionEvent) => {
+      const marker = sessionStorage.getItem("bb_google");
+      if (event.persisted && takeGoogleReturn()) setReturned(true);
+      if (googleChoiceResume({ busy: googleBusyRef.current, marker, persisted: event.persisted, visible: false }) === "reset") release(marker);
+    };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const marker = sessionStorage.getItem("bb_google");
+      if (googleChoiceResume({ busy: googleBusyRef.current, marker, persisted: false, visible: true }) === "reset") release(marker);
+    };
     addEventListener("pageshow", onShow);
-    return () => removeEventListener("pageshow", onShow);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      removeEventListener("pageshow", onShow);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, []);
 
   async function beginGoogle() {

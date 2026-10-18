@@ -14,7 +14,17 @@ Object.assign(globalThis, {
   },
 });
 
-const { seatNameFromMember, seatNames } = await import("./household.ts");
+const { partnerSyncScreen, seatNameFromMember, seatNames } = await import("./household.ts");
+
+test("pasangan sync prompt follows the local flag or cursor, not /me", () => {
+  assert.equal(partnerSyncScreen({ hasToken: false, userId: null, enabledFlag: null, syncCursor: 0 }), "signin");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: null, enabledFlag: null, syncCursor: 0 }), "wait");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: true, syncCursor: 0 }), "household");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: false, syncCursor: 0 }), "consent");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: false, syncCursor: 4 }), "household");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: null, syncCursor: 2 }), "household");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: null, syncCursor: 0 }), "consent");
+});
 const store = await import("./store.ts");
 
 const googleOwner = "Adit Google";
