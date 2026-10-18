@@ -187,24 +187,33 @@ export function onControllerChange() { return controllerChangeAction(authIsPendi
 /** Main registers this so a deferred service-worker reload runs after the sign-up chain stores its result. */
 export function whenAuthSettles(listener: () => void) { authSettled = listener; }
 
+let authPassword: string | null = null;
+
 function beginAuthAttempt(mode: SignInMode, email: string, password: string) {
-  sessionStorage.setItem(AUTH_ATTEMPT_KEY, JSON.stringify({ mode, email, password }));
+  authPassword = password;
+  sessionStorage.setItem(AUTH_ATTEMPT_KEY, JSON.stringify({ mode, email }));
   publishAuth(true, null);
 }
 
 function finishAuthAttempt(result: AuthResult | null) {
+  authPassword = null;
   sessionStorage.removeItem(AUTH_ATTEMPT_KEY);
   publishAuth(false, result);
   const settled = authSettled;
   if (settled) queueMicrotask(settled);
 }
 
+/** Same-page remounts can refill the field. A reload cannot, because the password is not stored. */
+export function authMemoryPassword() {
+  return authPassword ?? "";
+}
+
 function assignHash(hash: string) {
   try { location.hash = hash; } catch { /* non-browser tests */ }
 }
 
-function publishCreatedLogin(email: string, password: string) {
-  sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify({ mode: "masuk", email, password, failure: "created" }));
+function publishCreatedLogin(email: string) {
+  sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify({ mode: "masuk", email, failure: "created" }));
   sessionStorage.setItem(AUTH_NOTICE_KEY, "created");
   assignHash("#/masuk-akun");
 }
@@ -254,7 +263,7 @@ async function recoverAfterSignup(email: string, password: string, signupSucceed
     signInStatus = error instanceof ApiError ? error.status : 0;
   }
   if (signInRetryStep({ signInStatus, followUpFailed, signupSucceeded }) === "created-login") {
-    publishCreatedLogin(email, password);
+    publishCreatedLogin(email);
     throw new ApiError(409, "created");
   }
   throw new ApiError(signInStatus, "request_failed");
@@ -294,14 +303,41 @@ export async function authEmail(mode: SignInMode, email: string, password: strin
   }
 }
 
-/** After a reload drops the sign-up response, continue with sign-in. The account may already exist. */
+async function recoverSessionCookie() {
+  try {
+    const { data, res } = await api<{ session?: { token?: string }; token?: string } | null>("/api/auth/get-session");
+    const cookie = res.headers.get("set-auth-token") ?? data?.session?.token ?? data?.token ?? null;
+    if (!cookie) return false;
+    await enterWithToken(cookie);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** After a reload drops the sign-up response, continue from the cookie. The password did not survive the reload. */
 export async function resumeAuthAttempt() {
   const attempt = parseAuthAttempt(sessionStorage.getItem(AUTH_ATTEMPT_KEY));
   if (!attempt) return;
   if (state.token && state.me) { finishAuthAttempt(null); return; }
   if (!authUiState.pending) publishAuth(true, null);
   try {
-    await recoverAfterSignup(attempt.email, attempt.password, attempt.mode === "daftar");
+    let recovered = false;
+    if (authPassword) {
+      await recoverAfterSignup(attempt.email, authPassword, attempt.mode === "daftar");
+      recovered = true;
+    } else {
+      recovered = await recoverSessionCookie();
+    }
+    if (!recovered) {
+      if (attempt.mode === "daftar") {
+        publishCreatedLogin(attempt.email);
+        finishAuthAttempt({ id: ++authResultId, status: 409, failure: "created" });
+        return;
+      }
+      finishAuthAttempt({ id: ++authResultId, status: 0, failure: "network" });
+      return;
+    }
     finishAuthAttempt(null);
     assignHash(authDestination(attempt.mode === "daftar" ? "#/" : "#/profil"));
   } catch (error) {

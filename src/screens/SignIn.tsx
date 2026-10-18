@@ -5,7 +5,7 @@ import { Button, FieldError, Form, Input, Label, TextField } from "react-aria-co
 import { deviceHasData, setPrefs } from "../store";
 import { reducedMotion } from "../motion";
 import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, FAILURE_TEXT, SIGNIN_DRAFT_KEY, parseAuthAttempt, parseSignInDraft, signIn, signInDraft, signInInitial } from "../signin";
-import { ApiError, authDestination, authEmail, authUi, startGoogle, subscribeAuthUi, takeGoogleReturn } from "../sync";
+import { ApiError, authDestination, authEmail, authMemoryPassword, authUi, startGoogle, subscribeAuthUi, takeGoogleReturn } from "../sync";
 
 const EXIT_MS = 150; // matches the quiet exit in styles.css; enter (settle-in) is 200ms
 
@@ -49,6 +49,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
     parseSignInDraft(sessionStorage.getItem(SIGNIN_DRAFT_KEY)),
     parseAuthAttempt(sessionStorage.getItem(AUTH_ATTEMPT_KEY)),
     sessionStorage.getItem(AUTH_NOTICE_KEY) === "created",
+    authMemoryPassword(),
   ));
   if (s.pending && !auth.pending) {
     if (auth.result && appliedAuth.current !== auth.result.id) {
@@ -94,7 +95,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
   }
 
   function useExistingAccount() {
-    sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify({ mode: "masuk", email: s.email, password: s.password, failure: null }));
+    sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify({ mode: "masuk", email: s.email, failure: null }));
     if (signup || location.hash.includes("mode=signup")) location.hash = "#/masuk-akun";
     else dispatch({ type: "mode", mode: "masuk" });
   }
@@ -103,7 +104,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
   useEffect(() => {
     if (auth.pending) return;
     sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify(signInDraft(s)));
-  }, [s.mode, s.email, s.password, s.failure, auth.pending]);
+  }, [s.mode, s.email, s.failure, auth.pending]);
 
   // Came back from Google without a session: reload or errorCallbackURL lands here; Back may restore this page from bfcache.
   useEffect(() => {

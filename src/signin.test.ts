@@ -28,16 +28,17 @@ test("unreachable server is an honest network failure, never success", () => {
   assert.equal(failureFor("daftar", 408).failure, "timeout");
 });
 
-test("signup url wins, and a reload during submit keeps the typed fields", () => {
-  const draft = signInDraft({ mode: "masuk", email: "qa@example.com", password: "rahasia123", failure: "timeout" });
-  const saved = parseSignInDraft(JSON.stringify(draft));
+test("signup url wins, and a reload during submit keeps the email but not the password", () => {
+  const draft = signInDraft({ mode: "masuk", email: "qa@example.com", failure: "timeout" });
+  assert.equal("password" in draft, false);
+  const saved = parseSignInDraft(JSON.stringify({ ...draft, password: "rahasia123" }));
   const again = signInInitial(true, saved);
   assert.equal(again.mode, "daftar");
   assert.equal(again.email, "qa@example.com");
-  assert.equal(again.password, "rahasia123");
+  assert.equal(again.password, "");
   assert.equal(again.failure, "timeout");
   assert.equal(signInInitial(false, saved).mode, "masuk");
-  const pending = signIn(again, { type: "submit" });
+  const pending = signIn(signIn(again, { type: "password", value: "rahasia123" }), { type: "submit" });
   assert.equal(pending.pending, true);
   assert.equal(pending.email, "qa@example.com");
   assert.equal(signIn(pending, { type: "fail", status: 408 }).failure, "timeout");
@@ -84,11 +85,12 @@ test("daftar and masuk swap modes in place; state never holds a token or signed-
 });
 
 test("sign-up stays pending across a remount and blocks a service worker reload", () => {
-  const again = signInInitial(true, null, { mode: "daftar", email: "qa@example.com", password: "rahasia123" });
+  const again = signInInitial(true, null, { mode: "daftar", email: "qa@example.com" }, false, "rahasia123");
   assert.equal(again.pending, true, "the button stays on Menyambungkan… after the form remounts");
   assert.equal(again.mode, "daftar");
   assert.equal(again.email, "qa@example.com");
   assert.equal(again.password, "rahasia123");
+  assert.equal(signInInitial(true, null, { mode: "daftar", email: "qa@example.com" }).password, "");
   assert.equal(controllerChangeAction(again.pending), "defer");
   assert.equal(controllerChangeAction(false), "reload");
 });
@@ -107,7 +109,8 @@ test("a lost sign-up session retries sign-in, then opens login with the email", 
   assert.equal(created.email, "a@b.co");
   assert.equal(created.pending, false);
   assert.equal(FAILURE_TEXT.created, "Akun sudah dibuat. Masuk untuk lanjut.");
-  const fromNotice = signInInitial(true, { mode: "daftar", email: "qa@example.com", password: "rahasia123", failure: "created" }, null, true);
+  const fromNotice = signInInitial(true, { mode: "daftar", email: "qa@example.com", failure: "created" }, null, true);
+  assert.equal(fromNotice.password, "");
   assert.equal(fromNotice.mode, "masuk");
   assert.equal(fromNotice.email, "qa@example.com");
   assert.equal(fromNotice.failure, "created");
@@ -158,6 +161,9 @@ test("sign-up keeps loading through the session chain and recovers when that cha
       assert.equal(sync.authIsPending(), true, "loading stays up while sign-up, session, /me and /sync run");
       assert.equal(sync.onControllerChange(), "defer");
       assert.equal(memory.has("bb_auth_attempt"), true);
+      assert.equal(JSON.parse(memory.get("bb_auth_attempt")!).email, "qa-new@example.com");
+      assert.equal("password" in JSON.parse(memory.get("bb_auth_attempt")!), false);
+      assert.equal(JSON.stringify([...memory.values()]).includes("test-password"), false);
       const error = new Error("aborted");
       error.name = "TimeoutError";
       throw error;
@@ -206,6 +212,8 @@ test("sign-up keeps loading through the session chain and recovers when that cha
     assert.equal(memory.get("bb_auth_notice"), "created");
     assert.equal(JSON.parse(memory.get("bb_signin_draft")!).email, "qa-new@example.com");
     assert.equal(JSON.parse(memory.get("bb_signin_draft")!).mode, "masuk");
+    assert.equal("password" in JSON.parse(memory.get("bb_signin_draft")!), false);
+    assert.equal(JSON.stringify([...memory.values()]).includes("test-password"), false);
     assert.equal(sync.authIsPending(), false);
   } finally {
     globalThis.fetch = realFetch;
