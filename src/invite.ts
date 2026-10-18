@@ -162,6 +162,38 @@ export function joinConfirmCopy(name: string) {
   return house ? `Gabung ke rumah ${house}?` : "Gabung ke rumah ini?";
 }
 
+/** Logged-out invite visits stay on a choice screen. A page load never starts Google. */
+export function inviteEntry(input: { signedIn: boolean; validInvite: boolean }): "choose" | "confirm" | "ignore" {
+  if (!input.validInvite) return "ignore";
+  return input.signedIn ? "confirm" : "choose";
+}
+
+/**
+ * What to do with a leftover Google marker on boot.
+ * Only the OAuth callback (`#/profil`) may continue. Home, a reload, and a cancelled return do not start Google.
+ */
+export function googleReturnAction(input: {
+  marker: string | null;
+  navigation: string;
+  hash: string;
+  signedIn: boolean;
+}): "finish" | "stay" | "clear" {
+  const marker = input.marker === "away" || input.marker === "finishing" ? input.marker : null;
+  if (!marker) return "stay";
+  if (input.signedIn) return "clear";
+  if (input.hash.startsWith("#/masuk-akun")) return "stay";
+  if (input.navigation === "back_forward" && input.hash.startsWith("#/gabung?")) return "stay";
+  if (marker === "away" && (input.hash === "#/profil" || input.hash.startsWith("#/profil?"))) return "finish";
+  return "clear";
+}
+
+/** First click claims the join. A second click while it is held does nothing. */
+export function claimJoinClick(lock: { held: boolean }) {
+  if (lock.held) return false;
+  lock.held = true;
+  return true;
+}
+
 /** Shown only when this account already has notes on the phone or a sync cursor. */
 export const JOIN_DATA_WARNING = "Catatan di HP ini akan ikut. Catatan yang hanya ada di server untuk rumah lama mungkin tidak muncul lagi.";
 

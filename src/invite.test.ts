@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  clearInvite, displayInviteCode, externalBrowserHref, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, googleReturnAction, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
   isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "./invite.ts";
 
@@ -132,6 +132,31 @@ test("partner steps move from invite sent to login to synced", () => {
   assert.deepEqual(pairSteps({ ...paired, syncStatus: "error" }).map((step) => step.state), ["done", "done", "error"]);
   assert.deepEqual(pairSteps({ ...paired, syncStatus: "offline" }).map((step) => step.state), ["done", "done", "error"]);
   assert.equal(pairSteps({ ...base, hasPartner: true, inviteSent: false }).map((step) => step.state)[0], "done");
+});
+
+test("logged-out invite stays on the choice screen and a saved invite never starts Google", () => {
+  assert.equal(inviteEntry({ signedIn: false, validInvite: true }), "choose");
+  assert.equal(inviteEntry({ signedIn: true, validInvite: true }), "confirm");
+  assert.equal(inviteEntry({ signedIn: false, validInvite: false }), "ignore");
+  assert.equal(googleReturnAction({ marker: null, navigation: "navigate", hash: "#/gabung?invite=inviteTok1", signedIn: false }), "stay");
+  assert.equal(googleReturnAction({ marker: "away", navigation: "navigate", hash: "#/", signedIn: false }), "clear");
+  assert.equal(googleReturnAction({ marker: "away", navigation: "reload", hash: "/", signedIn: false }), "clear");
+  assert.equal(googleReturnAction({ marker: "away", navigation: "reload", hash: "#/gabung?invite=inviteTok1", signedIn: false }), "clear");
+});
+
+test("cancelled Google does not loop into another redirect", () => {
+  assert.equal(googleReturnAction({ marker: "away", navigation: "navigate", hash: "#/masuk-akun", signedIn: false }), "stay");
+  assert.equal(googleReturnAction({ marker: "away", navigation: "back_forward", hash: "#/gabung?invite=inviteTok1", signedIn: false }), "stay");
+  assert.equal(googleReturnAction({ marker: "away", navigation: "navigate", hash: "#/profil", signedIn: false }), "finish");
+  assert.equal(googleReturnAction({ marker: "away", navigation: "navigate", hash: "#/profil", signedIn: true }), "clear");
+  assert.equal(googleReturnAction({ marker: "finishing", navigation: "reload", hash: "#/", signedIn: false }), "clear");
+});
+
+test("double-click join claims the request once", () => {
+  const lock = { held: false };
+  assert.equal(claimJoinClick(lock), true);
+  assert.equal(claimJoinClick(lock), false);
+  assert.equal(lock.held, true);
 });
 
 test("Google cancelled copy only after a real return, not a failed start or a stale marker", () => {

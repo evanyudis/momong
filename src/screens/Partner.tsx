@@ -5,11 +5,11 @@ import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, useHousehold } from "../household";
 import {
-  clearInvite, displayInviteCode, externalBrowserHref, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
   isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteName, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "../invite";
 import { go } from "../route";
-import { getPrefs } from "../store";
+import { getPrefs, setPrefs } from "../store";
 import {
   HAS_API, setSyncEnabled, ApiError, acceptInvite, consumePendingInvite, createInvite, googlePhase, removeMember, takeGoogleReturn,
   requestMagicLink, signOut, startGoogle, syncNow, refreshMe, useAccount, authDestination, verifyMagicLink, type HouseholdInvite,
@@ -409,12 +409,14 @@ function JoinCodeSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
   const [confirmToken, setConfirmToken] = useState<string | null>(null);
   const [confirmName, setConfirmName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const joinLock = useRef({ held: false });
   useEffect(() => {
     if (open) return;
     setScanning(false);
     setError("");
     setBusy(false);
     setConfirmToken(null);
+    joinLock.current.held = false;
   }, [open]);
 
   function stage(raw: string) {
@@ -427,17 +429,24 @@ function JoinCodeSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
 
   async function confirmJoin() {
     const token = confirmToken;
-    if (!token) return;
+    if (!token || !claimJoinClick(joinLock.current)) return;
     setBusy(true);
     setError("");
     try {
       rememberInvite(token, localStorage, sessionStorage, { name: confirmName });
       const result = await acceptInvite(token);
-      if (result === "skipped") { setError(joinFailureMessage("seats_full")); setBusy(false); setConfirmToken(null); return; }
+      if (result === "skipped") {
+        joinLock.current.held = false;
+        setError(joinFailureMessage("seats_full"));
+        setBusy(false);
+        setConfirmToken(null);
+        return;
+      }
       toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
       onOpenChange(false);
       go("#/pasangan");
     } catch (e) {
+      joinLock.current.held = false;
       setError(joinFailureMessage(e instanceof ApiError ? e.code : ""));
       setBusy(false);
       setConfirmToken(null);
@@ -463,7 +472,7 @@ function JoinCodeSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         <div className="stack" style={{ marginTop: 16 }}>
           <p>Catatan di HP ini ikut ke rumah itu.</p>
           <JoinDataNote />
-          <button type="button" className="btn btn-blue block" disabled={busy} onClick={() => void confirmJoin()}>{busy ? "Menggabungkan…" : "Gabung"}</button>
+          <button type="button" className="btn btn-blue block" disabled={busy} aria-busy={busy} onClick={() => void confirmJoin()}>{busy ? "Menggabungkan…" : "Gabung"}</button>
           <button type="button" className="btn btn-soft block" disabled={busy} onClick={() => setConfirmToken(null)}>Nanti</button>
         </div>
       </Sheet>
@@ -517,7 +526,7 @@ export function MagicLanding({ token }: { token: string | null }) {
   );
 }
 
-/** #/gabung?invite=… — partner invite landing. Logged-out visits go to Google, then confirm before joining. */
+/** #/gabung?invite=… — partner invite landing. Logged-out visits choose how to sign in. Google starts only from that button. */
 export function JoinLanding({ invite }: { invite: string | null }) {
   const h = useHousehold();
   const inApp = isWhatsAppBrowser(navigator.userAgent);
@@ -532,9 +541,10 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     return nav === "back_forward" && takeGoogleReturn();
   });
   const [startFailed, setStartFailed] = useState(false);
-  const [googleTick, setGoogleTick] = useState(0);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [phase, setPhase] = useState<"ask" | "joining" | "declined" | "error">("ask");
   const [joinCode, setJoinCode] = useState("");
+  const joinLock = useRef({ held: false });
   const houseName = (invite ? inviteOwnerName(location.hash) : "") || readInviteName();
 
   useEffect(() => {
@@ -563,19 +573,35 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     return () => removeEventListener("pageshow", onShow);
   }, []);
 
-  useEffect(() => {
-    if (!valid || h.signedIn || inApp || startFailed || returned) return;
-    if (googlePhase() !== null) return;
-    let cancel = false;
-    startGoogle().catch(() => { if (!cancel) setStartFailed(true); });
-    return () => { cancel = true; };
-  }, [valid, h.signedIn, inApp, startFailed, returned, googleTick]);
+  async function beginGoogle() {
+    if (googleBusy) return;
+    setGoogleBusy(true);
+    setStartFailed(false);
+    try {
+      await startGoogle();
+    } catch {
+      setStartFailed(true);
+      setGoogleBusy(false);
+    }
+  }
+
+  function skipAccount() {
+    setPrefs({ guest: true });
+    sessionStorage.removeItem("bb_auth_return");
+    sessionStorage.removeItem("bb_google");
+    go("#/");
+  }
 
   async function confirmJoin() {
-    if (!invite) return;
+    if (!invite || !claimJoinClick(joinLock.current)) return;
     setPhase("joining");
     const result = await consumePendingInvite(invite);
-    if (result.ok === "failed") { setJoinCode(result.code); setPhase("error"); return; }
+    if (result.ok === "failed") {
+      joinLock.current.held = false;
+      setJoinCode(result.code);
+      setPhase("error");
+      return;
+    }
     if (result.ok === "joined") toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
     go("#/pasangan");
   }
@@ -586,15 +612,27 @@ export function JoinLanding({ invite }: { invite: string | null }) {
 
   const phaseNow = googlePhase();
   const showGoogleError = inviteShowsGoogleError({ returnedWithoutSession: returned, startFailed });
-  if (!h.signedIn && (showGoogleError || startFailed)) {
+  if (inviteEntry({ signedIn: h.signedIn, validInvite: valid }) === "choose") {
+    if (phaseNow === "finishing") {
+      return (
+        <>
+          <TopBar title="Gabung" />
+          <div className="card solid empty" role="status" aria-busy="true">
+            <strong>Menyambungkan akun…</strong>
+            Setelah masuk, konfirmasi sebelum bergabung.
+          </div>
+        </>
+      );
+    }
     return (
       <>
         <TopBar title="Gabung" />
-        <Hero title="Kamu diundang mencatat bersama" body="Masuk dengan Google. Setelah masuk, konfirmasi sebelum bergabung." />
+        <Hero title="Kamu diundang mencatat bersama" body="Pilih cara masuk. Setelah masuk, konfirmasi sebelum bergabung." />
         <div className="stack">
           {showGoogleError && <p role="alert" style={{ color: "var(--field-danger)" }}>Masuk Google belum selesai. Coba lagi dari browser ini.</p>}
-          <button className="btn btn-blue lg block" onClick={() => { sessionStorage.removeItem("bb_google"); setReturned(false); setStartFailed(false); setGoogleTick((n) => n + 1); }}>Lanjut dengan Google</button>
-          <a className="btn btn-soft block" href="#/masuk-akun">Masuk dengan email</a>
+          <button type="button" className="btn btn-blue lg block" disabled={googleBusy} aria-busy={googleBusy} onClick={() => void beginGoogle()}>{googleBusy ? "Membuka masuk Google…" : "Lanjut dengan Google"}</button>
+          <button type="button" className="btn btn-soft block" disabled={googleBusy} onClick={() => { if (!googleBusy) location.hash = "#/masuk-akun"; }}>Masuk dengan email</button>
+          <button type="button" className="btn btn-soft block" disabled={googleBusy} onClick={skipAccount}>Lanjut tanpa akun</button>
         </div>
       </>
     );
@@ -620,7 +658,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
           <div className="stack" style={{ marginTop: 16 }}>
             <p>Catatan di HP ini ikut ke rumah itu. Kamu tetap di akun ini kalau memilih nanti.</p>
             <JoinDataNote />
-            <button type="button" className="btn btn-blue lg block" disabled={phase === "joining"} onClick={() => void confirmJoin()}>{phase === "joining" ? "Menggabungkan…" : "Gabung"}</button>
+            <button type="button" className="btn btn-blue lg block" disabled={phase === "joining"} aria-busy={phase === "joining"} onClick={() => void confirmJoin()}>{phase === "joining" ? "Menggabungkan…" : "Gabung"}</button>
             <button type="button" className="btn btn-soft block" disabled={phase === "joining"} onClick={() => setPhase("declined")}>Nanti</button>
           </div>
         </Sheet>
@@ -628,13 +666,11 @@ export function JoinLanding({ invite }: { invite: string | null }) {
       </>
     );
   }
-  const status = phaseNow === "finishing" ? "Menyambungkan akun…" : "Membuka masuk Google…";
   return (
     <>
       <TopBar title="Gabung" />
-      <div className="card solid empty" role="status" aria-busy="true">
-        <strong>{status}</strong>
-        Setelah masuk, konfirmasi sebelum bergabung.
+      <div className="card solid empty" role="status">
+        <strong>Sebentar…</strong>
       </div>
     </>
   );
