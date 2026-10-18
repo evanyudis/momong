@@ -1,6 +1,6 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
-import { clearInvite, inviteReturnHash, isInviteToken, isSafeInviteReturn, navigationType, readInvite, reconcilePendingInvite, shouldClearStaleGoogle } from "./invite";
+import { clearInvite, googleReturnAction, inviteReturnHash, isInviteToken, isSafeInviteReturn, navigationType, readInvite, reconcilePendingInvite } from "./invite";
 import { PLUS_ENABLED } from "./release";
 import { nameFromEmail, type SignInMode } from "./signin";
 import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
@@ -73,6 +73,8 @@ export function authDestination(fallback = "#/profil") {
   sessionStorage.removeItem("bb_auth_return");
   if (target === "#/plus" || target === "#/pasangan") return target;
   if (target && isSafeInviteReturn(target)) return target;
+  const pending = readInvite();
+  if (pending) return inviteReturnHash(pending);
   return fallback;
 }
 
@@ -209,16 +211,18 @@ export function takeGoogleReturn() {
  *  A stored invite returns to the confirm step. It is not joined until that tap. No session: sign-in reads the marker. */
 export async function finishGoogle() {
   const marker = sessionStorage.getItem(GOOGLE_AWAY);
-  const nav = navigationType();
-  if (shouldClearStaleGoogle(location.hash, marker, nav)) {
+  const action = googleReturnAction({
+    marker,
+    navigation: navigationType(),
+    hash: location.hash,
+    signedIn: !!state.token,
+  });
+  if (action === "clear") {
     sessionStorage.removeItem(GOOGLE_AWAY);
     return;
   }
-  // Back onto the invite page: leave the marker for that screen. Do not send them to sign-in.
-  if (marker === "away" && nav === "back_forward" && location.hash.startsWith("#/gabung?")) return;
-  if (marker !== "away") return;
-  if (state.token) return sessionStorage.removeItem(GOOGLE_AWAY);
-  if (location.hash.startsWith("#/masuk-akun")) return; // error landing: SignIn takes the marker itself
+  // Stay: cancelled return (`#/masuk-akun`) or Back onto the invite. Do not start Google.
+  if (action !== "finish") return;
   sessionStorage.setItem(GOOGLE_AWAY, "finishing");
   const pending = readInvite();
   if (pending) {
@@ -331,15 +335,26 @@ export function consumePendingInvite(fallback?: string | null): Promise<InviteCo
   return run;
 }
 
+const joinFlight = new Map<string, Promise<void>>();
+
 export async function joinHousehold(token: string) {
+  const existing = joinFlight.get(token);
+  if (existing) return existing;
   if (!state.syncEnabled) throw new ApiError(409, "sync_disabled");
-  syncVersion++;
-  await api("/household/join", { method: "POST", body: JSON.stringify({ token }) });
-  set({ hasSynced: false });
-  localStorage.removeItem("bb_cursor");
-  markAllDirty();
-  await refreshMe();
-  await syncNow();
+  let run!: Promise<void>;
+  run = (async () => {
+    syncVersion++;
+    await api("/household/join", { method: "POST", body: JSON.stringify({ token }) });
+    set({ hasSynced: false });
+    localStorage.removeItem("bb_cursor");
+    markAllDirty();
+    await refreshMe();
+    await syncNow();
+  })().finally(() => {
+    if (joinFlight.get(token) === run) joinFlight.delete(token);
+  });
+  joinFlight.set(token, run);
+  return run;
 }
 
 export async function removeMember(id: string) {

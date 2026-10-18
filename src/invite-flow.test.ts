@@ -51,7 +51,33 @@ test("logged-out invite survives Google and waits for confirm", async () => {
       memory.set("bb_pending_invite_at", String(Date.now()));
       memory.delete("bb_pending_invite_user");
     };
+    const socialCalls = () => calls.filter((call) => call.path === "/api/auth/sign-in/social").length;
     saveInvite();
+    loc.hash = "#/";
+    loc.assigned = "";
+    await sync.finishGoogle();
+    assert.equal(loc.hash, "#/", "a saved invite does not move a logged-out home load");
+    assert.equal(loc.assigned, "");
+    assert.equal(socialCalls(), 0, "a saved invite does not start Google");
+
+    memory.set("bb_google", "away");
+    await sync.finishGoogle();
+    assert.equal(loc.hash, "#/");
+    assert.equal(memory.has("bb_google"), false, "a stale Google marker on home is dropped");
+    assert.equal(socialCalls(), 0);
+
+    memory.set("bb_google", "away");
+    loc.hash = "#/masuk-akun";
+    await sync.finishGoogle();
+    assert.equal(loc.hash, "#/masuk-akun", "a cancelled Google return stays on sign-in");
+    assert.equal(memory.get("bb_google"), "away");
+    assert.equal(socialCalls(), 0);
+    memory.delete("bb_google");
+    loc.hash = "#/";
+
+    saveInvite();
+    assert.equal(sync.authDestination("#/"), "#/gabung?invite=inviteTok1", "after sign-in a saved invite opens the confirm step");
+
     memory.set("bb_auth_return", "#/gabung?invite=inviteTok1");
     await sync.startGoogle();
     const social = calls.find((call) => call.path === "/api/auth/sign-in/social");
@@ -61,6 +87,7 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     assert.equal(memory.get("bb_pending_invite"), "inviteTok1", "Google does not drop the invite");
     assert.equal(memory.get("bb_google"), "away");
 
+    loc.hash = "#/profil";
     await sync.finishGoogle();
     assert.equal(calls.filter((call) => call.path === "/household/join").length, 0, "Google return does not join before confirm");
     assert.equal(sync.account().token, "google-session");
@@ -75,12 +102,21 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     assert.equal(loc.hash, "#/gabung?invite=inviteTok1");
 
     await sync.signOut();
+    saveInvite();
+    memory.set("bb_pending_invite_user", "someone-else");
+    memory.set("bb_google", "away");
+    loc.hash = "#/profil";
+    await sync.finishGoogle();
+    assert.equal(memory.has("bb_pending_invite"), false, "a different account drops the saved invite");
+    assert.equal(loc.hash, "#/profil");
+    assert.equal(calls.filter((call) => call.path === "/household/join").length, 1);
+    await sync.signOut();
     me = structuredClone(solo);
     joinStatus = 410;
     saveInvite();
     memory.set("bb_auth_return", "#/gabung?invite=inviteTok1");
     memory.set("bb_google", "away");
-    loc.hash = "#/";
+    loc.hash = "#/profil";
     await sync.finishGoogle();
     assert.equal(sync.account().token, "google-session", "a bad invite does not throw away the new session");
     assert.equal(loc.hash, "#/gabung?invite=inviteTok1");
