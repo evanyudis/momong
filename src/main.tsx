@@ -5,7 +5,7 @@ import { App } from "./App";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { applyTheme } from "./screens/Profil";
 import { getPrefs } from "./store";
-import { finishGoogle, startSync } from "./sync";
+import { authIsPending, finishGoogle, onControllerChange, resumeAuthAttempt, startSync, whenAuthSettles } from "./sync";
 import { listenForErrors, reportError, startTelemetry } from "./telemetry";
 import "./styles.css";
 
@@ -18,7 +18,7 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => appl
 startSync();
 const stopReminders = startReminders();
 import.meta.hot?.dispose(stopReminders);
-void finishGoogle(); // back from Google: session cookie → bearer → /me → /sync, like email Masuk
+void finishGoogle().finally(() => { void resumeAuthAttempt(); }); // back from Google, or a sign-up interrupted by a reload
 
 createRoot(document.getElementById("root")!, {
   onUncaughtError: (error) => { console.error(error); reportError(error, "react"); },
@@ -28,13 +28,18 @@ createRoot(document.getElementById("root")!, {
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
     // A page already running an older bundle reloads once the new worker claims it.
+    // After a wipe the cache install can claim mid sign-up and drop the response, so wait until the chain finishes.
     if (navigator.serviceWorker.controller) {
       let reloading = false;
-      navigator.serviceWorker.addEventListener("controllerchange", () => {
+      let defer = false;
+      const claim = () => {
         if (reloading) return;
+        if (onControllerChange() === "defer" || authIsPending()) { defer = true; return; }
         reloading = true;
         location.reload();
-      });
+      };
+      whenAuthSettles(() => { if (defer) claim(); });
+      navigator.serviceWorker.addEventListener("controllerchange", claim);
     }
     void navigator.serviceWorker.register("/sw.js").then((reg) => reg.update()).catch(() => {});
   });

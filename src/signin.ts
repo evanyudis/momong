@@ -1,7 +1,7 @@
 /** Sign-in screen state. Pure: the network calls live in sync.ts (authEmail, startGoogle); this only decides what the screen shows. */
 export type SignInMode = "masuk" | "daftar";
 /** Shown under the button. "Email tidak cocok" is not here: it sits on the email field (emailError). */
-export type SignInFailure = "network" | "daftar" | "other" | "timeout";
+export type SignInFailure = "network" | "daftar" | "other" | "timeout" | "created";
 export type SignInState = {
   mode: SignInMode;
   email: string;
@@ -17,7 +17,8 @@ export type SignInAction =
   | { type: "google" | "googleCancelled" }
   | { type: "googleFail"; status: number }
   | { type: "submit" }
-  | { type: "fail"; status: number };
+  | { type: "idle" }
+  | { type: "fail"; status: number; failure?: SignInFailure };
 
 export const SIGNIN_EMPTY: SignInState = {
   mode: "masuk", email: "", password: "", emailError: false, googleCancelled: false, pending: false, failure: null,
@@ -28,7 +29,45 @@ export const FAILURE_TEXT: Record<SignInFailure, string> = {
   daftar: "Akun tidak bisa dibuat. Email mungkin sudah terdaftar, atau kata sandi kurang dari 8 karakter.",
   other: "Server sedang bermasalah. Coba lagi nanti.",
   timeout: "Sambungan terlalu lama. Coba lagi.",
+  created: "Akun sudah dibuat. Masuk untuk lanjut.",
 };
+
+export const AUTH_ATTEMPT_KEY = "bb_auth_attempt";
+export const AUTH_NOTICE_KEY = "bb_auth_notice";
+
+export type AuthAttempt = { mode: SignInMode; email: string; password: string };
+
+export function parseAuthAttempt(raw: string | null): AuthAttempt | null {
+  try {
+    const value = JSON.parse(raw ?? "");
+    if (!value || (value.mode !== "masuk" && value.mode !== "daftar")) return null;
+    if (typeof value.email !== "string" || typeof value.password !== "string") return null;
+    return { mode: value.mode, email: value.email, password: value.password };
+  } catch {
+    return null;
+  }
+}
+
+/** A service worker claim reloads the page. That reload aborts sign-up after the account exists, so wait. */
+export function controllerChangeAction(authPending: boolean): "reload" | "defer" {
+  return authPending ? "defer" : "reload";
+}
+
+/** Sign-up HTTP outcome. A lost response (0/408) may still have created the account. */
+export function signupStep(input: { status: number; followUpFailed: boolean }): "retry-signin" | "registered" | "enter" | "show-error" {
+  if (input.followUpFailed) return "retry-signin";
+  if (input.status === 0 || input.status === 408) return "retry-signin";
+  if (input.status >= 400 && input.status < 500) return "registered";
+  if (input.status >= 200 && input.status < 300) return "enter";
+  return "show-error";
+}
+
+/** Password sign-in after a sign-up that succeeded or whose response was lost. */
+export function signInRetryStep(input: { signInStatus: number; followUpFailed: boolean; signupSucceeded: boolean }): "done" | "created-login" | "show-error" {
+  if (!input.followUpFailed && input.signInStatus >= 200 && input.signInStatus < 300) return "done";
+  if (input.signupSucceeded || (input.signInStatus >= 200 && input.signInStatus < 300)) return "created-login";
+  return "show-error";
+}
 
 export const SIGNIN_DRAFT_KEY = "bb_signin_draft";
 
@@ -39,15 +78,27 @@ export function parseSignInDraft(raw: string | null): SignInDraft | null {
     const value = JSON.parse(raw ?? "");
     if (!value || (value.mode !== "masuk" && value.mode !== "daftar")) return null;
     if (typeof value.email !== "string" || typeof value.password !== "string") return null;
-    const failure = value.failure === "network" || value.failure === "daftar" || value.failure === "other" || value.failure === "timeout" ? value.failure : null;
+    const failure = value.failure === "network" || value.failure === "daftar" || value.failure === "other" || value.failure === "timeout" || value.failure === "created" ? value.failure : null;
     return { mode: value.mode, email: value.email, password: value.password, failure };
   } catch {
     return null;
   }
 }
 
-/** URL `mode=signup` wins. A remount during loading keeps the typed email and password. */
-export function signInInitial(signup: boolean, draft: SignInDraft | null): SignInState {
+/** URL `mode=signup` wins, except a created-account notice. A remount during loading stays pending. */
+export function signInInitial(signup: boolean, draft: SignInDraft | null, attempt: AuthAttempt | null = null, createdNotice = false): SignInState {
+  if (attempt) {
+    return {
+      ...SIGNIN_EMPTY,
+      mode: signup ? "daftar" : attempt.mode,
+      email: attempt.email,
+      password: attempt.password,
+      pending: true,
+    };
+  }
+  if (createdNotice || draft?.failure === "created") {
+    return { ...SIGNIN_EMPTY, mode: "masuk", email: draft?.email ?? "", password: draft?.password ?? "", failure: "created" };
+  }
   return {
     ...SIGNIN_EMPTY,
     mode: signup ? "daftar" : draft?.mode ?? "masuk",
@@ -83,6 +134,10 @@ export function signIn(s: SignInState, a: SignInAction): SignInState {
     case "googleCancelled": return { ...s, pending: false, googleCancelled: true };
     case "googleFail": return { ...s, pending: false, failure: a.status === 0 ? "network" : "other" }; // never "Email tidak cocok"
     case "submit": return { ...s, pending: true, emailError: false, googleCancelled: false, failure: null };
-    case "fail": return { ...s, pending: false, ...failureFor(s.mode, a.status) }; // fields stay filled
+    case "idle": return { ...s, pending: false };
+    case "fail": {
+      const next = a.failure ? { emailError: false, failure: a.failure } : failureFor(s.mode, a.status);
+      return { ...s, pending: false, ...next, mode: next.failure === "created" ? "masuk" : s.mode };
+    }
   }
 }
