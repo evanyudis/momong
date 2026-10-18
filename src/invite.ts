@@ -194,6 +194,24 @@ export function claimJoinClick(lock: { held: boolean }) {
   return true;
 }
 
+/**
+ * Back from Google restores the choice screen from bfcache with the buttons still busy.
+ * A persisted page, or becoming visible again while the start is pending, re-enables them.
+ * A real callback still in `finishing` is left alone.
+ */
+export function googleChoiceResume(input: {
+  busy: boolean;
+  marker: string | null;
+  persisted: boolean;
+  visible: boolean;
+}): "reset" | "keep" {
+  if (input.marker === "finishing") return "keep";
+  const cameBack = input.persisted || input.visible;
+  if (!cameBack) return "keep";
+  if (input.busy || input.marker === "away") return "reset";
+  return "keep";
+}
+
 /** Shown only when this account already has notes on the phone or a sync cursor. */
 export const JOIN_DATA_WARNING = "Catatan di HP ini akan ikut. Catatan yang hanya ada di server untuk rumah lama mungkin tidak muncul lagi.";
 

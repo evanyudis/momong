@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, googleReturnAction, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  claimJoinClick, clearInvite, displayInviteCode, externalBrowserHref, googleChoiceResume, googleReturnAction, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
   isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
 } from "./invite.ts";
 
@@ -150,6 +150,15 @@ test("cancelled Google does not loop into another redirect", () => {
   assert.equal(googleReturnAction({ marker: "away", navigation: "navigate", hash: "#/profil", signedIn: false }), "finish");
   assert.equal(googleReturnAction({ marker: "away", navigation: "navigate", hash: "#/profil", signedIn: true }), "clear");
   assert.equal(googleReturnAction({ marker: "finishing", navigation: "reload", hash: "#/", signedIn: false }), "clear");
+});
+
+test("back from Google re-enables the choice buttons", () => {
+  assert.equal(googleChoiceResume({ busy: true, marker: "away", persisted: true, visible: false }), "reset");
+  assert.equal(googleChoiceResume({ busy: true, marker: "away", persisted: false, visible: true }), "reset");
+  assert.equal(googleChoiceResume({ busy: true, marker: null, persisted: true, visible: false }), "reset");
+  assert.equal(googleChoiceResume({ busy: false, marker: null, persisted: false, visible: true }), "keep");
+  assert.equal(googleChoiceResume({ busy: true, marker: "finishing", persisted: true, visible: true }), "keep");
+  assert.equal(googleChoiceResume({ busy: false, marker: "away", persisted: false, visible: false }), "keep");
 });
 
 test("double-click join claims the request once", () => {

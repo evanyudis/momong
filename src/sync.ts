@@ -22,13 +22,24 @@ type State = { checking?: boolean; restoreError?: boolean; verifiedAt?: number; 
 const load = <T,>(k: string, d: T): T => {
   try { return JSON.parse(localStorage.getItem(k) ?? "") ?? d; } catch { return d; }
 };
+function storedSyncEnabled(me: Me | null) {
+  const userId = me?.user?.id;
+  if (!userId) return false;
+  const raw = localStorage.getItem(`bb_sync_enabled:${userId}`);
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  const cursor = Number(localStorage.getItem("bb_cursor") ?? 0);
+  return Number.isFinite(cursor) && cursor > 0;
+}
+
+const cachedMe = load<Me | null>("bb_me", null);
 let state: State = {
   token: localStorage.getItem("bb_token"),
-  me: load<Me | null>("bb_me", null),
+  me: cachedMe,
   status: "local",
   lastSyncAt: load<number | null>("bb_last_sync", null),
   hasSynced: false,
-  syncEnabled: false,
+  syncEnabled: storedSyncEnabled(cachedMe),
 };
 export const entitled = (me: Me | null) => (PLUS_ENABLED || me?.entitlement.earlyAccess === true && (me.entitlement.plan === "trial" || me.entitlement.plan === "plus_lifetime")) && (me?.entitlement.plan === "plus_lifetime" || ((me?.entitlement.plan === "trial" || me?.entitlement.plan === "monthly") && !!me.entitlement.expiresAt && Date.parse(me.entitlement.expiresAt) > Date.now()));
 setPlusAccess(!!state.token && entitled(state.me));
@@ -169,6 +180,14 @@ export async function restoreAccount() {
 // Set while the browser is away at Google. Success returns to #/profil, cancel/deny to #/masuk-akun (errorCallbackURL).
 const GOOGLE_AWAY = "bb_google";
 let googleLeave: Promise<void> | null = null;
+let googleAttempt = 0;
+
+/** Drop an in-flight Google redirect. A late response must not navigate after Back. */
+export function abandonGoogleStart() {
+  googleAttempt += 1;
+  googleLeave = null;
+  sessionStorage.removeItem(GOOGLE_AWAY);
+}
 
 export function googlePhase(): "away" | "finishing" | null {
   const value = sessionStorage.getItem(GOOGLE_AWAY);
@@ -179,6 +198,7 @@ export function googlePhase(): "away" | "finishing" | null {
  *  callbackURL stays `#/profil`. An invite token lives in storage, not in the OAuth request. */
 export function startGoogle() {
   if (googleLeave) return googleLeave;
+  const attempt = googleAttempt;
   googleLeave = (async () => {
     try {
       const { data } = await api<{ url?: string }>("/api/auth/sign-in/social", {
@@ -189,11 +209,13 @@ export function startGoogle() {
           errorCallbackURL: `${location.origin}/#/masuk-akun`,
         }),
       });
+      if (attempt !== googleAttempt) return;
       if (!data.url) throw new ApiError(502, "no_url");
       sessionStorage.setItem(GOOGLE_AWAY, "away");
+      if (attempt !== googleAttempt) return;
       location.assign(data.url);
     } catch (error) {
-      googleLeave = null;
+      if (attempt === googleAttempt) googleLeave = null;
       throw error;
     }
   })();
