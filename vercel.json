@@ -76,6 +76,42 @@
   "rewrites": [
     {
       "source": "/api/:path*",
+      "has": [{ "type": "host", "value": "staging.momong.evanyudis.com" }],
+      "destination": "https://momong-api-staging.evanyudis.my.id/api/:path*",
+      "respectOriginCacheControl": false
+    },
+    {
+      "source": "/sync",
+      "has": [{ "type": "host", "value": "staging.momong.evanyudis.com" }],
+      "destination": "https://momong-api-staging.evanyudis.my.id/sync",
+      "respectOriginCacheControl": false
+    },
+    {
+      "source": "/me",
+      "has": [{ "type": "host", "value": "staging.momong.evanyudis.com" }],
+      "destination": "https://momong-api-staging.evanyudis.my.id/me",
+      "respectOriginCacheControl": false
+    },
+    {
+      "source": "/household/:path*",
+      "has": [{ "type": "host", "value": "staging.momong.evanyudis.com" }],
+      "destination": "https://momong-api-staging.evanyudis.my.id/household/:path*",
+      "respectOriginCacheControl": false
+    },
+    {
+      "source": "/wishlist/:path*",
+      "has": [{ "type": "host", "value": "staging.momong.evanyudis.com" }],
+      "destination": "https://momong-api-staging.evanyudis.my.id/wishlist/:path*",
+      "respectOriginCacheControl": false
+    },
+    {
+      "source": "/billing/:path*",
+      "has": [{ "type": "host", "value": "staging.momong.evanyudis.com" }],
+      "destination": "https://momong-api-staging.evanyudis.my.id/billing/:path*",
+      "respectOriginCacheControl": false
+    },
+    {
+      "source": "/api/:path*",
       "destination": "https://momong-api.evanyudis.my.id/api/:path*",
       "respectOriginCacheControl": false
     },
