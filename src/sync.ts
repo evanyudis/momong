@@ -2,7 +2,7 @@ import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
 import { clearInvite, googleReturnAction, inviteReturnHash, isInviteToken, isSafeInviteReturn, navigationType, readInvite, reconcilePendingInvite } from "./invite";
 import { PLUS_ENABLED } from "./release";
-import { nameFromEmail, type SignInMode } from "./signin";
+import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
 import { setPlusAccess, isPlus, applyRemote, clearAccountRecords, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
@@ -162,19 +162,156 @@ function isTimeout(error: unknown) {
   return !!error && typeof error === "object" && "name" in error && ((error as { name?: string }).name === "TimeoutError" || (error as { name?: string }).name === "AbortError");
 }
 
-/** Better Auth email + password. Sign-up signs in at once; both hand the bearer back on set-auth-token. */
-export async function authEmail(mode: SignInMode, email: string, password: string) {
+type AuthResult = { id: number; status: number; failure: SignInFailure | null };
+type AuthSnapshot = { pending: boolean; result: AuthResult | null };
+const authListeners = new Set<() => void>();
+let authResultId = 0;
+function storedAuthAttempt() {
+  try { return parseAuthAttempt(sessionStorage.getItem(AUTH_ATTEMPT_KEY)); } catch { return null; }
+}
+let authUiState: AuthSnapshot = { pending: !!storedAuthAttempt(), result: null };
+let authSettled: (() => void) | null = null;
+
+function publishAuth(pending: boolean, result: AuthResult | null) {
+  authUiState = { pending, result };
+  authListeners.forEach((listener) => listener());
+}
+
+export function authUi() { return authUiState; }
+export function subscribeAuthUi(listener: () => void) {
+  authListeners.add(listener);
+  return () => authListeners.delete(listener);
+}
+export function authIsPending() { return authUiState.pending; }
+export function onControllerChange() { return controllerChangeAction(authIsPending()); }
+/** Main registers this so a deferred service-worker reload runs after the sign-up chain stores its result. */
+export function whenAuthSettles(listener: () => void) { authSettled = listener; }
+
+function beginAuthAttempt(mode: SignInMode, email: string, password: string) {
+  sessionStorage.setItem(AUTH_ATTEMPT_KEY, JSON.stringify({ mode, email, password }));
+  publishAuth(true, null);
+}
+
+function finishAuthAttempt(result: AuthResult | null) {
+  sessionStorage.removeItem(AUTH_ATTEMPT_KEY);
+  publishAuth(false, result);
+  const settled = authSettled;
+  if (settled) queueMicrotask(settled);
+}
+
+function assignHash(hash: string) {
+  try { location.hash = hash; } catch { /* non-browser tests */ }
+}
+
+function publishCreatedLogin(email: string, password: string) {
+  sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify({ mode: "masuk", email, password, failure: "created" }));
+  sessionStorage.setItem(AUTH_NOTICE_KEY, "created");
+  assignHash("#/masuk-akun");
+}
+
+async function postAuth(mode: SignInMode, email: string, password: string) {
   const path = mode === "daftar" ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email";
   const body = mode === "daftar" ? { name: nameFromEmail(email), email, password } : { email, password };
-  let data: { token?: string }, res: Response;
   try {
-    ({ data, res } = await api<{ token?: string }>(path, { method: "POST", body: JSON.stringify(body), signal: AbortSignal.timeout(AUTH_TIMEOUT_MS) }));
+    return await api<{ token?: string }>(path, { method: "POST", body: JSON.stringify(body), signal: AbortSignal.timeout(AUTH_TIMEOUT_MS) });
   } catch (error) {
     if (isTimeout(error)) throw new ApiError(408, "timeout");
     throw error;
   }
-  establishSession(res.headers.get("set-auth-token") ?? data.token);
+}
+
+function bearer(res: Response, data: { token?: string } | null) {
+  return res.headers.get("set-auth-token") ?? data?.token ?? null;
+}
+
+async function enterWithToken(token: string | null) {
+  establishSession(token);
   await signedIn();
+}
+
+/** Cookie session first, then the same email and password. Sign-up is not posted again. */
+async function recoverAfterSignup(email: string, password: string, signupSucceeded: boolean) {
+  try {
+    const { data, res } = await api<{ session?: { token?: string }; token?: string } | null>("/api/auth/get-session");
+    const cookie = res.headers.get("set-auth-token") ?? data?.session?.token ?? data?.token ?? null;
+    if (cookie) {
+      await enterWithToken(cookie);
+      return;
+    }
+  } catch { /* no cookie session; try the password */ }
+  let signInStatus = 0;
+  let followUpFailed = false;
+  try {
+    const { data, res } = await postAuth("masuk", email, password);
+    signInStatus = res.status;
+    try {
+      await enterWithToken(bearer(res, data));
+      return;
+    } catch {
+      followUpFailed = true;
+    }
+  } catch (error) {
+    signInStatus = error instanceof ApiError ? error.status : 0;
+  }
+  if (signInRetryStep({ signInStatus, followUpFailed, signupSucceeded }) === "created-login") {
+    publishCreatedLogin(email, password);
+    throw new ApiError(409, "created");
+  }
+  throw new ApiError(signInStatus, "request_failed");
+}
+
+/** Better Auth email + password. The pending flag lives outside the form so a remount keeps the button disabled. */
+export async function authEmail(mode: SignInMode, email: string, password: string) {
+  beginAuthAttempt(mode, email, password);
+  try {
+    if (mode === "daftar") {
+      let signupOk = false;
+      try {
+        const { data, res } = await postAuth("daftar", email, password);
+        signupOk = true;
+        await enterWithToken(bearer(res, data));
+      } catch (error) {
+        const status = error instanceof ApiError ? error.status : 0;
+        const step = signupStep({ status, followUpFailed: signupOk });
+        if (step !== "retry-signin") throw error;
+        try {
+          await recoverAfterSignup(email, password, signupOk);
+        } catch (retryError) {
+          if (retryError instanceof ApiError && retryError.code === "created") throw retryError;
+          throw error;
+        }
+      }
+    } else {
+      const { data, res } = await postAuth("masuk", email, password);
+      await enterWithToken(bearer(res, data));
+    }
+    finishAuthAttempt(null);
+  } catch (error) {
+    const status = error instanceof ApiError ? error.status : 0;
+    const failure = error instanceof ApiError && error.code === "created" ? "created" : failureFor(mode, status).failure;
+    finishAuthAttempt({ id: ++authResultId, status, failure });
+    throw error;
+  }
+}
+
+/** After a reload drops the sign-up response, continue with sign-in. The account may already exist. */
+export async function resumeAuthAttempt() {
+  const attempt = parseAuthAttempt(sessionStorage.getItem(AUTH_ATTEMPT_KEY));
+  if (!attempt) return;
+  if (state.token && state.me) { finishAuthAttempt(null); return; }
+  if (!authUiState.pending) publishAuth(true, null);
+  try {
+    await recoverAfterSignup(attempt.email, attempt.password, attempt.mode === "daftar");
+    finishAuthAttempt(null);
+    assignHash(authDestination(attempt.mode === "daftar" ? "#/" : "#/profil"));
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "created") {
+      finishAuthAttempt({ id: ++authResultId, status: 409, failure: "created" });
+      return;
+    }
+    const status = error instanceof ApiError ? error.status : 0;
+    finishAuthAttempt({ id: ++authResultId, status, failure: failureFor("masuk", status).failure });
+  }
 }
 
 async function signedIn() {

@@ -1,11 +1,11 @@
 import { RestoreSheet } from "./Restore";
 import { ChevronLeft } from "lucide-react";
-import { type FormEvent, useEffect, useReducer, useRef, useState } from "react";
+import { type FormEvent, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { Button, FieldError, Form, Input, Label, TextField } from "react-aria-components";
 import { deviceHasData, setPrefs } from "../store";
 import { reducedMotion } from "../motion";
-import { FAILURE_TEXT, SIGNIN_DRAFT_KEY, parseSignInDraft, signIn, signInDraft, signInInitial } from "../signin";
-import { ApiError, authEmail, startGoogle, takeGoogleReturn, authDestination } from "../sync";
+import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, FAILURE_TEXT, SIGNIN_DRAFT_KEY, parseAuthAttempt, parseSignInDraft, signIn, signInDraft, signInInitial } from "../signin";
+import { ApiError, authDestination, authEmail, authUi, startGoogle, subscribeAuthUi, takeGoogleReturn } from "../sync";
 
 const EXIT_MS = 150; // matches the quiet exit in styles.css; enter (settle-in) is 200ms
 
@@ -42,7 +42,23 @@ function GoogleMark() {
 export function SignIn({ onboarding = false, plus = false, signup = false }: { onboarding?: boolean; plus?: boolean; signup?: boolean }) {
   const [restoreOpen, setRestoreOpen] = useState(false);
   const forPlus = plus || sessionStorage.getItem("bb_auth_return") === "#/plus";
-  const [s, dispatch] = useReducer(signIn, undefined, () => signInInitial(signup, parseSignInDraft(sessionStorage.getItem(SIGNIN_DRAFT_KEY))));
+  const auth = useSyncExternalStore(subscribeAuthUi, authUi, authUi);
+  const appliedAuth = useRef(0);
+  const [s, dispatch] = useReducer(signIn, undefined, () => signInInitial(
+    signup,
+    parseSignInDraft(sessionStorage.getItem(SIGNIN_DRAFT_KEY)),
+    parseAuthAttempt(sessionStorage.getItem(AUTH_ATTEMPT_KEY)),
+    sessionStorage.getItem(AUTH_NOTICE_KEY) === "created",
+  ));
+  if (s.pending && !auth.pending) {
+    if (auth.result && appliedAuth.current !== auth.result.id) {
+      appliedAuth.current = auth.result.id;
+      dispatch({ type: "fail", status: auth.result.status, ...(auth.result.failure ? { failure: auth.result.failure } : {}) });
+    } else if (!auth.result && !parseAuthAttempt(sessionStorage.getItem(AUTH_ATTEMPT_KEY))) {
+      dispatch({ type: "idle" });
+    }
+  }
+  const pending = s.pending || auth.pending;
   const [seenSignup, setSeenSignup] = useState(signup);
   if (signup !== seenSignup) {
     setSeenSignup(signup);
@@ -61,7 +77,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (s.pending) return;
+    if (pending) return;
     const email = s.email.trim();
     if (!email) return emailRef.current?.focus();
     if (!s.password) return passwordRef.current?.focus();
@@ -69,16 +85,25 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
     try {
       await authEmail(s.mode, email, s.password);
       sessionStorage.removeItem(SIGNIN_DRAFT_KEY);
+      sessionStorage.removeItem(AUTH_NOTICE_KEY);
       location.hash = authDestination(onboarding ? "#/" : "#/profil");
     } catch (err) {
-      // Status 0 covers fetch rejecting (offline, firewall, CORS, mixed content): never shown as success.
-      dispatch({ type: "fail", status: err instanceof ApiError ? err.status : 0 });
+      // The module publishes the failure so a remount still shows it. Status 0 is a lost response, never success.
+      if (!(err instanceof ApiError)) dispatch({ type: "fail", status: 0 });
     }
   }
 
+  function useExistingAccount() {
+    sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify({ mode: "masuk", email: s.email, password: s.password, failure: null }));
+    if (signup || location.hash.includes("mode=signup")) location.hash = "#/masuk-akun";
+    else dispatch({ type: "mode", mode: "masuk" });
+  }
+
+  useEffect(() => { sessionStorage.removeItem(AUTH_NOTICE_KEY); }, []);
   useEffect(() => {
+    if (auth.pending) return;
     sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify(signInDraft(s)));
-  }, [s.mode, s.email, s.password, s.failure]);
+  }, [s.mode, s.email, s.password, s.failure, auth.pending]);
 
   // Came back from Google without a session: reload or errorCallbackURL lands here; Back may restore this page from bfcache.
   useEffect(() => {
@@ -90,7 +115,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
   }, []);
 
   async function google() {
-    if (s.pending) return;
+    if (pending) return;
     dispatch({ type: "google" });
     try {
       await startGoogle(); // the browser leaves for Google; success comes back to #/profil
@@ -110,8 +135,8 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
         <p className="muted">{forPlus ? "Masuk atau daftar untuk lanjut dengan Momong Plus." : onboarding ? "Catat tanpa akun. Masuk untuk sinkron dengan pasangan." : "Supaya data tersimpan online. Sync dan pasangan tetap gratis."}</p>
       </header>
       <div className="signin" onKeyDownCapture={() => setStill(true)} onPointerDownCapture={() => setStill(false)}>
-        <Form className="stack" onSubmit={submit} validationBehavior="native" aria-busy={s.pending}>
-          <Button className="btn btn-glass block" isDisabled={s.pending} onPress={google}><GoogleMark />Lanjut dengan Google</Button>
+        <Form className="stack" onSubmit={submit} validationBehavior="native" aria-busy={pending}>
+          <Button className="btn btn-glass block" isDisabled={pending} onPress={google}><GoogleMark />Lanjut dengan Google</Button>
           {(s.googleCancelled || googleLeaving) && (
             <p className="muted signin-msg" role="status" {...msg(googleLeaving)}>Masuk Google dibatalkan.</p>
           )}
@@ -137,11 +162,12 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
             <FieldError className="signin-error" />
             {daftar && <small className="muted">Minimal 8 karakter.</small>}
           </TextField>
-          <Button type="submit" className="btn btn-signin block" isDisabled={s.pending}>{s.pending ? "Menyambungkan…" : daftar ? "Buat akun" : "Masuk"}</Button>
+          <Button type="submit" className="btn btn-signin block" isDisabled={pending}>{pending ? "Menyambungkan…" : daftar ? "Buat akun" : "Masuk"}</Button>
           {(s.failure || failLeaving) && lastFailure.current && (
             <p className="signin-failure signin-msg" role="alert" {...msg(failLeaving)}>{FAILURE_TEXT[lastFailure.current]}</p>
           )}
-          <Button type="button" className="link-btn signin-later" isDisabled={s.pending} onPress={() => dispatch({ type: "mode", mode: daftar ? "masuk" : "daftar" })}>
+          {s.failure === "daftar" && <Button type="button" className="btn btn-soft block" isDisabled={pending} onPress={useExistingAccount}>Masuk</Button>}
+          <Button type="button" className="link-btn signin-later" isDisabled={pending} onPress={() => dispatch({ type: "mode", mode: daftar ? "masuk" : "daftar" })}>
             {daftar ? "Sudah punya akun? Masuk" : "Belum punya akun? Daftar"}
           </Button>
 
