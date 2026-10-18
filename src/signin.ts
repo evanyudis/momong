@@ -35,14 +35,14 @@ export const FAILURE_TEXT: Record<SignInFailure, string> = {
 export const AUTH_ATTEMPT_KEY = "bb_auth_attempt";
 export const AUTH_NOTICE_KEY = "bb_auth_notice";
 
-export type AuthAttempt = { mode: SignInMode; email: string; password: string };
+export type AuthAttempt = { mode: SignInMode; email: string };
 
 export function parseAuthAttempt(raw: string | null): AuthAttempt | null {
   try {
     const value = JSON.parse(raw ?? "");
     if (!value || (value.mode !== "masuk" && value.mode !== "daftar")) return null;
-    if (typeof value.email !== "string" || typeof value.password !== "string") return null;
-    return { mode: value.mode, email: value.email, password: value.password };
+    if (typeof value.email !== "string") return null;
+    return { mode: value.mode, email: value.email };
   } catch {
     return null;
   }
@@ -71,45 +71,44 @@ export function signInRetryStep(input: { signInStatus: number; followUpFailed: b
 
 export const SIGNIN_DRAFT_KEY = "bb_signin_draft";
 
-export type SignInDraft = { mode: SignInMode; email: string; password: string; failure: SignInFailure | null };
+export type SignInDraft = { mode: SignInMode; email: string; failure: SignInFailure | null };
 
 export function parseSignInDraft(raw: string | null): SignInDraft | null {
   try {
     const value = JSON.parse(raw ?? "");
     if (!value || (value.mode !== "masuk" && value.mode !== "daftar")) return null;
-    if (typeof value.email !== "string" || typeof value.password !== "string") return null;
+    if (typeof value.email !== "string") return null;
     const failure = value.failure === "network" || value.failure === "daftar" || value.failure === "other" || value.failure === "timeout" || value.failure === "created" ? value.failure : null;
-    return { mode: value.mode, email: value.email, password: value.password, failure };
+    return { mode: value.mode, email: value.email, failure };
   } catch {
     return null;
   }
 }
 
-/** URL `mode=signup` wins, except a created-account notice. A remount during loading stays pending. */
-export function signInInitial(signup: boolean, draft: SignInDraft | null, attempt: AuthAttempt | null = null, createdNotice = false): SignInState {
+/** URL `mode=signup` wins, except a created-account notice. A remount during loading stays pending. The password argument is memory only. */
+export function signInInitial(signup: boolean, draft: SignInDraft | null, attempt: AuthAttempt | null = null, createdNotice = false, memoryPassword = ""): SignInState {
   if (attempt) {
     return {
       ...SIGNIN_EMPTY,
       mode: signup ? "daftar" : attempt.mode,
       email: attempt.email,
-      password: attempt.password,
+      password: memoryPassword,
       pending: true,
     };
   }
   if (createdNotice || draft?.failure === "created") {
-    return { ...SIGNIN_EMPTY, mode: "masuk", email: draft?.email ?? "", password: draft?.password ?? "", failure: "created" };
+    return { ...SIGNIN_EMPTY, mode: "masuk", email: draft?.email ?? "", failure: "created" };
   }
   return {
     ...SIGNIN_EMPTY,
     mode: signup ? "daftar" : draft?.mode ?? "masuk",
     email: draft?.email ?? "",
-    password: draft?.password ?? "",
     failure: draft?.failure ?? null,
   };
 }
 
-export function signInDraft(s: Pick<SignInState, "mode" | "email" | "password" | "failure">): SignInDraft {
-  return { mode: s.mode, email: s.email, password: s.password, failure: s.failure };
+export function signInDraft(s: Pick<SignInState, "mode" | "email" | "failure">): SignInDraft {
+  return { mode: s.mode, email: s.email, failure: s.failure };
 }
 
 /** Better Auth answers a wrong email or password on sign-in with 401. Status 0 = the request never got an answer. */
