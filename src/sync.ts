@@ -146,14 +146,19 @@ function establishSession(token?: string | null) {
   set({ token, me: null, checking: true, restoreError: false, syncEnabled: false, hasSynced: false, status: "local", lastSyncAt: null });
 }
 
+/** Email, magic link, and Google all land here. The sync flag is written only after /me, inside restore. */
+async function sessionEstablished(token: string | null) {
+  establishSession(token);
+  await signedIn();
+}
+
 export async function requestMagicLink(email: string) {
   await api("/api/auth/sign-in/magic-link", { method: "POST", body: JSON.stringify({ email }) });
 }
 
 export async function verifyMagicLink(token: string) {
   const { data, res } = await api<{ token: string }>(`/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`);
-  establishSession(res.headers.get("set-auth-token") ?? data.token);
-  await signedIn();
+  await sessionEstablished(res.headers.get("set-auth-token") ?? data.token);
 }
 
 export const AUTH_TIMEOUT_MS = 15_000;
@@ -234,8 +239,7 @@ function bearer(res: Response, data: { token?: string } | null) {
 }
 
 async function enterWithToken(token: string | null) {
-  establishSession(token);
-  await signedIn();
+  await sessionEstablished(token);
 }
 
 /** Cookie session first, then the same email and password. Sign-up is not posted again. */
@@ -451,8 +455,22 @@ export function takeGoogleReturn() {
   return away;
 }
 
-/** Boot after Google: the callback left a Better Auth session cookie on this origin. Trade it for the bearer, then the email path.
- *  A stored invite returns to the confirm step. It is not joined until that tap. No session: sign-in reads the marker. */
+function cookieToken(res: Response, data: { session?: { token?: string }; token?: string } | null) {
+  return res.headers.get("set-auth-token") ?? data?.session?.token ?? data?.token ?? null;
+}
+
+async function readCookieSession() {
+  const { data, res } = await api<{ session?: { token?: string }; token?: string } | null>("/api/auth/get-session");
+  return cookieToken(res, data);
+}
+
+function callbackHash() {
+  return location.hash === "#/profil" || location.hash.startsWith("#/profil?");
+}
+
+/** Boot after Google: the callback left a Better Auth session cookie on this origin. Trade it for the bearer, then the same session path as email.
+ *  A stored invite returns to the confirm step. It is not joined until that tap. No session: sign-in reads the marker.
+ *  iOS can drop the sessionStorage marker on the way back from Google. The callback hash and cookie are still a new session. */
 export async function finishGoogle() {
   const marker = sessionStorage.getItem(GOOGLE_AWAY);
   const action = googleReturnAction({
@@ -463,10 +481,15 @@ export async function finishGoogle() {
   });
   if (action === "clear") {
     sessionStorage.removeItem(GOOGLE_AWAY);
+    // The hash often does not survive the round trip. A cookie is still the same session as email login.
+    if (!state.token) await claimCookieSession();
     return;
   }
   // Stay: cancelled return (`#/masuk-akun`) or Back onto the invite. Do not start Google.
-  if (action !== "finish") return;
+  if (action !== "finish") {
+    if (!state.token && !marker && callbackHash()) await claimCookieSession();
+    return;
+  }
   sessionStorage.setItem(GOOGLE_AWAY, "finishing");
   const pending = readInvite();
   if (pending) {
@@ -474,24 +497,37 @@ export async function finishGoogle() {
     if (isSafeInviteReturn(dest) && location.hash !== dest) location.hash = dest;
   }
   try {
-    const { data, res } = await api<{ session?: { token?: string } } | null>("/api/auth/get-session");
-    const token = res.headers.get("set-auth-token") ?? data?.session?.token;
+    const token = await readCookieSession();
     if (!token) throw new ApiError(401, "no_session");
-    establishSession(token);
-    await signedIn();
+    await sessionEstablished(token);
   } catch {
     sessionStorage.setItem(GOOGLE_AWAY, "away");
     location.hash = "#/masuk-akun";
     return;
   }
   sessionStorage.removeItem(GOOGLE_AWAY);
+  if (landAfterSession()) return;
+  location.hash = authDestination();
+}
+
+/** A cookie with no local token is the OAuth return after iOS drops `bb_google`. Same restore as a marked return. */
+async function claimCookieSession() {
+  try {
+    const token = await readCookieSession();
+    if (!token) return;
+    await sessionEstablished(token);
+    landAfterSession();
+  } catch { /* no cookie session */ }
+}
+
+function landAfterSession() {
   const pendingNow = readInvite();
   if (pendingNow && isInviteToken(pendingNow)) {
     sessionStorage.removeItem("bb_auth_return");
     location.hash = inviteReturnHash(pendingNow);
-    return;
+    return true;
   }
-  location.hash = authDestination();
+  return false;
 }
 
 export async function refreshMe() {

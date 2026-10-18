@@ -24,12 +24,14 @@ test("logged-out invite survives Google and waits for confirm", async () => {
   };
   let me = structuredClone(solo);
   let joinStatus = 200;
+  let allowSession = false;
   globalThis.fetch = (async (url: string, init?: RequestInit) => {
     const path = new URL(url).pathname;
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ path, body });
     if (path === "/api/auth/sign-in/social") return Response.json({ url: "https://accounts.google.com/o/oauth2/v2/auth" });
     if (path === "/api/auth/get-session") {
+      if (!allowSession) return Response.json({}, { status: 401 });
       assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "the invite hash is restored before the session call");
       return Response.json({ session: { token: "google-session" } }, { headers: { "set-auth-token": "google-session" } });
     }
@@ -99,6 +101,7 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     assert.equal(memory.get("bb_pending_invite"), "inviteTok1", "Google does not drop the invite");
     assert.equal(memory.get("bb_google"), "away");
 
+    allowSession = true;
     loc.hash = "#/profil";
     await sync.finishGoogle();
     assert.equal(calls.filter((call) => call.path === "/household/join").length, 0, "Google return does not join before confirm");
