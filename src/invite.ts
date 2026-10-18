@@ -162,10 +162,16 @@ export function joinConfirmCopy(name: string) {
   return house ? `Gabung ke rumah ${house}?` : "Gabung ke rumah ini?";
 }
 
-/** Logged-out invite visits stay on a choice screen. A page load never starts Google. */
-export function inviteEntry(input: { signedIn: boolean; validInvite: boolean }): "choose" | "confirm" | "ignore" {
+/**
+ * Logged-out invite visits stay on a choice screen. A page load never starts Google.
+ * The invite token does not include a household id, and joining a different house would move
+ * this account, so a partner already on the account is already connected.
+ */
+export function inviteEntry(input: { signedIn: boolean; validInvite: boolean; hasPartner?: boolean }): "choose" | "confirm" | "connected" | "ignore" {
   if (!input.validInvite) return "ignore";
-  return input.signedIn ? "confirm" : "choose";
+  if (!input.signedIn) return "choose";
+  if (input.hasPartner) return "connected";
+  return "confirm";
 }
 
 /**

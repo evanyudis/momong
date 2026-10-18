@@ -26,5 +26,16 @@ createRoot(document.getElementById("root")!, {
 }).render(<StrictMode><ErrorBoundary><App /></ErrorBoundary></StrictMode>);
 
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+  window.addEventListener("load", () => {
+    // A page already running an older bundle reloads once the new worker claims it.
+    if (navigator.serviceWorker.controller) {
+      let reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (reloading) return;
+        reloading = true;
+        location.reload();
+      });
+    }
+    void navigator.serviceWorker.register("/sw.js").then((reg) => reg.update()).catch(() => {});
+  });
 }

@@ -152,8 +152,10 @@ export async function restoreAccount() {
   try {
     await refreshMe();
     if (version !== sessionVersion) return;
+    // Read the flag and cursor first. Deleting the cursor is a full pull, not a consent reset.
+    const keepSync = storedSyncEnabled(state.me);
     localStorage.removeItem("bb_cursor");
-    set({ syncEnabled: load<boolean>(`bb_sync_enabled:${state.me!.user.id}`, false), status: "local" });
+    set({ syncEnabled: keepSync, status: "local" });
     if (settings().birthMode !== "postpartum" && !settings().hpl) {
       let since = 0, more = true;
       while (more) {
