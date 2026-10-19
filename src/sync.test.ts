@@ -40,11 +40,13 @@ test("login does not upload; opt-in sync merges; logout ignores an in-flight res
     await sync.syncNow();
     assert.equal(calls.filter((p) => p === "/sync").length, 1, "login checks saved cloud data");
     assert.deepEqual(syncBodies[0].changes, [], "restoration never uploads local records");
-    assert.ok(store.pending().some((r: any) => r.id === "local"));
+    assert.equal(store.get("kicks", "local").ownerId, "anon");
+    assert.equal(store.pending().some((r: any) => r.id === "local"), false, "a logged-out note is not queued for this account");
     sync.setSyncEnabled(true);
     await sync.syncNow();
     assert.equal(store.get("kicks", "remote").count, 2);
     assert.equal(store.pending().length, 0);
+    assert.equal(syncBodies.every((body) => (body.changes ?? []).every((change: any) => change.id !== "local")), true, "Aktifkan sinkron does not upload the logged-out note");
     assert.equal(memory.get("bb_cursor"), "1");
     me.entitlement.plan = "plus_lifetime";
     await sync.refreshMe();
@@ -63,7 +65,9 @@ test("login does not upload; opt-in sync merges; logout ignores an in-flight res
     await work;
     assert.equal(store.get("kicks", "late"), undefined);
     assert.equal(store.get("kicks", "local").count, 1);
-    assert.ok(store.pending().some((r: any) => r.id === "pending"));
+    assert.equal(store.get("kicks", "pending").count, 3);
+    assert.equal(store.get("kicks", "pending").ownerId, "u1");
+    assert.equal(store.pending().length, 0, "logged out, the owned note stays but is not uploaded");
     assert.equal(memory.has("bb_cursor"), false);
     assert.equal(sync.account().syncEnabled, false);
     const beforeReset = calls.length;

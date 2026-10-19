@@ -15,7 +15,7 @@ Object.assign(globalThis, {
   },
 });
 
-const { householdHasPartner, partnerSyncScreen, seatNameFromMember, seatNames } = await import("./household.ts");
+const { householdHasPartner, partnerSyncScreen, profileName, seatNameFromMember, seatNames } = await import("./household.ts");
 
 test("pasangan sync prompt follows the local flag, the cursor, or a partner already on /me", () => {
   assert.equal(partnerSyncScreen({ hasToken: false, userId: null, enabledFlag: null, syncCursor: 0 }), "signin");
@@ -54,10 +54,14 @@ test("seat list name comes from the live household member, not local prefs", () 
   assert.equal(seatNames(household(editedOwner)).partner, editedOwner);
   assert.notEqual(seatNames(household(editedOwner)).partner, store.getPrefs().name);
   assert.equal(seatNames(household(googleOwner)).partner, googleOwner, "account name is shown only as the member name on /me");
+  assert.equal(seatNameFromMember({ name: "qa-d-1018" }), "qa-d-1018", "a saved name is not recapitalized");
   assert.equal(seatNameFromMember({ name: "  ", email: "adit@gmail.com" }), "Adit");
   assert.equal(seatNameFromMember({ name: "  ", email: "adit@gmail.com" }), seatNames(household("  ")).partner);
   assert.notEqual(seatNames(household("  ")).partner, store.getPrefs().name);
   assert.equal(seatNameFromMember(null), "");
+  assert.equal(profileName({ saved: "qa-d-1018", account: "Other" }), "qa-d-1018");
+  assert.equal(profileName({ saved: "  ", account: "qa-d-1018" }), "qa-d-1018");
+  assert.equal(profileName({ saved: "", account: "" }), "");
 });
 
 test("refresh replaces a cached Google name, and a saved name is what the seat list reads", async () => {

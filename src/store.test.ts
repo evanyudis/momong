@@ -12,6 +12,7 @@ const storage = {
 };
 Object.assign(globalThis, { localStorage: storage, sessionStorage: storage });
 const s = await import("./store.ts");
+s.setRecordOwner("device-user");
 
 test("local edits queue for push and clear only when unchanged", () => {
   const r = s.put("kicks", { at: Date.now(), count: 1 });
@@ -112,7 +113,7 @@ test("backup restores legacy and Momong data without account state or uploads", 
   s.restoreBackup(legacy);
   assert.equal(s.settings().hpl, "2027-01-01");
   assert.equal(s.getPrefs().guest, true);
-  assert.equal(s.pending().length, 1);
+  assert.equal(s.pending().length, 0, "an untagged backup stays on the device and is not uploaded");
   assert.throws(() => s.restoreBackup(legacy), /sudah berisi/);
   s.resetDeviceData();
   mem.set("bb_token", "session");

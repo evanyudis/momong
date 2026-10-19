@@ -4,12 +4,19 @@ export const PENDING_INVITE = "bb_pending_invite";
 export const PENDING_INVITE_AT = "bb_pending_invite_at";
 export const PENDING_INVITE_USER = "bb_pending_invite_user";
 export const PENDING_INVITE_NAME = "bb_pending_invite_name";
+/** Set when a logged-out visit starts sign-in. Survives the OAuth round trip. */
+export const PENDING_INVITE_FLOW = "bb_pending_invite_flow";
+/** Long enough for email sign-up and a Google round trip, short of a later leftover login. */
+export const INVITE_FLOW_MS = 60 * 60 * 1000;
 /** Matches the server invite lifetime. A saved link does not outlive that. */
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const INVITE_SENT = "bb_invite_sent";
 
-/** Opaque invite tokens and server-issued codes. No spaces, slashes, or query breaks. */
-const TOKEN = /^[A-Za-z0-9._~+=-]{6,512}$/;
+/**
+ * Opaque invite tokens. momong-api issues `randomBytes(18).toString("base64url")` (24 chars).
+ * The check stays wider than that so a longer base64url token still passes.
+ */
+const TOKEN = /^[A-Za-z0-9_-]{6,128}$/;
 
 export type SyncStepStatus = "local" | "offline" | "syncing" | "synced" | "error";
 export type PairStepState = "done" | "current" | "pending" | "error";
@@ -101,12 +108,14 @@ export function rememberInvite(
     storage.removeItem(PENDING_INVITE_NAME);
     session.removeItem(PENDING_INVITE_NAME);
   }
-  if (meta.accountId) {
-    storage.setItem(PENDING_INVITE_USER, meta.accountId);
-    session.setItem(PENDING_INVITE_USER, meta.accountId);
-  } else {
-    storage.removeItem(PENDING_INVITE_USER);
-    session.removeItem(PENDING_INVITE_USER);
+  if ("accountId" in meta) {
+    if (meta.accountId) {
+      storage.setItem(PENDING_INVITE_USER, meta.accountId);
+      session.setItem(PENDING_INVITE_USER, meta.accountId);
+    } else {
+      storage.removeItem(PENDING_INVITE_USER);
+      session.removeItem(PENDING_INVITE_USER);
+    }
   }
   return true;
 }
@@ -140,21 +149,128 @@ export function readInviteName(storage: Bag = localStorage, session: Bag = sessi
   return (session.getItem(PENDING_INVITE_NAME) || storage.getItem(PENDING_INVITE_NAME) || "").trim().slice(0, 80);
 }
 
+/** Owner recorded with the saved invite. Session wins when both exist; localStorage covers a new browser session. */
+export function readInviteOwner(storage: Bag = localStorage, session: Bag = sessionStorage) {
+  return session.getItem(PENDING_INVITE_USER) || storage.getItem(PENDING_INVITE_USER) || null;
+}
+
+export function markInviteFlow(now = Date.now(), storage: Bag = localStorage) {
+  storage.setItem(PENDING_INVITE_FLOW, String(now));
+}
+
+export function inviteFlowActive(now = Date.now(), storage: Bag = localStorage) {
+  const at = Number(storage.getItem(PENDING_INVITE_FLOW) ?? "");
+  return Number.isFinite(at) && at > 0 && now >= at && now - at <= INVITE_FLOW_MS;
+}
+
+export function clearInviteFlow(storage: Bag = localStorage) {
+  storage.removeItem(PENDING_INVITE_FLOW);
+}
+
 /**
- * A link opened before login is claimed by the account that signs in.
- * An invite saved for a different account stays until that person chooses.
+ * On login, a saved invite stays when its owner is the account that just signed in.
+ * An invite saved while logged out is claimed only during the sign-in that started from that link.
+ * A different owner, or a missing owner with no flow marker, is a leftover and is cleared.
+ * Logged-out reads do not clear it.
  */
-export function reconcilePendingInvite(currentAccountId: string | null, now = Date.now(), storage: Bag = localStorage, session: Bag = sessionStorage) {
+export function reconcilePendingInvite(currentAccountId: string | null, now = Date.now(), storage: Bag = localStorage, session: Bag = sessionStorage, sameFlow = inviteFlowActive(now, storage)) {
   const token = readInvite(storage, session, now);
-  if (!token) return "cleared" as const;
-  const stored = session.getItem(PENDING_INVITE_USER) || storage.getItem(PENDING_INVITE_USER);
-  if (currentAccountId && stored && stored !== currentAccountId) return "foreign" as const;
-  if (currentAccountId && !stored) {
-    storage.setItem(PENDING_INVITE_USER, currentAccountId);
-    session.setItem(PENDING_INVITE_USER, currentAccountId);
+  if (!token) {
+    clearInviteFlow(storage);
+    return "cleared" as const;
+  }
+  if (!currentAccountId) return "kept" as const;
+  const owner = readInviteOwner(storage, session);
+  if (owner === currentAccountId) {
+    clearInviteFlow(storage);
+    return "kept" as const;
+  }
+  if (!owner && sameFlow) {
+    claimForeignInvite(currentAccountId, storage, session, now);
+    clearInviteFlow(storage);
     return "claimed" as const;
   }
-  return "kept" as const;
+  clearInvite(storage, session);
+  clearInviteFlow(storage);
+  return "cleared" as const;
+}
+
+/** After login, Gabung waits until this account has a profile. A profile that is already here opens Beranda.
+ *  A preview of invalid, expired, or used never opens Gabung on its own. */
+export function postLoginRoute(input: { fallback: string; invite: string | null; onboarded: boolean; preview?: InvitePreview | null }) {
+  const invite = input.preview?.status === "invalid" ? null : input.invite;
+  if (invite && input.onboarded) return inviteReturnHash(invite);
+  if (input.onboarded && input.fallback === "#/profil") return "#/";
+  return input.fallback;
+}
+
+/** Onboarding ends on the confirm sheet when the saved invite belongs to this account and the preview is still live. */
+export function onboardingExitHash(input: { accountId: string | null; ownerId: string | null; token: string | null; preview?: InvitePreview | null }) {
+  if (input.preview?.status === "invalid") return "#/" as const;
+  if (input.token && input.accountId && input.ownerId === input.accountId) return inviteReturnHash(input.token);
+  return "#/" as const;
+}
+
+/** Drop a saved invite the server has rejected, including its owner and flow marker.
+ *  The session remembers the token so a link opened directly can show the invalid screen once. */
+export function releaseDeadInvite(token: string | null, storage: Bag = localStorage, session: Bag = sessionStorage) {
+  if (!token || !isInviteToken(token)) return false;
+  rememberInviteInvalid(token, session);
+  if (readInvite(storage, session) === token) clearInvite(storage, session);
+  return true;
+}
+
+/**
+ * Nanti and the sheet dismiss share one exit. The first event leaves for Beranda.
+ * A second event from the same press does not run again. Joining cannot be dismissed.
+ */
+export function gabungNantiAction(input: { phase: string; leaving: boolean; authReturn: string | null }):
+  | { type: "ignore" }
+  | { type: "leave"; hash: "#/"; authReturn: string | null } {
+  if (input.leaving || input.phase === "joining" || input.phase === "left") return { type: "ignore" };
+  const next = declineJoin({ authReturn: input.authReturn });
+  return { type: "leave", hash: next.hash, authReturn: next.authReturn };
+}
+
+/** Confirm sheet. It stays shut after Nanti even while the saved invite still exists. */
+export function gabungConfirmOpen(input: { phase: string; dismissed: boolean }) {
+  return (input.phase === "ask" || input.phase === "joining") && !input.dismissed;
+}
+
+export type GabungNantiView = {
+  phase: string;
+  leaving: boolean;
+  dismissed: boolean;
+  hash: string;
+  authReturn: string | null;
+  invite: string | null;
+};
+
+/**
+ * The first press or dismiss closes the sheet and leaves for Beranda.
+ * The saved invite stays. A second event from that same press does not open the sheet again.
+ */
+export function settleGabungNanti(state: GabungNantiView): GabungNantiView {
+  const action = gabungNantiAction({ phase: state.phase, leaving: state.leaving, authReturn: state.authReturn });
+  if (action.type === "ignore") return state;
+  return { ...state, leaving: true, dismissed: true, hash: action.hash, authReturn: action.authReturn };
+}
+
+/**
+ * Whether login may navigate to an invite.
+ * An explicit return is a link opened in this browser session.
+ * A preview of invalid, expired, or used drops the invite. A failed preview does not.
+ */
+export function loginInviteChoice(input: {
+  accountId: string | null;
+  ownerId: string | null;
+  explicit: boolean;
+  preview: InvitePreview | null;
+}): "open" | "drop" {
+  if (input.preview?.status === "invalid") return "drop";
+  if (input.explicit) return "open";
+  if (input.accountId && input.ownerId === input.accountId) return "open";
+  return "drop";
 }
 
 /** Use a saved invite on the account that is signed in now. */
@@ -303,6 +419,7 @@ export function clearInvite(storage: Bag = localStorage, session: Bag = sessionS
     bag.removeItem(PENDING_INVITE_AT);
     bag.removeItem(PENDING_INVITE_USER);
     bag.removeItem(PENDING_INVITE_NAME);
+    bag.removeItem(PENDING_INVITE_FLOW);
   }
 }
 
@@ -363,11 +480,214 @@ export function inviteShowsGoogleError(input: { returnedWithoutSession: boolean;
   return input.returnedWithoutSession;
 }
 
+/** Session cache of tokens POST /household/join already rejected. Keyed per token. */
+export const INVITE_INVALID_CACHE = "bb_invite_invalid:";
+
+export function rememberInviteInvalid(token: string, session: Bag = sessionStorage) {
+  if (!isInviteToken(token)) return false;
+  session.setItem(INVITE_INVALID_CACHE + token, "1");
+  return true;
+}
+
+export function readInviteInvalid(token: string, session: Bag = sessionStorage) {
+  return isInviteToken(token) && session.getItem(INVITE_INVALID_CACHE + token) === "1";
+}
+
+/** Raw `invite` query value, including tokens that fail the format check. */
+export function inviteParamFromHash(hash: string) {
+  const query = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+  return new URLSearchParams(query).get("invite");
+}
+
+export function inviteTokenFromHash(hash: string) {
+  const token = inviteParamFromHash(hash);
+  return token && isInviteToken(token) ? token : null;
+}
+
+/**
+ * House name for this token only.
+ * A saved name belongs to the stored token. A different token does not inherit it.
+ */
+export function houseNameForInvite(token: string | null, hash: string, storage: Bag = localStorage, session: Bag = sessionStorage) {
+  if (!token || !isInviteToken(token)) return "";
+  if (inviteTokenFromHash(hash) === token) {
+    const fromHash = inviteOwnerName(hash);
+    if (fromHash) return fromHash;
+  }
+  if (storedToken(storage, session) === token) return readInviteName(storage, session);
+  return "";
+}
+
+export type InvitePreview =
+  | { status: "invalid" }
+  | { status: "unknown" }
+  | { status: "full"; houseName?: string }
+  | { status: "valid"; houseName?: string };
+
+/** What the client can prove before any preview request. */
+export function localInvitePreview(token: string | null, session: Bag = sessionStorage): InvitePreview {
+  if (!token || !isInviteToken(token) || readInviteInvalid(token, session)) return { status: "invalid" };
+  return { status: "unknown" };
+}
+
+/** Server preview body. A bad body is null so the caller falls back to local knowledge. */
+export function mapServerInvitePreview(body: unknown): InvitePreview | null {
+  if (!body || typeof body !== "object") return null;
+  const row = body as { status?: unknown; householdName?: unknown; full?: unknown };
+  const status = row.status;
+  if (status !== "valid" && status !== "invalid" && status !== "expired" && status !== "used") return null;
+  if (status !== "valid") return { status: "invalid" };
+  const houseName = typeof row.householdName === "string" ? row.householdName.trim().slice(0, 80) : "";
+  if (row.full === true) return { status: "full", ...(houseName ? { houseName } : {}) };
+  return { status: "valid", ...(houseName ? { houseName } : {}) };
+}
+
+type PreviewLoader = (token: string) => Promise<InvitePreview | null>;
+let previewLoader: PreviewLoader | null = null;
+
+/** sync.ts registers the bearer call. Tests that never load it keep the local fallback. */
+export function bindInvitePreview(loader: PreviewLoader) {
+  previewLoader = loader;
+}
+
+/**
+ * GET /household/invite/:token/preview when sync has registered it.
+ * Null means the route is missing, the session is missing, or the network failed.
+ */
+export async function requestInvitePreview(token: string): Promise<InvitePreview | null> {
+  if (!previewLoader) return null;
+  return previewLoader(token);
+}
+
+export async function fetchInvitePreview(token: string, session: Bag = sessionStorage): Promise<InvitePreview> {
+  const local = localInvitePreview(token, session);
+  if (local.status === "invalid") return local;
+  try {
+    const remote = await requestInvitePreview(token);
+    return remote ?? local;
+  } catch {
+    return local;
+  }
+}
+
+export type GabungPhase = "checking" | "ask" | "joining" | "error";
+
+export function gabungPhaseForToken(token: string | null, session: Bag = sessionStorage): { phase: GabungPhase; joinCode: string } {
+  if (!token) return { phase: "error", joinCode: "" };
+  if (!isInviteToken(token) || readInviteInvalid(token, session)) return { phase: "error", joinCode: "invite_invalid" };
+  return { phase: "checking", joinCode: "" };
+}
+
+/** Null when the token is unchanged. A new token drops phase, error code, and the previous house. */
+export function gabungOnTokenChange(current: string | null, next: string | null, session: Bag = sessionStorage) {
+  if (next === current) return null;
+  return { token: next, ...gabungPhaseForToken(next, session) };
+}
+
+export function gabungAfterPreview(phase: GabungPhase, preview: InvitePreview): GabungPhase {
+  if (phase === "joining") return "joining";
+  if (preview.status === "invalid" || preview.status === "full") return "error";
+  if (phase === "checking" && (preview.status === "unknown" || preview.status === "valid")) return "ask";
+  return phase;
+}
+
+/**
+ * Only the owner of a house with an open seat may ask for a link.
+ * A join that has not refreshed /me yet must not. Reload reuses the open token; rotate is explicit.
+ */
+export function householdInviteRequest(input: { settling: boolean; isOwner: boolean; full: boolean; rotate?: boolean }) {
+  if (input.settling) return { ok: false as const, code: "household_settling" as const };
+  if (!input.isOwner) return { ok: false as const, code: "not_owner" as const };
+  if (input.full) return { ok: false as const, code: "seats_full" as const };
+  if (input.rotate) return { ok: true as const, path: "/household/invite?rotate=true", body: { rotate: true as const } };
+  return { ok: true as const, path: "/household/invite", body: {} };
+}
+
+/** Already-paired is only for someone who opened Gabung that way. A join in flight leaves for Pasangan. */
+export function gabungJoinScreen(input: { hasPartner: boolean; phase: GabungPhase; ownJoin: boolean }): "joining" | "connected" | "continue" {
+  if (input.ownJoin || input.phase === "joining") return "joining";
+  if (input.hasPartner) return "connected";
+  return "continue";
+}
+
+export function joinCodeAfterPreview(current: string, preview: InvitePreview) {
+  if (preview.status === "invalid") return "invite_invalid";
+  if (preview.status === "full") return "seats_full";
+  return current;
+}
+
+export function houseNameAfterPreview(current: string, preview: InvitePreview) {
+  if (preview.status !== "valid" && preview.status !== "full") return current;
+  const name = preview.houseName?.trim().slice(0, 80) ?? "";
+  return name || current;
+}
+
+/** `dari=` is only a name when the preview request itself failed. A server name replaces it. */
+export function gabungHouseName(input: { serverName: string; fallbackName: string; source: "pending" | "server" | "fallback" }) {
+  if (input.source === "fallback") return input.serverName.trim() || input.fallbackName.trim();
+  return input.serverName.trim();
+}
+
+/**
+ * The confirm sheet opens only after a check that did not prove the token invalid.
+ * Format failures and a cached invite_invalid result never open it.
+ * `checking` is the neutral wait. `unknown` is today's confirm step.
+ */
+export function gabungSheetOpen(input: {
+  token: string | null;
+  phase: GabungPhase;
+  joinCode: string;
+  signedIn: boolean;
+  hasPartner: boolean;
+  session?: Bag;
+}) {
+  const session = input.session ?? sessionStorage;
+  if (!input.token || !isInviteToken(input.token)) return false;
+  if (readInviteInvalid(input.token, session)) return false;
+  if (input.joinCode === "invite_invalid" || input.joinCode === "seats_full") return false;
+  if (!input.signedIn || input.hasPartner) return false;
+  return input.phase === "ask" || input.phase === "joining";
+}
+
 export const INVITE_INVALID_TITLE = "Tautan tidak valid atau sudah kedaluwarsa";
 
 export function joinFailureMessage(code: string) {
   if (code === "seats_full") return "Keluarga sudah memiliki dua anggota. Minta pasangan memeriksa akses keluarga.";
   if (code === "invite_invalid") return `${INVITE_INVALID_TITLE}. Minta tautan baru dari pasangan.`;
   if (code === "not_ready") return "Masuk dulu, lalu tempel kode undangan.";
+  if (code === "already_paired") return "Kamu sudah terhubung dengan pasangan.";
+  if (code === "timeout") return "Terlalu lama. Cek koneksi lalu coba lagi.";
   return "Belum bisa bergabung. Cek koneksi lalu coba lagi.";
+}
+
+/** A full house and a dead link go back to Beranda. Everything else can be retried. */
+export function gabungErrorActions(code: string): { back: boolean; retry: boolean } {
+  if (code === "invite_invalid" || code === "seats_full" || code === "already_paired") return { back: true, retry: false };
+  return { back: false, retry: true };
+}
+
+export type GabungJoinResult = { ok: "joined" | "skipped" } | { ok: "failed"; code: string } | { ok: "timeout" };
+
+/** Every finished join is success or a visible error. Skipped is not a silent return to the sheet. */
+export function gabungAfterJoin(result: GabungJoinResult): { joined: true } | { joined: false; joinCode: string } {
+  if (result.ok === "joined") return { joined: true };
+  if (result.ok === "timeout") return { joined: false, joinCode: "timeout" };
+  if (result.ok === "failed") return { joined: false, joinCode: result.code || "request_failed" };
+  return { joined: false, joinCode: "already_paired" };
+}
+
+/**
+ * First click shows loading. The outcome is never "the button is still Gabung and nothing happened".
+ * Onboarding is not an input. A missing session is an error, not a reason to ignore the tap.
+ */
+export function gabungClickResult(input: { token: string | null; lockHeld: boolean; result?: GabungJoinResult }):
+  | { kind: "ignore" }
+  | { kind: "loading" }
+  | { kind: "joined" }
+  | { kind: "error"; joinCode: string; lockHeld: false } {
+  if (!input.token || input.lockHeld) return { kind: "ignore" };
+  if (!input.result) return { kind: "loading" };
+  const next = gabungAfterJoin(input.result);
+  if (next.joined) return { kind: "joined" };
+  return { kind: "error", joinCode: next.joinCode, lockHeld: false };
 }

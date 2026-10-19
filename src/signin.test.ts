@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "vite";
-import { SIGNIN_EMPTY, controllerChangeAction, failureFor, nameFromEmail, parseSignInDraft, signIn, signInDraft, signInInitial, signInRetryStep, signupStep, FAILURE_TEXT, type SignInState } from "./signin.ts";
+import { SIGNIN_EMPTY, controllerChangeAction, failureFor, isAuthScreen, nameFromEmail, parseSignInDraft, signIn, signInDraft, signInInitial, signInRetryStep, signupStep, FAILURE_TEXT, type SignInState } from "./signin.ts";
 
 const filled = (mode: SignInState["mode"] = "masuk") =>
   signIn(signIn({ ...SIGNIN_EMPTY, mode }, { type: "email", value: "a@b.co" }), { type: "password", value: "rahasia123" });
+
+test("login and signup leave with replace once a session exists", () => {
+  assert.equal(isAuthScreen("#/masuk-akun"), true);
+  assert.equal(isAuthScreen("#/masuk-akun?mode=signup"), true);
+  assert.equal(isAuthScreen("#/daftar"), true);
+  assert.equal(isAuthScreen("#/masuk"), true);
+  assert.equal(isAuthScreen("#/profil"), false);
+  assert.equal(isAuthScreen("#/gabung?invite=inviteTok1"), false);
+});
 
 test("no email is special: submitting only marks the request pending", () => {
   for (const email of ["bunda@email", "a@b.co", ""]) {

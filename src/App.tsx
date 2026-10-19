@@ -47,7 +47,7 @@ export function App() {
   }, [path, acc.token]);
   let screen;
   if (path === "/masuk") screen = <MagicLanding token={params.get("token")} />;
-  else if (path === "/gabung") screen = <JoinLanding invite={params.get("invite")} />;
+  else if (path === "/gabung") screen = <JoinLanding key={params.get("invite") ?? ""} invite={params.get("invite")} />;
   else if (path === "/kado-bersama") screen = <SharedWishlist key={params.get("token")} token={params.get("token")} />;
   else if (path === "/pasangan") screen = <Partner />;
   else if (path === "/plus") {

@@ -1,9 +1,10 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
-import { clearInvite, googleReturnAction, inviteReturnHash, isInviteToken, isSafeInviteReturn, navigationType, readInvite, reconcilePendingInvite } from "./invite";
+import { bindInvitePreview, clearInvite, clearInviteFlow, googleReturnAction, householdInviteRequest, inviteFlowActive, inviteReturnHash, inviteTokenFromHash, isInviteToken, isSafeInviteReturn, loginInviteChoice, mapServerInvitePreview, navigationType, postLoginRoute, readInvite, readInviteOwner, reconcilePendingInvite, releaseDeadInvite, type InvitePreview } from "./invite";
 import { PLUS_ENABLED } from "./release";
-import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
-import { setPlusAccess, isPlus, applyRemote, clearAccountRecords, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
+import { hasProfile } from "./onboarding";
+import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, isAuthScreen, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
+import { setPlusAccess, isPlus, adoptLocalOwner, applyRemote, getPrefs, liftAnonRecords, markAllDirty, markPushed, mergeClaimedAnon, onLocalChange, parkProfileForJoin, pending, resetDeviceData, setPrefs, setRecordOwner, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
  *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
@@ -22,8 +23,6 @@ type State = { checking?: boolean; restoreError?: boolean; verifiedAt?: number; 
 const load = <T,>(k: string, d: T): T => {
   try { return JSON.parse(localStorage.getItem(k) ?? "") ?? d; } catch { return d; }
 };
-const DATA_USER = "bb_data_user";
-
 function syncFlagKey(userId: string) {
   return `bb_sync_enabled:${userId}`;
 }
@@ -42,11 +41,19 @@ function storedSyncEnabled(me: Me | null) {
   return Number.isFinite(cursor) && cursor > 0;
 }
 
-/** Local notes belong to the account that wrote them. A different login starts clean. Sync flags stay. */
-function adoptAccountData(userId: string) {
-  const previous = localStorage.getItem(DATA_USER);
-  if (previous && previous !== userId) clearAccountRecords();
-  localStorage.setItem(DATA_USER, userId);
+/** Local notes and the profile name belong to the account that wrote them. A different login parks the previous set.
+ *  Anon rows are retagged only for the sign-in that still has the invite flow marker. That marker is then consumed. */
+function adoptAccountData(userId: string, claimGuest = false) {
+  const lifted = claimGuest ? liftAnonRecords() : [];
+  adoptLocalOwner(userId);
+  if (lifted.length) mergeClaimedAnon(userId, lifted);
+  if (claimGuest) clearInviteFlow();
+}
+
+function rememberProfileName(name: string) {
+  const next = name.trim();
+  if (!next || getPrefs().name?.trim()) return;
+  setPrefs({ name: next });
 }
 
 /** Cache Storage and IndexedDB can keep a previous account after a wipe. */
@@ -77,8 +84,13 @@ setPlusAccess(!!state.token && entitled(state.me));
 let sessionVersion = 0;
 let syncVersion = 0;
 const listeners = new Set<() => void>();
+function syncRecordOwner() {
+  setRecordOwner(state.token && state.me?.user?.id ? state.me.user.id : null);
+}
+
 function set(patch: Partial<State>) {
   state = { ...state, ...patch };
+  syncRecordOwner();
   const plus = !!state.token && entitled(state.me);
   if (plus && !isPlus()) { localStorage.removeItem("bb_cursor"); syncVersion++; }
   setPlusAccess(plus);
@@ -87,6 +99,7 @@ function set(patch: Partial<State>) {
   localStorage.setItem("bb_last_sync", JSON.stringify(state.lastSyncAt));
   listeners.forEach((l) => l());
 }
+syncRecordOwner();
 export const useAccount = () =>
   useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => state, () => state);
 export const account = () => state;
@@ -98,13 +111,15 @@ export class ApiError extends Error {
 export async function api<T>(path: string, init: RequestInit = {}): Promise<{ data: T; res: Response }> {
   if (!HAS_API) throw new ApiError(0, "no_api");
   const version = sessionVersion;
+  // A new Masuk or Daftar must not send, or be rejected by, the previous account's bearer.
+  const freshAuth = path.startsWith("/api/auth/sign-in/") || path.startsWith("/api/auth/sign-up/");
   const res = await fetch(API_URL + path, {
     ...init,
-    headers: { "content-type": "application/json", ...(state.token ? { authorization: `Bearer ${state.token}` } : {}), ...init.headers },
+    headers: { "content-type": "application/json", ...(state.token && !freshAuth ? { authorization: `Bearer ${state.token}` } : {}), ...init.headers },
   });
   const data = await res.json().catch(() => { if (res.ok) throw new ApiError(502, "invalid_response"); return {}; });
   if (version !== sessionVersion) throw new ApiError(0, "session_changed");
-  if (res.status === 401 && state.token) clearSession();
+  if (res.status === 401 && state.token && !freshAuth) clearSession();
   if (res.status >= 500) reportError(new Error("API server failure"), "api");
   if (!res.ok) throw new ApiError(res.status, data?.error ?? data?.code ?? "request_failed");
   return { data, res };
@@ -116,8 +131,45 @@ export function authDestination(fallback = "#/profil") {
   if (target === "#/plus" || target === "#/pasangan") return target;
   if (target && isSafeInviteReturn(target)) return target;
   const pending = readInvite();
-  if (pending) return inviteReturnHash(pending);
+  const accountId = state.me?.user.id ?? null;
+  if (pending && accountId && readInviteOwner() === accountId) return inviteReturnHash(pending);
   return fallback;
+}
+
+/** True when this sign-in started from the logged-out invite, not from a leftover link. */
+export function pendingInviteSameFlow(now = Date.now()) {
+  if (inviteFlowActive(now)) return true;
+  const token = readInvite();
+  const target = sessionStorage.getItem("bb_auth_return");
+  return !!token && !!target && isSafeInviteReturn(target) && inviteTokenFromHash(target) === token;
+}
+
+/** After login: claim a same-flow invite, drop a leftover, and open Gabung only once this account has a profile. */
+export async function destinationAfterLogin(fallback = "#/profil") {
+  const target = sessionStorage.getItem("bb_auth_return");
+  sessionStorage.removeItem("bb_auth_return");
+  if (target === "#/plus" || target === "#/pasangan") return target;
+
+  const accountId = state.me?.user.id ?? null;
+  if (accountId) {
+    const explicit = target && isSafeInviteReturn(target) ? inviteTokenFromHash(target) : null;
+    const sameFlow = pendingInviteSameFlow() || (!!explicit && explicit === readInvite());
+    reconcilePendingInvite(accountId, Date.now(), localStorage, sessionStorage, sameFlow);
+  }
+  const saved = readInvite();
+  const ownerId = readInviteOwner();
+  const candidate = accountId && saved && ownerId === accountId ? saved : null;
+  const onboarded = hasProfile(settings());
+  if (!candidate) return postLoginRoute({ fallback, invite: null, onboarded });
+  const preview = await loadInvitePreview(candidate);
+  if (loginInviteChoice({ accountId, ownerId, explicit: false, preview }) === "drop") {
+    if (readInvite() === candidate) {
+      if (preview?.status === "invalid") releaseDeadInvite(candidate);
+      else clearInvite();
+    }
+    return postLoginRoute({ fallback, invite: null, onboarded, preview });
+  }
+  return postLoginRoute({ fallback, invite: candidate, onboarded, preview });
 }
 
 function clearSession() {
@@ -216,6 +268,22 @@ export function authMemoryPassword() {
 function assignHash(hash: string) {
   try { location.hash = hash; } catch { /* non-browser tests */ }
 }
+
+/** Replace the current history entry so Back does not return to the invite that was just used. */
+function replaceHash(hash: string) {
+  try {
+    if (typeof location.replace === "function") {
+      location.replace(hash);
+      return;
+    }
+  } catch { /* test doubles */ }
+  assignHash(hash);
+}
+
+let ownJoinToken: string | null = null;
+export function markOwnJoin(token: string) { ownJoinToken = token; }
+export function ownJoinActive() { return ownJoinToken !== null; }
+export function clearOwnJoin() { ownJoinToken = null; }
 
 function publishCreatedLogin(email: string) {
   sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify({ mode: "masuk", email, failure: "created" }));
@@ -343,7 +411,7 @@ export async function resumeAuthAttempt() {
       return;
     }
     finishAuthAttempt(null);
-    assignHash(authDestination(attempt.mode === "daftar" ? "#/" : "#/profil"));
+    leaveAuthScreen(await destinationAfterLogin(attempt.mode === "daftar" ? "#/" : "#/profil"));
   } catch (error) {
     if (error instanceof ApiError && error.code === "created") {
       finishAuthAttempt({ id: ++authResultId, status: 409, failure: "created" });
@@ -356,23 +424,26 @@ export async function resumeAuthAttempt() {
 
 async function signedIn() {
   const version = sessionVersion;
-  await restoreAccount();
+  const sameFlow = pendingInviteSameFlow();
+  const claimGuest = inviteFlowActive();
+  await restoreAccount(claimGuest);
   if (version !== sessionVersion) throw new ApiError(0, "session_changed");
   if (!state.me) {
     clearSession();
     throw new ApiError(502, "invalid_account");
   }
-  reconcilePendingInvite(state.me.user.id);
+  reconcilePendingInvite(state.me.user.id, Date.now(), localStorage, sessionStorage, sameFlow);
 }
 
 /** Restore saved household data before offering setup. A solo account still needs sync consent. A paired account does not. */
-export async function restoreAccount() {
+export async function restoreAccount(claimGuest = false) {
   const version = sessionVersion;
   set({ checking: true, restoreError: false });
   try {
     await refreshMe();
     if (version !== sessionVersion) return;
-    adoptAccountData(state.me!.user.id);
+    adoptAccountData(state.me!.user.id, claimGuest);
+    rememberProfileName(state.me!.user.name);
     // Read the flag and cursor first. Deleting the cursor is a full pull, not a consent reset.
     // A second member on /me is already paired. A fresh device has no local flag, so turn sync on and pull.
     const paired = state.me!.household.members.some((member) => member.id !== state.me!.user.id);
@@ -469,7 +540,8 @@ function callbackHash() {
 }
 
 /** Boot after Google: the callback left a Better Auth session cookie on this origin. Trade it for the bearer, then the same session path as email.
- *  A stored invite returns to the confirm step. It is not joined until that tap. No session: sign-in reads the marker.
+ *  A saved invite opens only when it belongs to this account, or this session returned to it, and the preview is not dead.
+ *  It is not joined until that tap. No session: sign-in reads the marker.
  *  iOS can drop the sessionStorage marker on the way back from Google. The callback hash and cookie are still a new session. */
 export async function finishGoogle() {
   const marker = sessionStorage.getItem(GOOGLE_AWAY);
@@ -491,11 +563,6 @@ export async function finishGoogle() {
     return;
   }
   sessionStorage.setItem(GOOGLE_AWAY, "finishing");
-  const pending = readInvite();
-  if (pending) {
-    const dest = inviteReturnHash(pending);
-    if (isSafeInviteReturn(dest) && location.hash !== dest) location.hash = dest;
-  }
   try {
     const token = await readCookieSession();
     if (!token) throw new ApiError(401, "no_session");
@@ -506,8 +573,7 @@ export async function finishGoogle() {
     return;
   }
   sessionStorage.removeItem(GOOGLE_AWAY);
-  if (landAfterSession()) return;
-  location.hash = authDestination();
+  await goAfterLogin("#/profil");
 }
 
 /** A cookie with no local token is the OAuth return after iOS drops `bb_google`. Same restore as a marked return. */
@@ -516,24 +582,51 @@ async function claimCookieSession() {
     const token = await readCookieSession();
     if (!token) return;
     await sessionEstablished(token);
-    landAfterSession();
+    await goAfterLogin(location.hash || "#/profil");
   } catch { /* no cookie session */ }
 }
 
-function landAfterSession() {
-  const pendingNow = readInvite();
-  if (pendingNow && isInviteToken(pendingNow)) {
-    sessionStorage.removeItem("bb_auth_return");
-    location.hash = inviteReturnHash(pendingNow);
-    return true;
-  }
-  return false;
+/** Leave login or signup without leaving that page under the next one. Other routes still push. */
+export function leaveAuthScreen(next: string) {
+  if (isAuthScreen(location.hash)) replaceHash(next);
+  else assignHash(next);
 }
 
+async function goAfterLogin(fallback: string) {
+  const next = await destinationAfterLogin(fallback);
+  if (next && location.hash !== next) leaveAuthScreen(next);
+}
+
+/** Membership snapshot from before a join. Pasangan stays on a placeholder until /me differs. */
+let householdHold: { householdId: string; memberIds: string } | null = null;
+
+function memberIds(me: Me | null | undefined) {
+  return (me?.household.members ?? []).map((member) => member.id).sort().join(",");
+}
+
+export function holdHouseholdForJoin() {
+  householdHold = { householdId: state.me?.household.id ?? "", memberIds: memberIds(state.me) };
+}
+
+export function householdSettling() {
+  if (!householdHold || !state.me) return householdHold !== null;
+  return state.me.household.id === householdHold.householdId && memberIds(state.me) === householdHold.memberIds;
+}
+
+function releaseHouseholdHold(me: Me) {
+  if (!householdHold) return;
+  if (me.household.id !== householdHold.householdId || memberIds(me) !== householdHold.memberIds) householdHold = null;
+}
+
+let meRequest = 0;
+
 export async function refreshMe() {
+  const request = ++meRequest;
   const { data } = await api<Me>("/me");
   if (!data?.user?.id || typeof data.user.email !== "string" || typeof data.user.name !== "string" || !data.household?.id ||
     !Array.isArray(data.household.members) || !data.entitlement || !["free", "trial", "monthly", "plus_lifetime"].includes(data.entitlement.plan)) throw new ApiError(502, "invalid_account");
+  if (request !== meRequest) return state.me ?? data;
+  releaseHouseholdHold(data);
   set({ me: data, verifiedAt: Date.now() });
   return data;
 }
@@ -582,11 +675,40 @@ export function inviteReadyFor(householdId: string) {
   return publishedInvite?.householdId === householdId ? publishedInvite.invite : null;
 }
 
-export async function createInvite() {
-  const { data } = await api<HouseholdInvite>("/household/invite", { method: "POST", body: "{}" });
-  if (data?.token && data?.url && state.me?.household.id) publishedInvite = { householdId: state.me.household.id, invite: data };
+export async function createInvite(options?: { rotate?: boolean }) {
+  const me = state.me;
+  const request = householdInviteRequest({
+    settling: householdSettling(),
+    isOwner: !!me?.household.members.some((member) => member.id === me.user.id && member.role === "owner"),
+    full: !!me && me.household.members.length >= me.household.seats,
+    rotate: options?.rotate === true,
+  });
+  if (!request.ok) throw new ApiError(409, request.code);
+  const householdId = me!.household.id;
+  const { data } = await api<HouseholdInvite>(request.path, { method: "POST", body: JSON.stringify(request.body) });
+  if (!data?.token || !data?.url || householdSettling() || state.me?.household.id !== householdId) return null;
+  publishedInvite = { householdId, invite: data };
   return data;
 }
+
+export const JOIN_TIMEOUT_MS = 15_000;
+
+/** Read-only. 401, 404, and network errors return null so Gabung keeps today's confirm step. */
+export async function loadInvitePreview(token: string): Promise<InvitePreview | null> {
+  if (!isInviteToken(token) || !state.token || !HAS_API) return null;
+  try {
+    const { data } = await api<unknown>(`/household/invite/${encodeURIComponent(token)}/preview`, {
+      signal: AbortSignal.timeout(JOIN_TIMEOUT_MS),
+    });
+    return mapServerInvitePreview(data);
+  } catch (error) {
+    // A missing preview route stays unknown. Only the invite_invalid code means the saved link is dead.
+    if (error instanceof ApiError && error.status === 404 && error.code === "invite_invalid") return { status: "invalid" };
+    return null;
+  }
+}
+
+bindInvitePreview(loadInvitePreview);
 
 export type InviteConsume = { ok: "joined" | "skipped" } | { ok: "failed"; code: string };
 
@@ -595,28 +717,38 @@ const inviteFlight = new Map<string, Promise<InviteConsume>>();
 /** Enable sync if needed, join, and clear the stored invite. Already-paired households skip the request. */
 export async function acceptInvite(token: string): Promise<"joined" | "skipped"> {
   if (!isInviteToken(token)) throw new ApiError(400, "invite_invalid");
-  if (!state.token || !state.me) throw new ApiError(401, "not_ready");
+  if (!state.token) throw new ApiError(401, "not_ready");
+  if (!state.me) {
+    try { await refreshMe(); } catch { /* the guard below reports not_ready */ }
+  }
+  if (!state.me) throw new ApiError(401, "not_ready");
   if (state.me.household.members.some((member) => member.id !== state.me!.user.id)) {
     clearInvite();
     return "skipped";
   }
+  // Park before the sync that setSyncEnabled starts, so that request cannot carry this profile into the new house.
+  parkProfileForJoin(state.me.user.id);
   if (!state.syncEnabled) setSyncEnabled(true);
   await joinHousehold(token);
   clearInvite();
   return "joined";
 }
 
-/** One join per token while the request is in flight, including a React remount during OAuth return. */
+function inviteFailure(error: unknown): InviteConsume {
+  if (isTimeout(error)) return { ok: "failed", code: "timeout" };
+  if (error instanceof ApiError) return { ok: "failed", code: error.code || "request_failed" };
+  return { ok: "failed", code: "" };
+}
+
+/** One join per token while the request is in flight, including a React remount during OAuth return.
+ *  The token on screen wins over a different saved invite. A missing session is a failure, not a skip. */
 export function consumePendingInvite(fallback?: string | null): Promise<InviteConsume> {
-  const token = readInvite() || (fallback && isInviteToken(fallback) ? fallback : null);
-  if (!token) return Promise.resolve({ ok: "skipped" });
+  const token = (fallback && isInviteToken(fallback) ? fallback : null) || readInvite();
+  if (!token) return Promise.resolve({ ok: "failed", code: "not_ready" });
   const existing = inviteFlight.get(token);
   if (existing) return existing;
   let run!: Promise<InviteConsume>;
-  run = acceptInvite(token).then((ok) => ({ ok })).catch((error: unknown): InviteConsume => {
-    if (error instanceof ApiError && error.code === "not_ready") return { ok: "skipped" };
-    return { ok: "failed", code: error instanceof ApiError ? error.code : "" };
-  }).finally(() => {
+  run = acceptInvite(token).then((ok) => ({ ok })).catch((error: unknown): InviteConsume => inviteFailure(error)).finally(() => {
     if (inviteFlight.get(token) === run) inviteFlight.delete(token);
   });
   inviteFlight.set(token, run);
@@ -632,11 +764,22 @@ export async function joinHousehold(token: string) {
   let run!: Promise<void>;
   run = (async () => {
     syncVersion++;
-    await api("/household/join", { method: "POST", body: JSON.stringify({ token }) });
+    await api("/household/join", { method: "POST", body: JSON.stringify({ token }), signal: AbortSignal.timeout(JOIN_TIMEOUT_MS) });
+    // The 200 already moved membership. Hold the old house, drop the invite, and leave
+    // Gabung before /me can paint the previous seats or an already-paired Gabung.
+    holdHouseholdForJoin();
+    clearInvite();
+    publishedInvite = null;
+    markOwnJoin(token);
+    // The house already has a profile. This phone's copy is set aside, not uploaded and not deleted.
+    if (state.me?.user.id) parkProfileForJoin(state.me.user.id);
+    replaceHash("#/pasangan");
     set({ hasSynced: false });
     localStorage.removeItem("bb_cursor");
     markAllDirty();
     await refreshMe();
+    // A sync that started before membership moved ignores its response. The next one pulls the house.
+    await syncNow();
     await syncNow();
   })().finally(() => {
     if (joinFlight.get(token) === run) joinFlight.delete(token);
@@ -662,7 +805,7 @@ export function syncNow(): Promise<void> {
   inFlight = (async () => {
     set({ status: "syncing" });
     try {
-      const changes = pending().slice(0, 1000);
+      const changes = pending().slice(0, 1000); // pending() is only this account's ownerId
       const since = Number(localStorage.getItem("bb_cursor") ?? 0);
       const { data } = await api<{ cursor: number; changes: any[]; hasMore?: boolean }>("/sync", {
         method: "POST",

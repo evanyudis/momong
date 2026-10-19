@@ -20,6 +20,12 @@ export type SignInAction =
   | { type: "idle" }
   | { type: "fail"; status: number; failure?: SignInFailure };
 
+/** Login, signup, and the magic-link screen. A session on these routes should leave with history.replace. */
+export function isAuthScreen(hash: string) {
+  const path = (hash.replace(/^#/, "") || "/").split("?")[0];
+  return path === "/masuk-akun" || path === "/daftar" || path === "/masuk";
+}
+
 export const SIGNIN_EMPTY: SignInState = {
   mode: "masuk", email: "", password: "", emailError: false, googleCancelled: false, pending: false, failure: null,
 };

@@ -4,8 +4,9 @@ import { type FormEvent, useEffect, useReducer, useRef, useState, useSyncExterna
 import { Button, FieldError, Form, Input, Label, TextField } from "react-aria-components";
 import { deviceHasData, setPrefs } from "../store";
 import { reducedMotion } from "../motion";
-import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, FAILURE_TEXT, SIGNIN_DRAFT_KEY, parseAuthAttempt, parseSignInDraft, signIn, signInDraft, signInInitial } from "../signin";
-import { ApiError, authDestination, authEmail, authMemoryPassword, authUi, startGoogle, subscribeAuthUi, takeGoogleReturn } from "../sync";
+import { clearInviteFlow } from "../invite";
+import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, FAILURE_TEXT, SIGNIN_DRAFT_KEY, isAuthScreen, parseAuthAttempt, parseSignInDraft, signIn, signInDraft, signInInitial } from "../signin";
+import { ApiError, authEmail, authMemoryPassword, authUi, destinationAfterLogin, leaveAuthScreen, startGoogle, subscribeAuthUi, takeGoogleReturn, useAccount } from "../sync";
 
 const EXIT_MS = 150; // matches the quiet exit in styles.css; enter (settle-in) is 200ms
 
@@ -75,6 +76,19 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const daftar = s.mode === "daftar";
+  const account = useAccount();
+  const arrivedWithSession = useRef(!!account.token);
+
+  useEffect(() => {
+    if (!arrivedWithSession.current || !account.token || !isAuthScreen(location.hash)) return;
+    let cancel = false;
+    void destinationAfterLogin(onboarding ? "#/" : "#/profil").then((next) => {
+      if (!cancel) leaveAuthScreen(next);
+    }).catch(() => {
+      if (!cancel) leaveAuthScreen(onboarding ? "#/" : "#/profil");
+    });
+    return () => { cancel = true; };
+  }, [account.token, onboarding]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -87,7 +101,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
       await authEmail(s.mode, email, s.password);
       sessionStorage.removeItem(SIGNIN_DRAFT_KEY);
       sessionStorage.removeItem(AUTH_NOTICE_KEY);
-      location.hash = authDestination(onboarding ? "#/" : "#/profil");
+      leaveAuthScreen(await destinationAfterLogin(onboarding ? "#/" : "#/profil"));
     } catch (err) {
       // The module publishes the failure so a remount still shows it. Status 0 is a lost response, never success.
       if (!(err instanceof ApiError)) dispatch({ type: "fail", status: 0 });
@@ -126,6 +140,10 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
   }
 
   const msg = (leaving: boolean) => ({ "data-still": still || undefined, "data-leaving": leaving || undefined });
+
+  if (account.token && isAuthScreen(location.hash)) {
+    return <div className="card solid empty" role="status" aria-busy="true"><strong>Menyiapkan akun…</strong></div>;
+  }
 
   return (
     <>
@@ -175,6 +193,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
         </Form>
         <button type="button" className="btn btn-soft block" style={{ marginTop: 20 }} onClick={() => {
           setPrefs({ guest: true });
+          clearInviteFlow();
           sessionStorage.removeItem("bb_auth_return");
           sessionStorage.removeItem("bb_plus_plan");
           location.hash = "#/";
