@@ -1,17 +1,38 @@
-import { Check, CloudOff, LoaderCircle, LogOut, Mail, MessageCircle, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
+import { Check, CloudOff, LoaderCircle, LogOut, Mail, MessageCircle, QrCode, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Button, Form, Input, Label, TextField } from "react-aria-components";
+import { encode } from "uqr";
 import { agoLabel } from "../dates";
-import { initial, useHousehold } from "../household";
-import { go } from "../route";
-import { getPrefs } from "../store";
+import { initial, partnerSyncScreen, useHousehold } from "../household";
 import {
-  HAS_API, setSyncEnabled, ApiError, createInvite, joinHousehold, refreshMe, removeMember, requestMagicLink, signOut, syncNow, useAccount, authDestination, verifyMagicLink,
+  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, googleChoiceResume, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteName, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
+} from "../invite";
+import { go } from "../route";
+import { getPrefs, setPrefs } from "../store";
+import {
+  HAS_API, setSyncEnabled, abandonGoogleStart, ApiError, acceptInvite, consumePendingInvite, createInvite, googlePhase, inviteReadyFor, removeMember, takeGoogleReturn,
+  requestMagicLink, signOut, startGoogle, syncNow, refreshMe, useAccount, authDestination, verifyMagicLink, type HouseholdInvite,
 } from "../sync";
-import { toast, TopBar } from "../ui";
+import { Sheet, toast, TopBar } from "../ui";
 
-const PENDING_INVITE = "bb_pending_invite";
 // A magic-link token is single-use; dedupe so a re-run effect can't burn it twice.
 const verifying = new Map<string, Promise<void>>();
+
+function localRecordCount() {
+  try {
+    return localLogCount(JSON.parse(localStorage.getItem("bb_db_v1") || "{}"));
+  } catch {
+    return 0;
+  }
+}
+
+function JoinDataNote() {
+  const cursor = Number(localStorage.getItem("bb_cursor") ?? 0);
+  const note = joinDataWarning({ localRecords: localRecordCount(), syncCursor: Number.isFinite(cursor) ? cursor : 0 });
+  if (!note) return null;
+  return <p className="wa-banner" role="status" style={{ margin: 0 }}>{note}</p>;
+}
 
 export function SyncDot() {
   const acc = useAccount();
@@ -33,19 +54,33 @@ export function SyncDot() {
 
 export function Partner() {
   const h = useHousehold();
+  const [joinOpen, setJoinOpen] = useState(false);
+  const userId = h.me?.user.id ?? null;
+  const rawFlag = userId ? localStorage.getItem(`bb_sync_enabled:${userId}`) : null;
+  const storedFlag = rawFlag === "true" ? true : rawFlag === "false" ? false : null;
+  const view = !HAS_API ? "no-server" : partnerSyncScreen({
+    hasToken: !!h.acc.token,
+    userId,
+    enabledFlag: h.acc.syncEnabled ? true : storedFlag,
+    syncCursor: Number(localStorage.getItem("bb_cursor") ?? 0),
+    paired: !!h.partner,
+    checking: !!h.acc.checking,
+  });
   return (
     <>
       <TopBar title="Pasangan" />
-      {!HAS_API ? <NoServer /> : h.signedIn ? h.acc.syncEnabled ? <Household /> : <SyncConsent /> : <SignIn />}
+      {view === "no-server" ? <NoServer /> : view === "signin" ? <SignIn /> : view === "wait" ? <div className="card solid empty" role="status" aria-busy="true"><strong>Memeriksa sesi…</strong></div> : view === "household" ? <Household onJoin={() => setJoinOpen(true)} /> : <SyncConsent paired={!!h.partner} onJoin={() => setJoinOpen(true)} />}
+      {h.signedIn && <JoinCodeSheet open={joinOpen} onOpenChange={setJoinOpen} />}
     </>
   );
 }
 
-function SyncConsent() {
+function SyncConsent({ paired, onJoin }: { paired: boolean; onJoin: () => void }) {
   return <section className="card solid stack">
     <h1>Aktifkan sinkron?</h1>
     <p className="muted">Catatan di HP ini akan diunggah dan digabung dengan catatan keluarga di akunmu. Sinkron dan pasangan gratis untuk 2 orang.</p>
     <button className="btn btn-ink block" onClick={() => setSyncEnabled(true)}>Aktifkan sinkron</button>
+    {!paired && <button className="btn btn-soft block" onClick={onJoin}>Punya kode dari pasangan?</button>}
     <a className="btn btn-soft block" href="#/profil">Nanti saja</a>
   </section>;
 }
@@ -75,7 +110,7 @@ function NoServer() {
   );
 }
 
-function SignIn({ invite }: { invite?: boolean }) {
+function SignIn() {
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   async function submit(e: React.FormEvent) {
@@ -91,10 +126,8 @@ function SignIn({ invite }: { invite?: boolean }) {
   return (
     <>
       <Hero
-        title={invite ? "Kamu diundang mencatat bersama" : "Ajak pasangan mencatat bersama"}
-        body={invite
-          ? "Masuk dengan email dulu. Setelah itu aktifkan sinkron dan konfirmasi untuk bergabung."
-          : "Berdua lebih ringan. Masuk dengan email untuk sinkron dan undang pasangan. Gratis untuk 2 orang."}
+        title="Ajak pasangan mencatat bersama"
+        body="Berdua lebih ringan. Masuk dengan email untuk sinkron dan undang pasangan. Gratis untuk 2 orang."
       />
       {state === "sent" ? (
         <div className="card solid" role="status">
@@ -117,46 +150,112 @@ function SignIn({ invite }: { invite?: boolean }) {
   );
 }
 
-function Household() {
+function PairStatus({ inviteSent }: { inviteSent: boolean }) {
   const h = useHousehold();
+  const steps = pairSteps({
+    inviteSent,
+    hasPartner: !!h.partner,
+    syncEnabled: h.acc.syncEnabled,
+    syncStatus: h.acc.status,
+  });
+  return (
+    <section className="card solid">
+      <span className="label" style={{ fontWeight: 600 }}>Status pasangan</span>
+      <ol className="pair-steps" aria-live="polite" aria-label="Status pasangan">
+        {steps.map((step, index) => (
+          <li key={step.id} data-state={step.state} aria-current={step.state === "current" ? "step" : undefined}>
+            <span className="mark" aria-hidden="true">{step.state === "done" ? <Check size={16} /> : index + 1}</span>
+            <span className="grow">
+              <span className="title">{step.label}</span>
+              <span className="sub">{pairStepLabel(step.state)}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function InviteQr({ value }: { value: string }) {
+  const qr = encode(value, { ecc: "M", border: 2 });
+  const n = qr.size;
+  return (
+    <svg className="invite-qr" viewBox={`0 0 ${n} ${n}`} role="img" aria-label="Kode QR undangan">
+      <rect width={n} height={n} fill="var(--surface)" />
+      {qr.data.flatMap((row, y) => row.map((on, x) => on ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="currentColor" /> : null))}
+    </svg>
+  );
+}
+
+function Household({ onJoin }: { onJoin: () => void }) {
+  const h = useHousehold();
+  const householdId = h.me?.household.id ?? "";
   useEffect(() => { void refreshMe().catch(() => {}); }, []);
   const previousPartner = useRef(h.partner?.id);
   const [joinedPartner, setJoinedPartner] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  useEffect(() => { setSent(inviteWasSent(householdId)); }, [householdId]);
   useEffect(() => {
     if (!previousPartner.current && h.partner) setJoinedPartner(h.partner.id);
     previousPartner.current = h.partner?.id;
   }, [h.partner?.id]);
-  const [invite, setInvite] = useState<{ url: string } | null>(null);
+  useEffect(() => {
+    const pull = () => { void refreshMe().catch(() => {}); void syncNow(); };
+    const id = setInterval(pull, h.partner ? 15000 : 5000);
+    return () => clearInterval(id);
+  }, [h.partner]);
+  const [invite, setInvite] = useState<HouseholdInvite | null>(null);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState(false);
   const [inviteAttempt, setInviteAttempt] = useState(0);
   const full = h.seatsUsed >= h.seats;
 
   useEffect(() => {
-    if (full || !h.isOwner || invite) return;
-    let cancelled = false;
+    if (full || !h.isOwner) return;
+    const ready = inviteReadyFor(householdId);
+    if (ready) { setInvite(ready); setInviteLoading(false); return; }
+    if (invite) return;
     setInviteLoading(true); setInviteError(false);
+    let dropped = false;
     createInvite().then((value) => {
-      if (!cancelled) { setInvite(value); setInviteLoading(false); }
+      // A cleanup must not throw away a 200. The link comes from this response.
+      setInvite(value);
+      setInviteLoading(false);
     }).catch(() => {
-      if (!cancelled) { setInviteError(true); setInviteLoading(false); }
+      if (dropped) return;
+      setInviteError(true);
+      setInviteLoading(false);
     });
-    return () => { cancelled = true; };
-  }, [full, h.isOwner, invite, inviteAttempt]);
+    return () => { dropped = true; };
+  }, [full, h.isOwner, invite, inviteAttempt, householdId]);
 
-  const name = getPrefs().name || "Bunda";
+  const code = invite ? displayInviteCode(invite) : "";
+  const shareUrl = invite ? inviteLinkWithOwner(invite.url, h.myName) : "";
   const message = invite
-    ? `Yuk catat kehamilan & si kecil bareng di Momong. Gabung lewat tautan ini (berlaku 7 hari): ${invite.url}`
+    ? `Yuk catat kehamilan & si kecil bareng di Momong. Gabung lewat tautan ini (berlaku 7 hari): ${shareUrl}\n\nAtau buka aplikasi Momong, masuk, lalu tempel kode: ${code}`
     : "";
+
+  function noteSent() {
+    if (!householdId) return;
+    markInviteSent(householdId);
+    setSent(true);
+  }
 
   async function share() {
     if (!invite) return;
     try {
       if (navigator.share) await navigator.share({ title: "Momong", text: message });
-      else { await navigator.clipboard.writeText(invite.url); toast("Tautan undangan disalin. Siap dikirim ke pasangan."); }
+      else { await navigator.clipboard.writeText(shareUrl); toast("Tautan undangan disalin. Siap dikirim ke pasangan."); }
+      noteSent();
     } catch (e) {
       if (!(e instanceof DOMException && e.name === "AbortError")) toast("Undangan belum dibagikan. Cek izin berbagi lalu coba lagi.", "error");
     }
+  }
+
+  async function copyCode() {
+    if (!code) return;
+    try { await navigator.clipboard.writeText(code); toast("Kode undangan disalin."); }
+    catch { toast("Kode belum tersalin. Salin manual dari layar.", "error"); }
   }
 
   async function revoke(id: string, self: boolean) {
@@ -165,16 +264,22 @@ function Household() {
     catch { toast(self ? "Belum bisa keluar dari keluarga. Cek koneksi lalu coba lagi." : "Akses pasangan belum dihapus. Cek koneksi lalu coba lagi.", "error"); }
   }
 
+  const synced = !!h.partner && h.acc.syncEnabled && h.acc.status === "synced";
+  const name = getPrefs().name || "Bunda";
+
   return (
     <>
       {h.partner
-        ? <Hero title="Kalian mencatat berdua" body={`Catatan kamu dan ${h.partnerName} tersinkron di kedua HP. Kalian berdua bisa menambah dan mengedit.`} />
+        ? <Hero title="Kalian mencatat berdua" body={synced
+          ? `Catatan kamu dan ${h.partnerName} tersinkron di kedua HP. Kalian berdua bisa menambah dan mengedit.`
+          : `Catatan kamu dan ${h.partnerName} sedang disatukan. Status di bawah ikut berubah.`} />
         : <Hero title="Ajak pasangan mencatat bersama" body="Berdua lebih ringan. Catat kontraksi, gerakan, menyusu, dan popok dari HP masing-masing." />}
       <div className="stack">
+        <PairStatus inviteSent={sent} />
         <section className="card solid">
           <div className="spread">
             <span className="label" style={{ fontWeight: 600 }}>Kursi keluarga</span>
-            <span className={`muted num ${full ? "" : ""}`} style={{ fontSize: 15 }}>{h.seatsUsed} dari {h.seats} terisi</span>
+            <span className="muted num" style={{ fontSize: 15 }}>{h.seatsUsed} dari {h.seats} terisi</span>
           </div>
           <div className="list" style={{ marginTop: 4 }}>
             <div className="list-row">
@@ -226,11 +331,21 @@ function Household() {
               <p role="alert" style={{ color: "var(--field-danger)" }}>Tautan undangan belum bisa dibuat. Cek koneksi lalu coba lagi.</p>
               <button className="btn btn-soft block" onClick={() => setInviteAttempt((n) => n + 1)}>Coba lagi</button>
             </>}
+            {invite && (
+              <section className="card solid stack">
+                <div className="card-title" style={{ fontSize: 16 }}>Kode undangan</div>
+                <p className="muted">Pasangan membuka Momong, masuk, lalu menempel kode ini atau memindai QR.</p>
+                <InviteQr value={shareUrl} />
+                <p className="invite-code">{code}</p>
+                <button className="btn btn-soft block" onClick={() => void copyCode()}>Salin kode</button>
+              </section>
+            )}
             <a
               className="btn btn-blue lg block"
               href={invite ? `https://wa.me/?text=${encodeURIComponent(message)}` : undefined}
               aria-disabled={!invite}
               target="_blank" rel="noreferrer"
+              onClick={() => invite && noteSent()}
             >
               <MessageCircle size={22} /> Undang lewat WhatsApp
             </a>
@@ -238,6 +353,7 @@ function Household() {
             <p className="faint" style={{ fontSize: 14, textAlign: "center" }}>Tautan undangan berlaku 7 hari</p>
           </div>
         )}
+        {!full && <button className="btn btn-soft lg block" onClick={onJoin}>Punya kode dari pasangan?</button>}
         {full && (
           <p className="muted" style={{ textAlign: "center", fontSize: 15 }}>Kedua kursi sudah terisi.</p>
         )}
@@ -250,6 +366,151 @@ function Household() {
   );
 }
 
+function QrScanner({ active, onText }: { active: boolean; onText: (value: string) => void }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const onTextRef = useRef(onText);
+  onTextRef.current = onText;
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!active) return;
+    let stop = false;
+    let stream: MediaStream | null = null;
+    let frame = 0;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        if (stop || !videoRef.current || !ctx) { stream.getTracks().forEach((track) => track.stop()); return; }
+        videoRef.current.srcObject = stream;
+        videoRef.current.playsInline = true;
+        await videoRef.current.play();
+        const jsQR = (await import("jsqr")).default;
+        const tick = () => {
+          if (stop || !videoRef.current) return;
+          const video = videoRef.current;
+          if (video.readyState >= 2 && video.videoWidth) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const found = jsQR(image.data, image.width, image.height);
+            if (found?.data) { onTextRef.current(found.data); return; }
+          }
+          frame = requestAnimationFrame(tick);
+        };
+        frame = requestAnimationFrame(tick);
+      } catch {
+        if (!stop) setError("Kamera tidak bisa dipakai. Tempel kode undangan.");
+      }
+    })();
+    return () => {
+      stop = true;
+      cancelAnimationFrame(frame);
+      stream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [active]);
+  return (
+    <div className="stack">
+      <video ref={videoRef} className="qr-video" muted playsInline />
+      {error && <p role="alert" style={{ color: "var(--field-danger)" }}>{error}</p>}
+    </div>
+  );
+}
+
+function JoinCodeSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [confirmToken, setConfirmToken] = useState<string | null>(null);
+  const [confirmName, setConfirmName] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const joinLock = useRef({ held: false });
+  useEffect(() => {
+    if (open) return;
+    setScanning(false);
+    setError("");
+    setBusy(false);
+    setConfirmToken(null);
+    joinLock.current.held = false;
+  }, [open]);
+
+  function stage(raw: string) {
+    const token = inviteTokenFromInput(raw);
+    if (!token) { setError("Kode tidak dikenali. Tempel kode atau tautan undangan."); return; }
+    setError("");
+    setConfirmName(inviteOwnerName(raw));
+    setConfirmToken(token);
+  }
+
+  async function confirmJoin() {
+    const token = confirmToken;
+    if (!token || !claimJoinClick(joinLock.current)) return;
+    setBusy(true);
+    setError("");
+    try {
+      rememberInvite(token, localStorage, sessionStorage, { name: confirmName });
+      const result = await acceptInvite(token);
+      if (result === "skipped") {
+        joinLock.current.held = false;
+        setError(joinFailureMessage("seats_full"));
+        setBusy(false);
+        setConfirmToken(null);
+        return;
+      }
+      toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
+      onOpenChange(false);
+      if (joinResultRoute("joined") === "pasangan") go("#/pasangan");
+    } catch (e) {
+      joinLock.current.held = false;
+      setError(joinFailureMessage(e instanceof ApiError ? e.code : ""));
+      setBusy(false);
+      setConfirmToken(null);
+    }
+  }
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange} title="Gabung dengan kode" initialFocus={inputRef}>
+      <Form className="stack" onSubmit={(event) => { event.preventDefault(); stage(code); }}>
+        <p className="muted">Tempel kode dari pasangan, tautan undangannya, atau pindai QR. Hasilnya sama dengan membuka tautan.</p>
+        <TextField className="field" value={code} onChange={setCode} isInvalid={!!error} autoFocus>
+          <Label>Kode undangan</Label>
+          <Input ref={inputRef} className="input" placeholder="Tempel kode atau tautan" autoCapitalize="none" autoCorrect="off" spellCheck={false} />
+        </TextField>
+        {error && <p role="alert" style={{ color: "var(--field-danger)" }}>{error}</p>}
+        <Button type="submit" className="btn btn-blue block" isDisabled={busy}>Lanjut</Button>
+        <Button type="button" className="btn btn-soft block" isDisabled={busy} onPress={() => setScanning((value) => !value)}>
+          <QrCode size={18} />{scanning ? "Tutup kamera" : "Pindai QR"}
+        </Button>
+        {scanning && <QrScanner active={scanning && open && !confirmToken} onText={(value) => { setCode(value); stage(value); }} />}
+      </Form>
+      <Sheet open={!!confirmToken} onOpenChange={(next) => { if (!next && !busy) setConfirmToken(null); }} title={joinConfirmCopy(confirmName)}>
+        <div className="stack" style={{ marginTop: 16 }}>
+          <p>Catatan di HP ini ikut ke rumah itu.</p>
+          <JoinDataNote />
+          <button type="button" className="btn btn-blue block" disabled={busy} aria-busy={busy} onClick={() => void confirmJoin()}>{busy ? "Menggabungkan…" : "Gabung"}</button>
+          <button type="button" className="btn btn-soft block" disabled={busy} onClick={() => setConfirmToken(null)}>Nanti</button>
+        </div>
+      </Sheet>
+    </Sheet>
+  );
+}
+
+function WhatsAppBanner({ invite }: { invite: string }) {
+  const url = new URL(location.href);
+  url.hash = inviteReturnHash(invite);
+  const href = externalBrowserHref(url.toString(), navigator.userAgent);
+  const android = isAndroid(navigator.userAgent);
+  return (
+    <aside className="wa-banner" role="region" aria-label="Buka di browser">
+      <p>Undangan ini terbuka di WhatsApp, terpisah dari Momong di layar utama.</p>
+      <a className="btn btn-blue lg block" href={href} {...(android ? {} : { target: "_blank", rel: "noopener noreferrer" })}>Buka di Safari/Chrome</a>
+      <p>Di iPhone, buka aplikasi Momong, masuk, lalu tempel kode undangan.</p>
+    </aside>
+  );
+}
+
 /** #/masuk?token=… — magic link landing. */
 export function MagicLanding({ token }: { token: string | null }) {
   const [state, setState] = useState<"working" | "error">("working");
@@ -259,7 +520,7 @@ export function MagicLanding({ token }: { token: string | null }) {
       try {
         if (!verifying.has(token)) verifying.set(token, verifyMagicLink(token));
         await verifying.get(token);
-        const pendingInvite = localStorage.getItem(PENDING_INVITE);
+        const pendingInvite = readInvite();
         if (pendingInvite) {
           go(`#/gabung?invite=${encodeURIComponent(pendingInvite)}`);
           return;
@@ -282,35 +543,207 @@ export function MagicLanding({ token }: { token: string | null }) {
   );
 }
 
-/** #/gabung?invite=… — partner invite landing. */
+/** #/gabung?invite=… — partner invite landing. Logged-out visits choose how to sign in. Google starts only from that button. */
 export function JoinLanding({ invite }: { invite: string | null }) {
   const h = useHousehold();
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { if (invite && !h.signedIn) localStorage.setItem(PENDING_INVITE, invite); }, [invite, h.signedIn]);
+  const inApp = isWhatsAppBrowser(navigator.userAgent);
+  const valid = !!invite && isInviteToken(invite);
+  const [returned, setReturned] = useState(() => {
+    const nav = navigationType();
+    const marker = sessionStorage.getItem("bb_google");
+    if (shouldClearStaleGoogle(location.hash, marker, nav)) {
+      sessionStorage.removeItem("bb_google");
+      return false;
+    }
+    return nav === "back_forward" && takeGoogleReturn();
+  });
+  const [startFailed, setStartFailed] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const googleBusyRef = useRef(false);
+  googleBusyRef.current = googleBusy;
+  const [phase, setPhase] = useState<"ask" | "joining" | "error">("ask");
+  const [foreignInvite, setForeignInvite] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const joinLock = useRef({ held: false });
+  const houseName = (invite ? inviteOwnerName(location.hash) : "") || readInviteName();
+
+  useEffect(() => {
+    if (!valid || !invite || inApp) return;
+    rememberInvite(invite, localStorage, sessionStorage, {
+      name: inviteOwnerName(location.hash),
+      accountId: h.me?.user.id ?? null,
+    });
+    if (!h.signedIn) {
+      const back = inviteReturnHash(invite);
+      if (isSafeInviteReturn(back)) sessionStorage.setItem("bb_auth_return", back);
+      return;
+    }
+    const result = reconcilePendingInvite(h.me?.user.id ?? null);
+    setForeignInvite(result === "foreign");
+  }, [invite, valid, inApp, h.signedIn, h.me?.user.id]);
+
+  useEffect(() => {
+    if (!valid || !h.signedIn || inApp || !h.partner) return;
+    clearInvite();
+  }, [valid, h.signedIn, inApp, h.partner]);
+
+  useEffect(() => {
+    const release = (marker: string | null) => {
+      const away = marker === "away";
+      abandonGoogleStart();
+      setGoogleBusy(false);
+      if (away) setReturned(true);
+    };
+    const onShow = (event: PageTransitionEvent) => {
+      const marker = sessionStorage.getItem("bb_google");
+      if (event.persisted && takeGoogleReturn()) setReturned(true);
+      if (googleChoiceResume({ busy: googleBusyRef.current, marker, persisted: event.persisted, visible: false }) === "reset") release(marker);
+    };
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const marker = sessionStorage.getItem("bb_google");
+      if (googleChoiceResume({ busy: googleBusyRef.current, marker, persisted: false, visible: true }) === "reset") release(marker);
+    };
+    addEventListener("pageshow", onShow);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      removeEventListener("pageshow", onShow);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  async function beginGoogle() {
+    if (googleBusy) return;
+    setGoogleBusy(true);
+    setStartFailed(false);
+    try {
+      await startGoogle();
+    } catch {
+      setStartFailed(true);
+      setGoogleBusy(false);
+    }
+  }
+
+  function skipAccount() {
+    setPrefs({ guest: true });
+    sessionStorage.removeItem("bb_auth_return");
+    sessionStorage.removeItem("bb_google");
+    go("#/");
+  }
+
+  function leaveJoinConfirm() {
+    const next = declineJoin({ authReturn: sessionStorage.getItem("bb_auth_return") });
+    if (next.authReturn) sessionStorage.setItem("bb_auth_return", next.authReturn);
+    else sessionStorage.removeItem("bb_auth_return");
+    location.replace(`${location.pathname}${location.search}#/`);
+  }
+
+  async function confirmJoin() {
+    if (!invite || !claimJoinClick(joinLock.current)) return;
+    setPhase("joining");
+    const result = await consumePendingInvite(invite);
+    if (result.ok === "failed") {
+      joinLock.current.held = false;
+      setJoinCode(result.code);
+      setPhase("error");
+      return;
+    }
+    if (result.ok === "joined") {
+      toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
+      if (joinResultRoute("joined") === "pasangan") go("#/pasangan");
+      return;
+    }
+    setPhase("ask");
+  }
 
   if (!HAS_API) return <><TopBar title="Gabung" /><NoServer /></>;
-  if (!invite) return <><TopBar title="Gabung" /><div className="card solid empty"><strong>Tautan tidak lengkap</strong>Minta pasangan kirim ulang undangan.</div></>;
-  if (!h.signedIn) return <><TopBar title="Gabung" /><SignIn invite /></>;
-  if (!h.acc.syncEnabled) return <><TopBar title="Gabung" /><SyncConsent /></>;
+  if (!valid) return <><TopBar title="Gabung" /><div className="card solid empty"><strong>Tautan tidak lengkap</strong>Minta pasangan kirim ulang undangan.</div></>;
+  if (inApp) return <><TopBar title="Gabung" back="#/" /><WhatsAppBanner invite={invite!} /><Hero title="Kamu diundang mencatat bersama" body="Masuk dengan Google di Safari atau Chrome. Setelah masuk, konfirmasi sebelum bergabung." /></>;
 
-  async function join() {
-    setBusy(true);
-    try {
-      await joinHousehold(invite!);
-      localStorage.removeItem(PENDING_INVITE);
-      toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
-      go("#/pasangan");
-    } catch (e) {
-      const code = e instanceof ApiError ? e.code : "";
-      toast(code === "seats_full" ? "Keluarga sudah memiliki dua anggota. Minta pasangan memeriksa akses keluarga." : code === "invite_invalid" ? "Undangan sudah tidak berlaku. Minta tautan baru dari pasangan." : "Belum bisa bergabung. Cek koneksi lalu coba lagi.", "error");
-      setBusy(false);
+  const phaseNow = googlePhase();
+  const showGoogleError = inviteShowsGoogleError({ returnedWithoutSession: returned, startFailed });
+  const entry = inviteEntry({ signedIn: h.signedIn, validInvite: valid, hasPartner: !!h.partner });
+  if (foreignInvite && h.signedIn) {
+    return (
+      <>
+        <TopBar title="Gabung" />
+        <Hero title="Undangan ini untuk akun lain" body="Undangan ini tersimpan untuk akun yang lain. Pakai undangan ini di akun yang sekarang?" />
+        <div className="stack">
+          <button type="button" className="btn btn-blue lg block" onClick={() => { if (h.me && claimForeignInvite(h.me.user.id)) setForeignInvite(false); }}>Pakai undangan ini</button>
+          <button type="button" className="btn btn-soft block" onClick={() => { clearInvite(); setForeignInvite(false); go("#/"); }}>Abaikan</button>
+        </div>
+      </>
+    );
+  }
+  if (entry === "connected") {
+    return (
+      <>
+        <TopBar title="Gabung" />
+        <Hero title="Kamu sudah terhubung dengan pasangan" body="Kamu sudah terhubung di rumah ini. Undangan ini tidak mengubah rumahmu." />
+        <a className="btn btn-soft block" href="#/pasangan">Ke halaman Pasangan</a>
+      </>
+    );
+  }
+  if (entry === "choose") {
+    if (phaseNow === "finishing") {
+      return (
+        <>
+          <TopBar title="Gabung" />
+          <div className="card solid empty" role="status" aria-busy="true">
+            <strong>Menyambungkan akun…</strong>
+            Setelah masuk, konfirmasi sebelum bergabung.
+          </div>
+        </>
+      );
     }
+    return (
+      <>
+        <TopBar title="Gabung" />
+        <Hero title="Kamu diundang mencatat bersama" body="Pilih cara masuk. Setelah masuk, konfirmasi sebelum bergabung." />
+        <div className="stack">
+          {showGoogleError && <p role="alert" style={{ color: "var(--field-danger)" }}>Masuk Google belum selesai. Coba lagi dari browser ini.</p>}
+          <button type="button" className="btn btn-blue lg block" disabled={googleBusy} aria-busy={googleBusy} onClick={() => void beginGoogle()}>{googleBusy ? "Membuka masuk Google…" : "Lanjut dengan Google"}</button>
+          <button type="button" className="btn btn-soft block" disabled={googleBusy} onClick={() => { if (!googleBusy) location.hash = "#/masuk-akun"; }}>Masuk dengan email</button>
+          <button type="button" className="btn btn-soft block" disabled={googleBusy} onClick={skipAccount}>Lanjut tanpa akun</button>
+        </div>
+      </>
+    );
+  }
+  if (phase === "error") {
+    const invalid = joinCode === "invite_invalid";
+    return (
+      <>
+        <TopBar title="Gabung" />
+        <Hero title={invalid ? INVITE_INVALID_TITLE : "Gabung belum berhasil"} body={invalid ? "Minta pasangan kirim tautan yang baru." : joinFailureMessage(joinCode)} />
+        <div className="stack">
+          {!invalid && <p role="alert" style={{ color: "var(--field-danger)" }}>{joinFailureMessage(joinCode)}</p>}
+          {invalid ? <a className="btn btn-soft block" href="#/">Kembali</a> : <button className="btn btn-blue lg block" onClick={() => setPhase("ask")}>Coba lagi</button>}
+        </div>
+      </>
+    );
+  }
+  if (h.signedIn && !h.partner) {
+    return (
+      <>
+        <TopBar title="Gabung" />
+        <Hero title="Kamu diundang mencatat bersama" body="Cek dulu rumah yang kamu ikuti. Gabung setelah kamu yakin." />
+        <Sheet open={phase === "ask" || phase === "joining"} onOpenChange={(open) => { if (!open && phase !== "joining") leaveJoinConfirm(); }} title={joinConfirmCopy(houseName)}>
+          <div className="stack" style={{ marginTop: 16 }}>
+            <p>Catatan di HP ini ikut ke rumah itu. Kamu tetap di akun ini kalau memilih nanti.</p>
+            <JoinDataNote />
+            <button type="button" className="btn btn-blue lg block" disabled={phase === "joining"} aria-busy={phase === "joining"} onClick={() => void confirmJoin()}>{phase === "joining" ? "Menggabungkan…" : "Gabung"}</button>
+            <button type="button" className="btn btn-soft block" disabled={phase === "joining"} onClick={leaveJoinConfirm}>Nanti</button>
+          </div>
+        </Sheet>
+      </>
+    );
   }
   return (
     <>
       <TopBar title="Gabung" />
-      <Hero title="Gabung mencatat bersama" body="Catatan di HP ini akan digabung dengan catatan pasangan. Kalian berdua bisa menambah dan mengedit." />
-      <button className="btn btn-blue lg block" onClick={join} disabled={busy}>{busy ? "Menggabungkan…" : "Gabung sekarang"}</button>
+      <div className="card solid empty" role="status">
+        <strong>Sebentar…</strong>
+      </div>
     </>
   );
 }

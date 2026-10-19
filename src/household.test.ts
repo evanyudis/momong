@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "vite";
+import { inviteEntry } from "./invite.ts";
 import type { Me } from "./sync.ts";
 
 const memory = new Map<string, string>();
@@ -14,7 +15,20 @@ Object.assign(globalThis, {
   },
 });
 
-const { seatNameFromMember, seatNames } = await import("./household.ts");
+const { householdHasPartner, partnerSyncScreen, seatNameFromMember, seatNames } = await import("./household.ts");
+
+test("pasangan sync prompt follows the local flag, the cursor, or a partner already on /me", () => {
+  assert.equal(partnerSyncScreen({ hasToken: false, userId: null, enabledFlag: null, syncCursor: 0 }), "signin");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: null, enabledFlag: null, syncCursor: 0, paired: true, checking: true }), "wait");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: true, syncCursor: 0, checking: true }), "household");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: false, syncCursor: 0 }), "consent");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: false, syncCursor: 4, checking: true }), "household");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: null, syncCursor: 2 }), "household");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: null, syncCursor: 0, checking: true }), "wait");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: null, syncCursor: 0, paired: true }), "household");
+  assert.equal(partnerSyncScreen({ hasToken: true, userId: "u1", enabledFlag: null, syncCursor: 0 }), "consent");
+  assert.equal(householdHasPartner(null), false);
+});
 const store = await import("./store.ts");
 
 const googleOwner = "Adit Google";
@@ -89,6 +103,307 @@ test("refresh replaces a cached Google name, and a saved name is what the seat l
     assert.equal(householdMod.seatNames(sync.account().me).partner, editedOwner);
   } finally {
     globalThis.fetch = realFetch;
+    await server.close();
+  }
+});
+
+test("restore keeps sync when the cursor is the only local evidence", async () => {
+  const previousLocal = globalThis.localStorage;
+  const previousSession = globalThis.sessionStorage;
+  const memory = new Map<string, string>();
+  const storage = {
+    get length() { return memory.size; },
+    key: (i: number) => [...memory.keys()][i] ?? null,
+    getItem: (k: string) => memory.get(k) ?? null,
+    setItem: (k: string, v: string) => void memory.set(k, v),
+    removeItem: (k: string) => void memory.delete(k),
+  };
+  const me = {
+    user: { id: "qa-a", email: "qa-a@example.com", name: "Qa A" },
+    entitlement: { plan: "free", expiresAt: null },
+    household: {
+      id: "house-1",
+      seats: 2,
+      members: [
+        { id: "owner", email: "owner@example.com", name: "Owner", role: "owner" },
+        { id: "qa-a", email: "qa-a@example.com", name: "Qa A", role: "member" },
+      ],
+    },
+  };
+  memory.set("bb_token", "test-token");
+  memory.set("bb_me", JSON.stringify(me));
+  memory.set("bb_cursor", "4");
+  Object.assign(globalThis, { localStorage: storage, sessionStorage: storage });
+  const server = await createServer({ server: { middlewareMode: true }, define: { "import.meta.env.VITE_API_URL": JSON.stringify("http://test.local") } });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path === "/me") return Response.json(me);
+    if (path === "/sync") return Response.json({ cursor: 4, changes: [] });
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  try {
+    const sync = await server.ssrLoadModule("/src/sync.ts");
+    assert.equal(sync.account().syncEnabled, true);
+    await sync.restoreAccount();
+    assert.equal(sync.account().syncEnabled, true, "a full pull does not turn a synced account off");
+    assert.equal(partnerSyncScreen({
+      hasToken: true,
+      userId: "qa-a",
+      enabledFlag: sync.account().syncEnabled ? true : null,
+      syncCursor: Number(memory.get("bb_cursor") ?? 0),
+    }), "household");
+  } finally {
+    globalThis.fetch = realFetch;
+    Object.assign(globalThis, { localStorage: previousLocal, sessionStorage: previousSession });
+    await server.close();
+  }
+});
+
+test("a paired account on a fresh device leaves Gabung for Pasangan without the sync prompt", async () => {
+  const previousLocal = globalThis.localStorage;
+  const previousSession = globalThis.sessionStorage;
+  const memory = new Map<string, string>();
+  const me = {
+    user: { id: "qa-fresh", email: "qa-fresh@example.com", name: "Qa Fresh" },
+    entitlement: { plan: "free", expiresAt: null },
+    household: {
+      id: "house-fresh",
+      seats: 2,
+      members: [
+        { id: "qa-fresh", email: "qa-fresh@example.com", name: "Qa Fresh", role: "owner" },
+        { id: "partner", email: "partner@example.com", name: "Pasangan", role: "member" },
+      ],
+    },
+  };
+  memory.set("bb_token", "fresh-token");
+  Object.assign(globalThis, { localStorage: storageFrom(memory), sessionStorage: storageFrom(memory) });
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+  const server = await createServer({ server: { middlewareMode: true }, define: { "import.meta.env.VITE_API_URL": JSON.stringify("http://test.local") } });
+  const realFetch = globalThis.fetch;
+  const syncs: unknown[] = [];
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    const path = new URL(url).pathname;
+    if (path === "/me") return Response.json(me);
+    if (path === "/sync") {
+      syncs.push(init?.body ? JSON.parse(String(init.body)) : null);
+      return Response.json({ cursor: 3, changes: [] });
+    }
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  try {
+    assert.equal(memory.has("bb_sync_enabled:qa-fresh"), false);
+    assert.equal(memory.has("bb_cursor"), false);
+    assert.equal(inviteEntry({ signedIn: true, validInvite: true, hasPartner: householdHasPartner(me) }), "connected");
+    const sync = await server.ssrLoadModule("/src/sync.ts");
+    assert.equal(sync.account().syncEnabled, false, "a fresh device has not opted in locally");
+    await sync.restoreAccount();
+    assert.equal(sync.account().syncEnabled, true, "a second member on /me turns sync on");
+    assert.equal(memory.get("bb_sync_enabled:qa-fresh"), "true");
+    assert.ok(syncs.length >= 1, "the first sync runs");
+    assert.equal(partnerSyncScreen({
+      hasToken: true,
+      userId: sync.account().me.user.id,
+      enabledFlag: sync.account().syncEnabled ? true : null,
+      syncCursor: Number(memory.get("bb_cursor") ?? 0),
+      paired: householdHasPartner(sync.account().me),
+      checking: !!sync.account().checking,
+    }), "household");
+  } finally {
+    globalThis.fetch = realFetch;
+    Object.assign(globalThis, { localStorage: previousLocal, sessionStorage: previousSession });
+    await server.close();
+  }
+});
+
+test("Google return on a fresh device turns sync on for a paired account", async () => {
+  const previousLocal = globalThis.localStorage;
+  const previousSession = globalThis.sessionStorage;
+  const memory = new Map<string, string>();
+  const me = {
+    user: { id: "qa-google", email: "qa-google@example.com", name: "Qa Google" },
+    entitlement: { plan: "free", expiresAt: null },
+    household: {
+      id: "house-google",
+      seats: 2,
+      members: [
+        { id: "qa-google", email: "qa-google@example.com", name: "Qa Google", role: "owner" },
+        { id: "partner", email: "partner@example.com", name: "Pasangan", role: "member" },
+      ],
+    },
+  };
+  const loc = { origin: "https://momong.test", hash: "#/profil", assigned: "", assign(url: string) { this.assigned = url; } };
+  Object.assign(globalThis, { localStorage: storageFrom(memory), sessionStorage: storageFrom(memory), location: loc });
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+  const server = await createServer({ server: { middlewareMode: true }, define: { "import.meta.env.VITE_API_URL": JSON.stringify("http://test.local") } });
+  const realFetch = globalThis.fetch;
+  const calls: string[] = [];
+  globalThis.fetch = (async (url: string) => {
+    const path = new URL(url).pathname;
+    calls.push(path);
+    if (path === "/api/auth/get-session") return Response.json({ session: { token: "google-session" } }, { headers: { "set-auth-token": "google-session" } });
+    if (path === "/me") return Response.json(me);
+    if (path === "/sync") return Response.json({ cursor: 2, changes: [] });
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  try {
+    memory.set("bb_google", "away");
+    const sync = await server.ssrLoadModule("/src/sync.ts");
+    assert.equal(sync.account().token, null);
+    assert.equal([...memory.keys()].some((key) => key.startsWith("bb_sync_enabled:")), false);
+    await sync.finishGoogle();
+    assert.equal(sync.account().token, "google-session");
+    assert.equal(sync.account().syncEnabled, true, "Google return uses the same restore as email");
+    assert.equal(memory.get("bb_sync_enabled:qa-google"), "true");
+    assert.ok(calls.indexOf("/api/auth/get-session") < calls.indexOf("/me"), "the user id is known only after the cookie session");
+    assert.ok(calls.includes("/sync"), "the first sync runs");
+    assert.equal(inviteEntry({ signedIn: true, validInvite: true, hasPartner: householdHasPartner(sync.account().me) }), "connected");
+    assert.equal(partnerSyncScreen({
+      hasToken: true,
+      userId: "qa-google",
+      enabledFlag: true,
+      syncCursor: Number(memory.get("bb_cursor") ?? 0),
+      paired: true,
+      checking: false,
+    }), "household");
+
+    await sync.signOut();
+    memory.delete("bb_sync_enabled:qa-google");
+    memory.delete("bb_cursor");
+    memory.delete("bb_google");
+    loc.hash = "#/profil";
+    await sync.finishGoogle();
+    assert.equal(sync.account().syncEnabled, true, "a dropped Google marker still restores from the callback cookie");
+    assert.equal(memory.get("bb_sync_enabled:qa-google"), "true");
+    assert.equal(partnerSyncScreen({
+      hasToken: !!sync.account().token,
+      userId: sync.account().me?.user.id ?? null,
+      enabledFlag: sync.account().syncEnabled ? true : null,
+      syncCursor: 0,
+      paired: householdHasPartner(sync.account().me),
+      checking: !!sync.account().checking,
+    }), "household");
+  } finally {
+    globalThis.fetch = realFetch;
+    Object.assign(globalThis, { localStorage: previousLocal, sessionStorage: previousSession });
+    await server.close();
+  }
+});
+
+function storageFrom(memory: Map<string, string>) {
+  return {
+    get length() { return memory.size; },
+    key: (i: number) => [...memory.keys()][i] ?? null,
+    getItem: (k: string) => memory.get(k) ?? null,
+    setItem: (k: string, v: string) => void memory.set(k, v),
+    removeItem: (k: string) => void memory.delete(k),
+  };
+}
+
+test("sync stays on for the same account after logout and login", async () => {
+  const previousLocal = globalThis.localStorage;
+  const previousSession = globalThis.sessionStorage;
+  const memory = new Map<string, string>();
+  const me = {
+    user: { id: "qa-a", email: "qa-a@example.com", name: "Qa A" },
+    entitlement: { plan: "free", expiresAt: null },
+    household: { id: "house-1", seats: 2, members: [{ id: "qa-a", email: "qa-a@example.com", name: "Qa A", role: "owner" }] },
+  };
+  memory.set("bb_token", "test-token");
+  memory.set("bb_me", JSON.stringify(me));
+  memory.set("bb_cursor", "4");
+  Object.assign(globalThis, { localStorage: storageFrom(memory), sessionStorage: storageFrom(memory) });
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+  const server = await createServer({ server: { middlewareMode: true }, define: { "import.meta.env.VITE_API_URL": JSON.stringify("http://test.local") } });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path === "/api/auth/sign-in/email") return Response.json({ token: "again" });
+    if (path === "/me") return Response.json(me);
+    if (path === "/sync") return Response.json({ cursor: 4, changes: [] });
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  try {
+    const sync = await server.ssrLoadModule("/src/sync.ts");
+    assert.equal(sync.account().syncEnabled, true);
+    await sync.signOut();
+    assert.equal(memory.get("bb_sync_enabled:qa-a"), "true", "logout keeps the per-account sync flag");
+    assert.equal(memory.has("bb_cursor"), false);
+    await sync.authEmail("masuk", "qa-a@example.com", "test-password");
+    assert.equal(sync.account().syncEnabled, true, "logging back in restores sync");
+    assert.equal(partnerSyncScreen({
+      hasToken: true,
+      userId: "qa-a",
+      enabledFlag: memory.get("bb_sync_enabled:qa-a") === "true",
+      syncCursor: Number(memory.get("bb_cursor") ?? 0),
+    }), "household");
+  } finally {
+    globalThis.fetch = realFetch;
+    Object.assign(globalThis, { localStorage: previousLocal, sessionStorage: previousSession });
+    await server.close();
+  }
+});
+
+test("wipe clears profile, sync, invite, and browser caches; another account does not inherit the profile", async () => {
+  const previousLocal = globalThis.localStorage;
+  const previousSession = globalThis.sessionStorage;
+  const memory = new Map<string, string>();
+  Object.assign(globalThis, { localStorage: storageFrom(memory), sessionStorage: storageFrom(memory) });
+  Object.defineProperty(globalThis, "navigator", { value: { onLine: true }, configurable: true });
+  const deleted: string[] = [];
+  (globalThis as { caches?: unknown }).caches = {
+    keys: async () => ["bb-shell"],
+    delete: async (key: string) => { deleted.push(key); return true; },
+  };
+  (globalThis as { indexedDB?: unknown }).indexedDB = {
+    databases: async () => [{ name: "momong-local" }],
+    deleteDatabase: (name: string) => { deleted.push(name); },
+  };
+  const server = await createServer({ server: { middlewareMode: true }, define: { "import.meta.env.VITE_API_URL": JSON.stringify("http://test.local") } });
+  const realFetch = globalThis.fetch;
+  const qaD = {
+    user: { id: "qa-d", email: "qa-d@example.com", name: "Qa D" },
+    entitlement: { plan: "free", expiresAt: null },
+    household: { id: "house-d", seats: 2, members: [{ id: "qa-d", email: "qa-d@example.com", name: "Qa D", role: "owner" }] },
+  };
+  globalThis.fetch = (async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path === "/api/auth/sign-in/email") return Response.json({ token: "d-session" });
+    if (path === "/me") return Response.json(qaD);
+    if (path === "/sync") return Response.json({ cursor: 1, changes: [] });
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  try {
+    const store = await server.ssrLoadModule("/src/store.ts");
+    const sync = await server.ssrLoadModule("/src/sync.ts");
+    store.saveSettings({ birthMode: "postpartum", babyName: "Bayi A", babyBirth: "2026-10-01" });
+    memory.set("bb_data_user", "qa-a");
+    memory.set("bb_sync_enabled:qa-a", "true");
+    memory.set("bb_sync_enabled:qa-d", "true");
+    memory.set("bb_cursor", "3");
+    memory.set("bb_pending_invite", "inviteTok1");
+    memory.set("bb_pending_invite_at", String(Date.now()));
+    assert.equal(sync.resetGuestData(), true);
+    assert.equal(store.settings().babyName, undefined);
+    assert.equal(store.settings().birthMode, undefined);
+    assert.equal(memory.has("bb_sync_enabled:qa-a"), false);
+    assert.equal(memory.has("bb_cursor"), false);
+    assert.equal(memory.has("bb_pending_invite"), false);
+    assert.equal(memory.has("bb_db_v1"), false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(deleted.includes("bb-shell"));
+    assert.ok(deleted.includes("momong-local"));
+
+    store.saveSettings({ birthMode: "postpartum", babyName: "Bayi A", babyBirth: "2026-10-01" });
+    memory.set("bb_data_user", "qa-a");
+    memory.set("bb_sync_enabled:qa-a", "true");
+    await sync.authEmail("masuk", "qa-d@example.com", "test-password");
+    assert.notEqual(store.settings().babyName, "Bayi A");
+    assert.equal(memory.get("bb_sync_enabled:qa-a"), "true", "the other account's sync flag stays");
+    assert.equal(memory.get("bb_data_user"), "qa-d");
+  } finally {
+    globalThis.fetch = realFetch;
+    Object.assign(globalThis, { localStorage: previousLocal, sessionStorage: previousSession });
     await server.close();
   }
 });

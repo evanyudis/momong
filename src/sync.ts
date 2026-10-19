@@ -1,8 +1,9 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
+import { clearInvite, googleReturnAction, inviteReturnHash, isInviteToken, isSafeInviteReturn, navigationType, readInvite, reconcilePendingInvite } from "./invite";
 import { PLUS_ENABLED } from "./release";
-import { nameFromEmail, type SignInMode } from "./signin";
-import { setPlusAccess, isPlus, applyRemote, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
+import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
+import { setPlusAccess, isPlus, applyRemote, clearAccountRecords, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
  *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
@@ -21,13 +22,55 @@ type State = { checking?: boolean; restoreError?: boolean; verifiedAt?: number; 
 const load = <T,>(k: string, d: T): T => {
   try { return JSON.parse(localStorage.getItem(k) ?? "") ?? d; } catch { return d; }
 };
+const DATA_USER = "bb_data_user";
+
+function syncFlagKey(userId: string) {
+  return `bb_sync_enabled:${userId}`;
+}
+
+function writeSyncEnabled(userId: string, enabled: boolean) {
+  localStorage.setItem(syncFlagKey(userId), JSON.stringify(enabled));
+}
+
+function storedSyncEnabled(me: Me | null) {
+  const userId = me?.user?.id;
+  if (!userId) return false;
+  const raw = localStorage.getItem(syncFlagKey(userId));
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  const cursor = Number(localStorage.getItem("bb_cursor") ?? 0);
+  return Number.isFinite(cursor) && cursor > 0;
+}
+
+/** Local notes belong to the account that wrote them. A different login starts clean. Sync flags stay. */
+function adoptAccountData(userId: string) {
+  const previous = localStorage.getItem(DATA_USER);
+  if (previous && previous !== userId) clearAccountRecords();
+  localStorage.setItem(DATA_USER, userId);
+}
+
+/** Cache Storage and IndexedDB can keep a previous account after a wipe. */
+export function clearBrowserCaches() {
+  const cacheStore = (globalThis as { caches?: { keys: () => Promise<string[]>; delete: (key: string) => Promise<boolean> } }).caches;
+  if (cacheStore?.keys) {
+    void Promise.resolve(cacheStore.keys()).then((keys) => Promise.all(keys.map((key) => cacheStore.delete(key)))).catch(() => {});
+  }
+  const idb = (globalThis as { indexedDB?: { databases?: () => Promise<{ name?: string | null }[]>; deleteDatabase: (name: string) => void } }).indexedDB;
+  if (idb?.databases && idb.deleteDatabase) {
+    void Promise.resolve(idb.databases()).then((dbs) => {
+      for (const db of dbs) if (db?.name) idb.deleteDatabase(db.name);
+    }).catch(() => {});
+  }
+}
+
+const cachedMe = load<Me | null>("bb_me", null);
 let state: State = {
   token: localStorage.getItem("bb_token"),
-  me: load<Me | null>("bb_me", null),
+  me: cachedMe,
   status: "local",
   lastSyncAt: load<number | null>("bb_last_sync", null),
   hasSynced: false,
-  syncEnabled: false,
+  syncEnabled: storedSyncEnabled(cachedMe),
 };
 export const entitled = (me: Me | null) => (PLUS_ENABLED || me?.entitlement.earlyAccess === true && (me.entitlement.plan === "trial" || me.entitlement.plan === "plus_lifetime")) && (me?.entitlement.plan === "plus_lifetime" || ((me?.entitlement.plan === "trial" || me?.entitlement.plan === "monthly") && !!me.entitlement.expiresAt && Date.parse(me.entitlement.expiresAt) > Date.now()));
 setPlusAccess(!!state.token && entitled(state.me));
@@ -70,7 +113,11 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<{ da
 export function authDestination(fallback = "#/profil") {
   const target = sessionStorage.getItem("bb_auth_return");
   sessionStorage.removeItem("bb_auth_return");
-  return target === "#/plus" || target === "#/pasangan" ? target : fallback;
+  if (target === "#/plus" || target === "#/pasangan") return target;
+  if (target && isSafeInviteReturn(target)) return target;
+  const pending = readInvite();
+  if (pending) return inviteReturnHash(pending);
+  return fallback;
 }
 
 function clearSession() {
@@ -84,7 +131,7 @@ function clearSession() {
 export function setSyncEnabled(enabled: boolean) {
   if (!state.me || !state.token) return;
   syncVersion++;
-  localStorage.setItem(`bb_sync_enabled:${state.me.user.id}`, JSON.stringify(enabled));
+  writeSyncEnabled(state.me.user.id, enabled);
   set({ syncEnabled: enabled, status: "local", hasSynced: false });
   if (enabled) {
     localStorage.removeItem("bb_cursor");
@@ -99,23 +146,212 @@ function establishSession(token?: string | null) {
   set({ token, me: null, checking: true, restoreError: false, syncEnabled: false, hasSynced: false, status: "local", lastSyncAt: null });
 }
 
+/** Email, magic link, and Google all land here. The sync flag is written only after /me, inside restore. */
+async function sessionEstablished(token: string | null) {
+  establishSession(token);
+  await signedIn();
+}
+
 export async function requestMagicLink(email: string) {
   await api("/api/auth/sign-in/magic-link", { method: "POST", body: JSON.stringify({ email }) });
 }
 
 export async function verifyMagicLink(token: string) {
   const { data, res } = await api<{ token: string }>(`/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`);
-  establishSession(res.headers.get("set-auth-token") ?? data.token);
-  await signedIn();
+  await sessionEstablished(res.headers.get("set-auth-token") ?? data.token);
 }
 
-/** Better Auth email + password. Sign-up signs in at once; both hand the bearer back on set-auth-token. */
-export async function authEmail(mode: SignInMode, email: string, password: string) {
+export const AUTH_TIMEOUT_MS = 15_000;
+
+function isTimeout(error: unknown) {
+  return !!error && typeof error === "object" && "name" in error && ((error as { name?: string }).name === "TimeoutError" || (error as { name?: string }).name === "AbortError");
+}
+
+type AuthResult = { id: number; status: number; failure: SignInFailure | null };
+type AuthSnapshot = { pending: boolean; result: AuthResult | null };
+const authListeners = new Set<() => void>();
+let authResultId = 0;
+function storedAuthAttempt() {
+  try { return parseAuthAttempt(sessionStorage.getItem(AUTH_ATTEMPT_KEY)); } catch { return null; }
+}
+let authUiState: AuthSnapshot = { pending: !!storedAuthAttempt(), result: null };
+let authSettled: (() => void) | null = null;
+
+function publishAuth(pending: boolean, result: AuthResult | null) {
+  authUiState = { pending, result };
+  authListeners.forEach((listener) => listener());
+}
+
+export function authUi() { return authUiState; }
+export function subscribeAuthUi(listener: () => void) {
+  authListeners.add(listener);
+  return () => authListeners.delete(listener);
+}
+export function authIsPending() { return authUiState.pending; }
+export function onControllerChange() { return controllerChangeAction(authIsPending()); }
+/** Main registers this so a deferred service-worker reload runs after the sign-up chain stores its result. */
+export function whenAuthSettles(listener: () => void) { authSettled = listener; }
+
+let authPassword: string | null = null;
+
+function beginAuthAttempt(mode: SignInMode, email: string, password: string) {
+  authPassword = password;
+  sessionStorage.setItem(AUTH_ATTEMPT_KEY, JSON.stringify({ mode, email }));
+  publishAuth(true, null);
+}
+
+function finishAuthAttempt(result: AuthResult | null) {
+  authPassword = null;
+  sessionStorage.removeItem(AUTH_ATTEMPT_KEY);
+  publishAuth(false, result);
+  const settled = authSettled;
+  if (settled) queueMicrotask(settled);
+}
+
+/** Same-page remounts can refill the field. A reload cannot, because the password is not stored. */
+export function authMemoryPassword() {
+  return authPassword ?? "";
+}
+
+function assignHash(hash: string) {
+  try { location.hash = hash; } catch { /* non-browser tests */ }
+}
+
+function publishCreatedLogin(email: string) {
+  sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify({ mode: "masuk", email, failure: "created" }));
+  sessionStorage.setItem(AUTH_NOTICE_KEY, "created");
+  assignHash("#/masuk-akun");
+}
+
+async function postAuth(mode: SignInMode, email: string, password: string) {
   const path = mode === "daftar" ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email";
   const body = mode === "daftar" ? { name: nameFromEmail(email), email, password } : { email, password };
-  const { data, res } = await api<{ token?: string }>(path, { method: "POST", body: JSON.stringify(body) });
-  establishSession(res.headers.get("set-auth-token") ?? data.token);
-  await signedIn();
+  try {
+    return await api<{ token?: string }>(path, { method: "POST", body: JSON.stringify(body), signal: AbortSignal.timeout(AUTH_TIMEOUT_MS) });
+  } catch (error) {
+    if (isTimeout(error)) throw new ApiError(408, "timeout");
+    throw error;
+  }
+}
+
+function bearer(res: Response, data: { token?: string } | null) {
+  return res.headers.get("set-auth-token") ?? data?.token ?? null;
+}
+
+async function enterWithToken(token: string | null) {
+  await sessionEstablished(token);
+}
+
+/** Cookie session first, then the same email and password. Sign-up is not posted again. */
+async function recoverAfterSignup(email: string, password: string, signupSucceeded: boolean) {
+  try {
+    const { data, res } = await api<{ session?: { token?: string }; token?: string } | null>("/api/auth/get-session");
+    const cookie = res.headers.get("set-auth-token") ?? data?.session?.token ?? data?.token ?? null;
+    if (cookie) {
+      await enterWithToken(cookie);
+      return;
+    }
+  } catch { /* no cookie session; try the password */ }
+  let signInStatus = 0;
+  let followUpFailed = false;
+  try {
+    const { data, res } = await postAuth("masuk", email, password);
+    signInStatus = res.status;
+    try {
+      await enterWithToken(bearer(res, data));
+      return;
+    } catch {
+      followUpFailed = true;
+    }
+  } catch (error) {
+    signInStatus = error instanceof ApiError ? error.status : 0;
+  }
+  if (signInRetryStep({ signInStatus, followUpFailed, signupSucceeded }) === "created-login") {
+    publishCreatedLogin(email);
+    throw new ApiError(409, "created");
+  }
+  throw new ApiError(signInStatus, "request_failed");
+}
+
+/** Better Auth email + password. The pending flag lives outside the form so a remount keeps the button disabled. */
+export async function authEmail(mode: SignInMode, email: string, password: string) {
+  beginAuthAttempt(mode, email, password);
+  try {
+    if (mode === "daftar") {
+      let signupOk = false;
+      try {
+        const { data, res } = await postAuth("daftar", email, password);
+        signupOk = true;
+        await enterWithToken(bearer(res, data));
+      } catch (error) {
+        const status = error instanceof ApiError ? error.status : 0;
+        const step = signupStep({ status, followUpFailed: signupOk });
+        if (step !== "retry-signin") throw error;
+        try {
+          await recoverAfterSignup(email, password, signupOk);
+        } catch (retryError) {
+          if (retryError instanceof ApiError && retryError.code === "created") throw retryError;
+          throw error;
+        }
+      }
+    } else {
+      const { data, res } = await postAuth("masuk", email, password);
+      await enterWithToken(bearer(res, data));
+    }
+    finishAuthAttempt(null);
+  } catch (error) {
+    const status = error instanceof ApiError ? error.status : 0;
+    const failure = error instanceof ApiError && error.code === "created" ? "created" : failureFor(mode, status).failure;
+    finishAuthAttempt({ id: ++authResultId, status, failure });
+    throw error;
+  }
+}
+
+async function recoverSessionCookie() {
+  try {
+    const { data, res } = await api<{ session?: { token?: string }; token?: string } | null>("/api/auth/get-session");
+    const cookie = res.headers.get("set-auth-token") ?? data?.session?.token ?? data?.token ?? null;
+    if (!cookie) return false;
+    await enterWithToken(cookie);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** After a reload drops the sign-up response, continue from the cookie. The password did not survive the reload. */
+export async function resumeAuthAttempt() {
+  const attempt = parseAuthAttempt(sessionStorage.getItem(AUTH_ATTEMPT_KEY));
+  if (!attempt) return;
+  if (state.token && state.me) { finishAuthAttempt(null); return; }
+  if (!authUiState.pending) publishAuth(true, null);
+  try {
+    let recovered = false;
+    if (authPassword) {
+      await recoverAfterSignup(attempt.email, authPassword, attempt.mode === "daftar");
+      recovered = true;
+    } else {
+      recovered = await recoverSessionCookie();
+    }
+    if (!recovered) {
+      if (attempt.mode === "daftar") {
+        publishCreatedLogin(attempt.email);
+        finishAuthAttempt({ id: ++authResultId, status: 409, failure: "created" });
+        return;
+      }
+      finishAuthAttempt({ id: ++authResultId, status: 0, failure: "network" });
+      return;
+    }
+    finishAuthAttempt(null);
+    assignHash(authDestination(attempt.mode === "daftar" ? "#/" : "#/profil"));
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "created") {
+      finishAuthAttempt({ id: ++authResultId, status: 409, failure: "created" });
+      return;
+    }
+    const status = error instanceof ApiError ? error.status : 0;
+    finishAuthAttempt({ id: ++authResultId, status, failure: failureFor("masuk", status).failure });
+  }
 }
 
 async function signedIn() {
@@ -126,17 +362,24 @@ async function signedIn() {
     clearSession();
     throw new ApiError(502, "invalid_account");
   }
+  reconcilePendingInvite(state.me.user.id);
 }
 
-/** Restore saved household data before offering setup. Uploads still require sync consent. */
+/** Restore saved household data before offering setup. A solo account still needs sync consent. A paired account does not. */
 export async function restoreAccount() {
   const version = sessionVersion;
   set({ checking: true, restoreError: false });
   try {
     await refreshMe();
     if (version !== sessionVersion) return;
+    adoptAccountData(state.me!.user.id);
+    // Read the flag and cursor first. Deleting the cursor is a full pull, not a consent reset.
+    // A second member on /me is already paired. A fresh device has no local flag, so turn sync on and pull.
+    const paired = state.me!.household.members.some((member) => member.id !== state.me!.user.id);
+    const keepSync = storedSyncEnabled(state.me) || paired;
+    if (keepSync) writeSyncEnabled(state.me!.user.id, true);
     localStorage.removeItem("bb_cursor");
-    set({ syncEnabled: load<boolean>(`bb_sync_enabled:${state.me!.user.id}`, false), status: "local" });
+    set({ syncEnabled: keepSync, status: "local" });
     if (settings().birthMode !== "postpartum" && !settings().hpl) {
       let since = 0, more = true;
       while (more) {
@@ -162,20 +405,47 @@ export async function restoreAccount() {
 
 // Set while the browser is away at Google. Success returns to #/profil, cancel/deny to #/masuk-akun (errorCallbackURL).
 const GOOGLE_AWAY = "bb_google";
+let googleLeave: Promise<void> | null = null;
+let googleAttempt = 0;
 
-/** Better Auth social sign-in: the API answers with Google's URL (and sets its OAuth state cookie on this origin), then we leave. */
-export async function startGoogle() {
-  const { data } = await api<{ url?: string }>("/api/auth/sign-in/social", {
-    method: "POST",
-    body: JSON.stringify({
-      provider: "google",
-      callbackURL: `${location.origin}/#/profil`,
-      errorCallbackURL: `${location.origin}/#/masuk-akun`,
-    }),
-  });
-  if (!data.url) throw new ApiError(502, "no_url");
-  sessionStorage.setItem(GOOGLE_AWAY, "away");
-  location.assign(data.url);
+/** Drop an in-flight Google redirect. A late response must not navigate after Back. */
+export function abandonGoogleStart() {
+  googleAttempt += 1;
+  googleLeave = null;
+  sessionStorage.removeItem(GOOGLE_AWAY);
+}
+
+export function googlePhase(): "away" | "finishing" | null {
+  const value = sessionStorage.getItem(GOOGLE_AWAY);
+  return value === "away" || value === "finishing" ? value : null;
+}
+
+/** Better Auth social sign-in: the API answers with Google's URL (and sets its OAuth state cookie on this origin), then we leave.
+ *  callbackURL stays `#/profil`. An invite token lives in storage, not in the OAuth request. */
+export function startGoogle() {
+  if (googleLeave) return googleLeave;
+  const attempt = googleAttempt;
+  googleLeave = (async () => {
+    try {
+      const { data } = await api<{ url?: string }>("/api/auth/sign-in/social", {
+        method: "POST",
+        body: JSON.stringify({
+          provider: "google",
+          callbackURL: `${location.origin}/#/profil`,
+          errorCallbackURL: `${location.origin}/#/masuk-akun`,
+        }),
+      });
+      if (attempt !== googleAttempt) return;
+      if (!data.url) throw new ApiError(502, "no_url");
+      sessionStorage.setItem(GOOGLE_AWAY, "away");
+      if (attempt !== googleAttempt) return;
+      location.assign(data.url);
+    } catch (error) {
+      if (attempt === googleAttempt) googleLeave = null;
+      throw error;
+    }
+  })();
+  return googleLeave;
 }
 
 /** True once per Google round trip that came back without signing in; clears the marker. SignIn shows "Masuk Google dibatalkan". */
@@ -185,25 +455,79 @@ export function takeGoogleReturn() {
   return away;
 }
 
-/** Boot after Google: the callback left a Better Auth session cookie on this origin. Trade it for the bearer, then the email path.
- *  No session (cancelled, closed, denied): send them to the sign-in screen, which reads the marker and says so. */
+function cookieToken(res: Response, data: { session?: { token?: string }; token?: string } | null) {
+  return res.headers.get("set-auth-token") ?? data?.session?.token ?? data?.token ?? null;
+}
+
+async function readCookieSession() {
+  const { data, res } = await api<{ session?: { token?: string }; token?: string } | null>("/api/auth/get-session");
+  return cookieToken(res, data);
+}
+
+function callbackHash() {
+  return location.hash === "#/profil" || location.hash.startsWith("#/profil?");
+}
+
+/** Boot after Google: the callback left a Better Auth session cookie on this origin. Trade it for the bearer, then the same session path as email.
+ *  A stored invite returns to the confirm step. It is not joined until that tap. No session: sign-in reads the marker.
+ *  iOS can drop the sessionStorage marker on the way back from Google. The callback hash and cookie are still a new session. */
 export async function finishGoogle() {
-  if (sessionStorage.getItem(GOOGLE_AWAY) !== "away") return;
-  if (state.token) return sessionStorage.removeItem(GOOGLE_AWAY);
-  if (location.hash.startsWith("#/masuk-akun")) return; // error landing: SignIn takes the marker itself
-  sessionStorage.setItem(GOOGLE_AWAY, "finishing");
-  try {
-    const { data, res } = await api<{ session?: { token?: string } } | null>("/api/auth/get-session");
-    const token = res.headers.get("set-auth-token") ?? data?.session?.token;
-    if (!token) throw new ApiError(401, "no_session");
-    establishSession(token);
-    await signedIn();
+  const marker = sessionStorage.getItem(GOOGLE_AWAY);
+  const action = googleReturnAction({
+    marker,
+    navigation: navigationType(),
+    hash: location.hash,
+    signedIn: !!state.token,
+  });
+  if (action === "clear") {
     sessionStorage.removeItem(GOOGLE_AWAY);
-    location.hash = authDestination();
+    // The hash often does not survive the round trip. A cookie is still the same session as email login.
+    if (!state.token) await claimCookieSession();
+    return;
+  }
+  // Stay: cancelled return (`#/masuk-akun`) or Back onto the invite. Do not start Google.
+  if (action !== "finish") {
+    if (!state.token && !marker && callbackHash()) await claimCookieSession();
+    return;
+  }
+  sessionStorage.setItem(GOOGLE_AWAY, "finishing");
+  const pending = readInvite();
+  if (pending) {
+    const dest = inviteReturnHash(pending);
+    if (isSafeInviteReturn(dest) && location.hash !== dest) location.hash = dest;
+  }
+  try {
+    const token = await readCookieSession();
+    if (!token) throw new ApiError(401, "no_session");
+    await sessionEstablished(token);
   } catch {
     sessionStorage.setItem(GOOGLE_AWAY, "away");
     location.hash = "#/masuk-akun";
+    return;
   }
+  sessionStorage.removeItem(GOOGLE_AWAY);
+  if (landAfterSession()) return;
+  location.hash = authDestination();
+}
+
+/** A cookie with no local token is the OAuth return after iOS drops `bb_google`. Same restore as a marked return. */
+async function claimCookieSession() {
+  try {
+    const token = await readCookieSession();
+    if (!token) return;
+    await sessionEstablished(token);
+    landAfterSession();
+  } catch { /* no cookie session */ }
+}
+
+function landAfterSession() {
+  const pendingNow = readInvite();
+  if (pendingNow && isInviteToken(pendingNow)) {
+    sessionStorage.removeItem("bb_auth_return");
+    location.hash = inviteReturnHash(pendingNow);
+    return true;
+  }
+  return false;
 }
 
 export async function refreshMe() {
@@ -231,9 +555,9 @@ export async function updateDisplayName(name: string) {
 
 export async function signOut() {
   const token = state.token;
+  if (state.syncEnabled && state.me?.user.id) writeSyncEnabled(state.me.user.id, true);
   sessionStorage.removeItem("bb_auth_return");
   sessionStorage.removeItem("bb_google");
-  localStorage.removeItem("bb_pending_invite");
   clearSession();
   if (token && HAS_API && navigator.onLine) {
     await fetch(API_URL + "/api/auth/sign-out", {
@@ -246,23 +570,79 @@ export function resetGuestData() {
   if (state.token) return false;
   clearSession();
   resetDeviceData();
+  clearBrowserCaches();
   return true;
 }
 
+export type HouseholdInvite = { token: string; url: string; expiresAt: string; code?: string };
+
+let publishedInvite: { householdId: string; invite: HouseholdInvite } | null = null;
+
+export function inviteReadyFor(householdId: string) {
+  return publishedInvite?.householdId === householdId ? publishedInvite.invite : null;
+}
+
 export async function createInvite() {
-  const { data } = await api<{ token: string; url: string; expiresAt: string }>("/household/invite", { method: "POST", body: "{}" });
+  const { data } = await api<HouseholdInvite>("/household/invite", { method: "POST", body: "{}" });
+  if (data?.token && data?.url && state.me?.household.id) publishedInvite = { householdId: state.me.household.id, invite: data };
   return data;
 }
 
+export type InviteConsume = { ok: "joined" | "skipped" } | { ok: "failed"; code: string };
+
+const inviteFlight = new Map<string, Promise<InviteConsume>>();
+
+/** Enable sync if needed, join, and clear the stored invite. Already-paired households skip the request. */
+export async function acceptInvite(token: string): Promise<"joined" | "skipped"> {
+  if (!isInviteToken(token)) throw new ApiError(400, "invite_invalid");
+  if (!state.token || !state.me) throw new ApiError(401, "not_ready");
+  if (state.me.household.members.some((member) => member.id !== state.me!.user.id)) {
+    clearInvite();
+    return "skipped";
+  }
+  if (!state.syncEnabled) setSyncEnabled(true);
+  await joinHousehold(token);
+  clearInvite();
+  return "joined";
+}
+
+/** One join per token while the request is in flight, including a React remount during OAuth return. */
+export function consumePendingInvite(fallback?: string | null): Promise<InviteConsume> {
+  const token = readInvite() || (fallback && isInviteToken(fallback) ? fallback : null);
+  if (!token) return Promise.resolve({ ok: "skipped" });
+  const existing = inviteFlight.get(token);
+  if (existing) return existing;
+  let run!: Promise<InviteConsume>;
+  run = acceptInvite(token).then((ok) => ({ ok })).catch((error: unknown): InviteConsume => {
+    if (error instanceof ApiError && error.code === "not_ready") return { ok: "skipped" };
+    return { ok: "failed", code: error instanceof ApiError ? error.code : "" };
+  }).finally(() => {
+    if (inviteFlight.get(token) === run) inviteFlight.delete(token);
+  });
+  inviteFlight.set(token, run);
+  return run;
+}
+
+const joinFlight = new Map<string, Promise<void>>();
+
 export async function joinHousehold(token: string) {
+  const existing = joinFlight.get(token);
+  if (existing) return existing;
   if (!state.syncEnabled) throw new ApiError(409, "sync_disabled");
-  syncVersion++;
-  await api("/household/join", { method: "POST", body: JSON.stringify({ token }) });
-  set({ hasSynced: false });
-  localStorage.removeItem("bb_cursor");
-  markAllDirty();
-  await refreshMe();
-  await syncNow();
+  let run!: Promise<void>;
+  run = (async () => {
+    syncVersion++;
+    await api("/household/join", { method: "POST", body: JSON.stringify({ token }) });
+    set({ hasSynced: false });
+    localStorage.removeItem("bb_cursor");
+    markAllDirty();
+    await refreshMe();
+    await syncNow();
+  })().finally(() => {
+    if (joinFlight.get(token) === run) joinFlight.delete(token);
+  });
+  joinFlight.set(token, run);
+  return run;
 }
 
 export async function removeMember(id: string) {

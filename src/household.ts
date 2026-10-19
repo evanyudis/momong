@@ -12,6 +12,33 @@ export function seatNames(me: Me | null | undefined) {
   return { self: seatNameFromMember(me?.user), partner: seatNameFromMember(partner) };
 }
 
+/** A second member on GET /me means this account already shares a household. */
+export function householdHasPartner(me: { user?: { id?: string } | null; household?: { members?: { id: string }[] } | null } | null | undefined) {
+  const id = me?.user?.id;
+  if (!id) return false;
+  return !!me?.household?.members?.some((member) => member.id !== id);
+}
+
+/**
+ * Pasangan body. A local flag or cursor shows the household without waiting for /me.
+ * A partner already on /me does too. While the account id is unknown, or /me is still loading and nothing local says synced, wait instead of asking.
+ */
+export function partnerSyncScreen(input: {
+  hasToken: boolean;
+  userId: string | null;
+  enabledFlag: boolean | null;
+  syncCursor: number;
+  paired?: boolean;
+  checking?: boolean;
+}): "signin" | "wait" | "consent" | "household" {
+  if (!input.hasToken) return "signin";
+  if (!input.userId) return "wait";
+  const cursor = Number.isFinite(input.syncCursor) && input.syncCursor > 0;
+  if (input.enabledFlag === true || cursor || input.paired) return "household";
+  if (input.checking) return "wait";
+  return "consent";
+}
+
 /** Display state for the partner/sync surfaces. */
 export function useHousehold() {
   const acc = useAccount();
