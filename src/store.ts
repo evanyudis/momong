@@ -309,6 +309,55 @@ export function adoptLocalOwner(userId: string): "kept" | "restored" | "claimed"
   return "fresh";
 }
 
+/** Take logged-out rows out of the open database before another account's snapshot is installed. Untagged rows stay. */
+export function liftAnonRecords(): { col: Collection; id: string; rec: Rec }[] {
+  const lifted: { col: Collection; id: string; rec: Rec }[] = [];
+  let next = db;
+  let changed = false;
+  for (const col of Object.keys(db) as Collection[]) {
+    const rows = db[col];
+    if (!rows) continue;
+    let copy: Record<string, Rec> | null = null;
+    for (const [id, rec] of Object.entries(rows)) {
+      if (rec?.ownerId !== ANON_OWNER) continue;
+      copy ??= { ...rows };
+      delete copy[id];
+      dirty.delete(`${col}/${id}`);
+      lifted.push({ col, id, rec });
+    }
+    if (copy) {
+      next = { ...next, [col]: copy };
+      changed = true;
+    }
+  }
+  if (changed) {
+    db = next;
+    commit(false);
+  }
+  return lifted;
+}
+
+/** Give same-flow guest rows to this account. An id this account already has stays theirs; that guest copy remains anon. */
+export function mergeClaimedAnon(userId: string, lifted: { col: Collection; id: string; rec: Rec }[]) {
+  if (!userId || userId === ANON_OWNER || !lifted.length) return;
+  const aside: { col: Collection; id: string; rec: Rec }[] = [];
+  let next = db;
+  for (const item of lifted) {
+    if (next[item.col]?.[item.id]) {
+      aside.push(item);
+      continue;
+    }
+    next = { ...next, [item.col]: { ...next[item.col], [item.id]: { ...item.rec, ownerId: userId } } };
+    dirty.add(`${item.col}/${item.id}`);
+  }
+  db = next;
+  commit(false);
+  if (!aside.length) return;
+  const parked = readBundle(ANON_OWNER) ?? { db: {}, prefs: {}, dirty: [] as string[] };
+  for (const item of aside) parked.db[item.col] = { ...parked.db[item.col], [item.id]: item.rec };
+  localStorage.setItem(bundleKey(ANON_OWNER), JSON.stringify({ db: parked.db, prefs: parked.prefs, dirty: parked.dirty }));
+}
+
 /** Profile this phone had before joining a house. Not the account bundle, so re-login does not put it back on screen. */
 export const PREJOIN_PROFILE_PREFIX = "bb_prejoin_profile:";
 

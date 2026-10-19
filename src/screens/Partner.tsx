@@ -6,8 +6,8 @@ import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, partnerSyncScreen, useHousehold } from "../household";
 import {
-  claimForeignInvite, claimJoinClick, clearInvite, clearInviteFlow, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungConfirmOpen, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, householdInviteRequest, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromHash, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, markInviteFlow, settleGabungNanti,
-  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInviteInvalid, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
+  claimForeignInvite, claimJoinClick, clearInvite, clearInviteFlow, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungConfirmOpen, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, householdInviteRequest, INVITE_INVALID_TITLE,   inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromHash, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, markInviteFlow, releaseDeadInvite, settleGabungNanti,
+  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteInvalid, rememberInvite, shouldClearStaleGoogle,
   type GabungPhase,
 } from "../invite";
 import { go } from "../route";
@@ -668,7 +668,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     let cancel = false;
     void fetchInvitePreview(liveInvite).then((preview) => {
       if (cancel || ownJoinActive() || phaseRef.current === "joining") return;
-      if (preview.status === "invalid") rememberInviteInvalid(liveInvite);
+      if (preview.status === "invalid") releaseDeadInvite(liveInvite);
       setNameSource(preview.status === "unknown" ? "fallback" : "server");
       setServerName((current) => houseNameAfterPreview(current, preview));
       setJoinCode((current) => joinCodeAfterPreview(current, preview));
@@ -681,6 +681,10 @@ export function JoinLanding({ invite }: { invite: string | null }) {
 
   useEffect(() => {
     if (!valid || !liveInvite || inApp || phase === "joining" || ownJoinActive()) return;
+    if (readInviteInvalid(liveInvite)) {
+      if (readInvite() === liveInvite) clearInvite();
+      return;
+    }
     const accountId = h.me?.user.id;
     rememberInvite(liveInvite, localStorage, sessionStorage, {
       name: inviteOwnerName(location.hash),
@@ -797,7 +801,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
       return;
     }
     joinLock.current.held = false;
-    if (next.joinCode === "invite_invalid") rememberInviteInvalid(token);
+    if (next.joinCode === "invite_invalid") releaseDeadInvite(token);
     setJoinCode(next.joinCode);
     setPhase("error");
   }

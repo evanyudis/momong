@@ -1,10 +1,10 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
-import { bindInvitePreview, clearInvite, googleReturnAction, householdInviteRequest, inviteFlowActive, inviteReturnHash, inviteTokenFromHash, isInviteToken, isSafeInviteReturn, loginInviteChoice, mapServerInvitePreview, navigationType, postLoginRoute, readInvite, readInviteOwner, reconcilePendingInvite, type InvitePreview } from "./invite";
+import { bindInvitePreview, clearInvite, clearInviteFlow, googleReturnAction, householdInviteRequest, inviteFlowActive, inviteReturnHash, inviteTokenFromHash, isInviteToken, isSafeInviteReturn, loginInviteChoice, mapServerInvitePreview, navigationType, postLoginRoute, readInvite, readInviteOwner, reconcilePendingInvite, releaseDeadInvite, type InvitePreview } from "./invite";
 import { PLUS_ENABLED } from "./release";
 import { hasProfile } from "./onboarding";
 import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, isAuthScreen, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
-import { setPlusAccess, isPlus, adoptLocalOwner, applyRemote, getPrefs, markAllDirty, markPushed, onLocalChange, parkProfileForJoin, pending, resetDeviceData, setPrefs, setRecordOwner, settings } from "./store";
+import { setPlusAccess, isPlus, adoptLocalOwner, applyRemote, getPrefs, liftAnonRecords, markAllDirty, markPushed, mergeClaimedAnon, onLocalChange, parkProfileForJoin, pending, resetDeviceData, setPrefs, setRecordOwner, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
  *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
@@ -41,9 +41,13 @@ function storedSyncEnabled(me: Me | null) {
   return Number.isFinite(cursor) && cursor > 0;
 }
 
-/** Local notes and the profile name belong to the account that wrote them. A different login parks the previous set. */
-function adoptAccountData(userId: string) {
+/** Local notes and the profile name belong to the account that wrote them. A different login parks the previous set.
+ *  Anon rows are retagged only for the sign-in that still has the invite flow marker. That marker is then consumed. */
+function adoptAccountData(userId: string, claimGuest = false) {
+  const lifted = claimGuest ? liftAnonRecords() : [];
   adoptLocalOwner(userId);
+  if (lifted.length) mergeClaimedAnon(userId, lifted);
+  if (claimGuest) clearInviteFlow();
 }
 
 function rememberProfileName(name: string) {
@@ -107,13 +111,15 @@ export class ApiError extends Error {
 export async function api<T>(path: string, init: RequestInit = {}): Promise<{ data: T; res: Response }> {
   if (!HAS_API) throw new ApiError(0, "no_api");
   const version = sessionVersion;
+  // A new Masuk or Daftar must not send, or be rejected by, the previous account's bearer.
+  const freshAuth = path.startsWith("/api/auth/sign-in/") || path.startsWith("/api/auth/sign-up/");
   const res = await fetch(API_URL + path, {
     ...init,
-    headers: { "content-type": "application/json", ...(state.token ? { authorization: `Bearer ${state.token}` } : {}), ...init.headers },
+    headers: { "content-type": "application/json", ...(state.token && !freshAuth ? { authorization: `Bearer ${state.token}` } : {}), ...init.headers },
   });
   const data = await res.json().catch(() => { if (res.ok) throw new ApiError(502, "invalid_response"); return {}; });
   if (version !== sessionVersion) throw new ApiError(0, "session_changed");
-  if (res.status === 401 && state.token) clearSession();
+  if (res.status === 401 && state.token && !freshAuth) clearSession();
   if (res.status >= 500) reportError(new Error("API server failure"), "api");
   if (!res.ok) throw new ApiError(res.status, data?.error ?? data?.code ?? "request_failed");
   return { data, res };
@@ -157,10 +163,13 @@ export async function destinationAfterLogin(fallback = "#/profil") {
   if (!candidate) return postLoginRoute({ fallback, invite: null, onboarded });
   const preview = await loadInvitePreview(candidate);
   if (loginInviteChoice({ accountId, ownerId, explicit: false, preview }) === "drop") {
-    if (readInvite() === candidate) clearInvite();
-    return postLoginRoute({ fallback, invite: null, onboarded });
+    if (readInvite() === candidate) {
+      if (preview?.status === "invalid") releaseDeadInvite(candidate);
+      else clearInvite();
+    }
+    return postLoginRoute({ fallback, invite: null, onboarded, preview });
   }
-  return postLoginRoute({ fallback, invite: candidate, onboarded });
+  return postLoginRoute({ fallback, invite: candidate, onboarded, preview });
 }
 
 function clearSession() {
@@ -415,23 +424,25 @@ export async function resumeAuthAttempt() {
 
 async function signedIn() {
   const version = sessionVersion;
-  await restoreAccount();
+  const sameFlow = pendingInviteSameFlow();
+  const claimGuest = inviteFlowActive();
+  await restoreAccount(claimGuest);
   if (version !== sessionVersion) throw new ApiError(0, "session_changed");
   if (!state.me) {
     clearSession();
     throw new ApiError(502, "invalid_account");
   }
-  reconcilePendingInvite(state.me.user.id, Date.now(), localStorage, sessionStorage, pendingInviteSameFlow());
+  reconcilePendingInvite(state.me.user.id, Date.now(), localStorage, sessionStorage, sameFlow);
 }
 
 /** Restore saved household data before offering setup. A solo account still needs sync consent. A paired account does not. */
-export async function restoreAccount() {
+export async function restoreAccount(claimGuest = false) {
   const version = sessionVersion;
   set({ checking: true, restoreError: false });
   try {
     await refreshMe();
     if (version !== sessionVersion) return;
-    adoptAccountData(state.me!.user.id);
+    adoptAccountData(state.me!.user.id, claimGuest);
     rememberProfileName(state.me!.user.name);
     // Read the flag and cursor first. Deleting the cursor is a full pull, not a consent reset.
     // A second member on /me is already paired. A fresh device has no local flag, so turn sync on and pull.
@@ -690,7 +701,9 @@ export async function loadInvitePreview(token: string): Promise<InvitePreview | 
       signal: AbortSignal.timeout(JOIN_TIMEOUT_MS),
     });
     return mapServerInvitePreview(data);
-  } catch {
+  } catch (error) {
+    // A missing preview route stays unknown. Only the invite_invalid code means the saved link is dead.
+    if (error instanceof ApiError && error.status === 404 && error.code === "invite_invalid") return { status: "invalid" };
     return null;
   }
 }
