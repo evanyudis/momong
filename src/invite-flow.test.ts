@@ -27,6 +27,7 @@ test("logged-out invite survives Google and waits for confirm", async () => {
   let allowSession = false;
   let expectPasanganBeforeMe = false;
   let previewBody: Record<string, unknown> | null = null;
+  let syncMod: { householdSettling: () => boolean } | undefined;
   globalThis.fetch = (async (url: string, init?: RequestInit) => {
     const path = new URL(url).pathname;
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
@@ -44,6 +45,7 @@ test("logged-out invite survives Google and waits for confirm", async () => {
         assert.equal(loc.hash, "#/pasangan", "a successful join replaces the route before /me");
         assert.equal(memory.has("bb_pending_invite"), false, "the saved invite is cleared before /me");
         assert.equal(memory.has("bb_pending_invite_user"), false, "the saved invite owner is cleared before /me");
+        assert.equal(syncMod?.householdSettling(), true, "Pasangan waits until /me returns the new household");
         expectPasanganBeforeMe = false;
       }
       return Response.json(me);
@@ -61,6 +63,7 @@ test("logged-out invite survives Google and waits for confirm", async () => {
   }) as typeof fetch;
   try {
     const sync = await server.ssrLoadModule("/src/sync.ts");
+    syncMod = sync;
     const saveInvite = () => {
       memory.set("bb_pending_invite", "inviteTok1");
       memory.set("bb_pending_invite_at", String(Date.now()));
@@ -131,6 +134,11 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     assert.equal(memory.has("bb_pending_invite_user"), false);
     assert.equal(loc.hash, "#/pasangan", "join success leaves Gabung for Pasangan");
     assert.equal(expectPasanganBeforeMe, false, "the route was replaced before /me refreshed the pair");
+    assert.equal(sync.householdSettling(), false, "the new household is shown once /me returns it");
+    const invitePosts = () => calls.filter((call) => call.path === "/household/invite").length;
+    const beforeInvite = invitePosts();
+    await assert.rejects(() => sync.createInvite(), (error: { code?: string }) => error.code === "seats_full");
+    assert.equal(invitePosts(), beforeInvite, "a full house does not request an invite link");
 
     await sync.signOut();
     saveInvite();

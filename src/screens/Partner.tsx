@@ -6,14 +6,14 @@ import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, partnerSyncScreen, useHousehold } from "../household";
 import {
-  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromHash, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview,
+  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, householdInviteRequest, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromHash, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview,
   isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInviteInvalid, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
   type GabungPhase,
 } from "../invite";
 import { go } from "../route";
 import { getPrefs, setPrefs } from "../store";
 import {
-  HAS_API, setSyncEnabled, abandonGoogleStart, ApiError, acceptInvite, clearOwnJoin, consumePendingInvite, createInvite, googlePhase, inviteReadyFor, ownJoinActive, removeMember, takeGoogleReturn,
+  HAS_API, setSyncEnabled, abandonGoogleStart, ApiError, acceptInvite, clearOwnJoin, consumePendingInvite, createInvite, googlePhase, householdSettling, inviteReadyFor, ownJoinActive, removeMember, takeGoogleReturn,
   requestMagicLink, signOut, startGoogle, syncNow, refreshMe, useAccount, destinationAfterLogin, verifyMagicLink, type HouseholdInvite,
 } from "../sync";
 import { Sheet, toast, TopBar } from "../ui";
@@ -57,6 +57,16 @@ export function SyncDot() {
 export function Partner() {
   const h = useHousehold();
   const [joinOpen, setJoinOpen] = useState(false);
+  if (householdSettling()) {
+    return (
+      <>
+        <TopBar title="Pasangan" />
+        <div className="card solid empty" role="status" aria-busy="true">
+          <strong>Menyiapkan rumah kalian…</strong>
+        </div>
+      </>
+    );
+  }
   const userId = h.me?.user.id ?? null;
   const rawFlag = userId ? localStorage.getItem(`bb_sync_enabled:${userId}`) : null;
   const storedFlag = rawFlag === "true" ? true : rawFlag === "false" ? false : null;
@@ -210,10 +220,14 @@ function Household({ onJoin }: { onJoin: () => void }) {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState(false);
   const [inviteAttempt, setInviteAttempt] = useState(0);
+  const [rotateConfirm, setRotateConfirm] = useState(false);
+  const [rotating, setRotating] = useState(false);
+  const [rotateError, setRotateError] = useState("");
   const full = h.seatsUsed >= h.seats;
 
   useEffect(() => {
-    if (full || !h.isOwner) return;
+    const request = householdInviteRequest({ settling: householdSettling(), isOwner: h.isOwner, full, rotate: false });
+    if (!request.ok) return;
     const ready = inviteReadyFor(householdId);
     if (ready) { setInvite(ready); setInviteLoading(false); return; }
     if (invite) return;
@@ -221,8 +235,8 @@ function Household({ onJoin }: { onJoin: () => void }) {
     let dropped = false;
     createInvite().then((value) => {
       // A cleanup must not throw away a 200. The link comes from this response.
-      setInvite(value);
-      setInviteLoading(false);
+      if (value) setInvite(value);
+      if (!dropped) setInviteLoading(false);
     }).catch(() => {
       if (dropped) return;
       setInviteError(true);
@@ -230,6 +244,26 @@ function Household({ onJoin }: { onJoin: () => void }) {
     });
     return () => { dropped = true; };
   }, [full, h.isOwner, invite, inviteAttempt, householdId]);
+
+  async function rotateInvite() {
+    if (rotating) return;
+    setRotating(true);
+    setRotateError("");
+    try {
+      const value = await createInvite({ rotate: true });
+      if (!value) {
+        setRotateError("Tautan baru belum bisa dibuat. Cek koneksi lalu coba lagi.");
+        return;
+      }
+      setInvite(value);
+      setRotateConfirm(false);
+    } catch (error) {
+      const code = error instanceof ApiError ? error.code : "";
+      setRotateError(code === "seats_full" ? "Rumah ini sudah penuh." : "Tautan baru belum bisa dibuat. Cek koneksi lalu coba lagi.");
+    } finally {
+      setRotating(false);
+    }
+  }
 
   const code = invite ? displayInviteCode(invite) : "";
   const shareUrl = invite ? inviteLinkWithOwner(invite.url, h.myName) : "";
@@ -344,14 +378,24 @@ function Household({ onJoin }: { onJoin: () => void }) {
             )}
             <a
               className="btn btn-blue lg block"
-              href={invite ? `https://wa.me/?text=${encodeURIComponent(message)}` : undefined}
-              aria-disabled={!invite}
+              href={invite && !rotating ? `https://wa.me/?text=${encodeURIComponent(message)}` : undefined}
+              aria-disabled={!invite || rotating}
               target="_blank" rel="noreferrer"
-              onClick={() => invite && noteSent()}
+              onClick={() => invite && !rotating && noteSent()}
             >
               <MessageCircle size={22} /> Undang lewat WhatsApp
             </a>
-            <button className="btn btn-ghost lg block" onClick={share} disabled={!invite}>Bagikan tautan</button>
+            <button className="btn btn-ghost lg block" onClick={share} disabled={!invite || rotating}>Bagikan tautan</button>
+            {invite && (rotateConfirm ? (
+              <div className="stack">
+                <p>Tautan lama tidak bisa dipakai lagi.</p>
+                <button type="button" className="btn btn-soft block" disabled={rotating} aria-busy={rotating} onClick={() => void rotateInvite()}>{rotating ? "Membuat tautan baru…" : "Buat tautan baru"}</button>
+                <button type="button" className="btn btn-ghost block" disabled={rotating} onClick={() => { setRotateConfirm(false); setRotateError(""); }}>Batal</button>
+              </div>
+            ) : (
+              <button type="button" className="btn btn-ghost block" onClick={() => { setRotateError(""); setRotateConfirm(true); }}>Buat tautan baru</button>
+            ))}
+            {rotateError && <p role="alert" style={{ color: "var(--field-danger)" }}>{rotateError}</p>}
             <p className="faint" style={{ fontSize: 14, textAlign: "center" }}>Tautan undangan berlaku 7 hari</p>
           </div>
         )}

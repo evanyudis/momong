@@ -499,9 +499,18 @@ export function gabungAfterPreview(phase: GabungPhase, preview: InvitePreview): 
 }
 
 /**
- * Already-paired is only for someone who opened Gabung that way.
- * A join that just succeeded, or one still in flight, leaves for Pasangan instead.
+ * Only the owner of a house with an open seat may ask for a link.
+ * A join that has not refreshed /me yet must not. Reload reuses the open token; rotate is explicit.
  */
+export function householdInviteRequest(input: { settling: boolean; isOwner: boolean; full: boolean; rotate?: boolean }) {
+  if (input.settling) return { ok: false as const, code: "household_settling" as const };
+  if (!input.isOwner) return { ok: false as const, code: "not_owner" as const };
+  if (input.full) return { ok: false as const, code: "seats_full" as const };
+  if (input.rotate) return { ok: true as const, path: "/household/invite?rotate=true", body: { rotate: true as const } };
+  return { ok: true as const, path: "/household/invite", body: {} };
+}
+
+/** Already-paired is only for someone who opened Gabung that way. A join in flight leaves for Pasangan. */
 export function gabungJoinScreen(input: { hasPartner: boolean; phase: GabungPhase; ownJoin: boolean }): "joining" | "connected" | "continue" {
   if (input.ownJoin || input.phase === "joining") return "joining";
   if (input.hasPartner) return "connected";
