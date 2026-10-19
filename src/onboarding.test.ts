@@ -3,11 +3,14 @@ import { test } from "node:test";
 import { todayISO } from "./dates.ts";
 
 const memory = new Map<string, string>();
-(globalThis as any).localStorage = {
+const storage = {
+  get length() { return memory.size; },
+  key: (i: number) => [...memory.keys()][i] ?? null,
   getItem: (key: string) => memory.get(key) ?? null,
   setItem: (key: string, value: string) => void memory.set(key, value),
   removeItem: (key: string) => void memory.delete(key),
 };
+Object.assign(globalThis, { localStorage: storage, sessionStorage: storage });
 const { motherNameFromAccount, onboardingStep, saveOnboarding } = await import("./onboarding.ts");
 const store = await import("./store.ts");
 
@@ -45,7 +48,18 @@ test("setup rejects incomplete details without saving a mode or name", () => {
   }
 });
 
+test("guest setup stays on this phone and is not queued for upload", () => {
+  store.resetDeviceData();
+  store.setRecordOwner(null);
+  assert.equal(saveOnboarding({ mode: "pregnant", name: "Tamu", hpl: "2027-03-01", babyName: "", babyBirth: "" }), true);
+  assert.equal(store.settings().hpl, "2027-03-01");
+  assert.equal(store.get("settings", "main")?.ownerId, "anon");
+  assert.deepEqual(store.pending(), []);
+});
+
 test("both completed modes save the right fields and queue household sync", () => {
+  store.resetDeviceData();
+  store.setRecordOwner("sari");
   assert.equal(saveOnboarding({ mode: "pregnant", name: " Sari Putri ", hpl: "2027-01-01", babyName: "", babyBirth: "" }), true);
   assert.equal(store.getPrefs().name, "Sari Putri");
   assert.equal(store.settings().birthMode, "pregnant");
@@ -61,4 +75,6 @@ test("both completed modes save the right fields and queue household sync", () =
   assert.ok(change);
   assert.equal(change.data?.babyName, "Nara");
   assert.equal(change.data?.babyBirth, birth);
+  assert.equal(change.data?.ownerId, undefined);
+  assert.equal(store.get("settings", "main")?.ownerId, "sari");
 });

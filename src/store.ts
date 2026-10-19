@@ -59,22 +59,39 @@ function commit(local: boolean) {
 export const onLocalChange = (fn: () => void) => { onChangeHooks.add(fn); return () => onChangeHooks.delete(fn); };
 export const uid = () => crypto.randomUUID();
 
+/** Logged-out rows. Not a real account, so they are never uploaded. */
+export const ANON_OWNER = "anon";
+
+/** Signed-in writer. Null while logged out, so new rows are anon and are not uploaded. */
+let recordOwner: string | null = null;
+export function setRecordOwner(userId: string | null) {
+  recordOwner = userId && userId !== ANON_OWNER ? userId : null;
+}
+
 export function put(col: Collection, rec: Omit<Rec, "updatedAt"> & { id?: string }) {
   const id = recordId(col, rec.id ?? uid());
   const babyId = SCOPED.includes(col) ? { babyId: activeBabyId() } : {};
   const prev = db[col]?.[id];
-  const next = { ...babyId, ...prev, ...rec, id, updatedAt: Math.max(Date.now(), (prev?.updatedAt ?? 0) + 1), deleted: false };
+  const { ownerId: _fromCaller, ...fields } = rec;
+  const next: Rec = { ...babyId, ...prev, ...fields, id, updatedAt: Math.max(Date.now(), (prev?.updatedAt ?? 0) + 1), deleted: false };
+  // An existing row keeps its tag, including no tag. Editing must not make it uploadable.
+  if (prev) {
+    if (prev.ownerId) next.ownerId = prev.ownerId;
+    else delete next.ownerId;
+  } else next.ownerId = recordOwner ?? ANON_OWNER;
   db = { ...db, [col]: { ...db[col], [id]: next } };
   dirty.add(`${col}/${id}`);
   commit(true);
-  return next as Rec;
+  return next;
 }
 
 export function remove(col: Collection, id: string) {
   id = recordId(col, id);
   const prev = db[col]?.[id];
   if (!prev) return;
-  db = { ...db, [col]: { ...db[col], [id]: { id, updatedAt: Math.max(Date.now(), prev.updatedAt + 1), deleted: true, ...(prev.babyId ? { babyId: prev.babyId } : {}) } } };
+  const tomb: Rec = { id, updatedAt: Math.max(Date.now(), prev.updatedAt + 1), deleted: true, ...(prev.babyId ? { babyId: prev.babyId } : {}) };
+  if (prev.ownerId) tomb.ownerId = prev.ownerId;
+  db = { ...db, [col]: { ...db[col], [id]: tomb } };
   dirty.add(`${col}/${id}`);
   commit(true);
 }
@@ -86,6 +103,7 @@ export function get(col: Collection, id: string): Rec | undefined {
 }
 
 export function list(col: Collection, now = Date.now()): Rec[] {
+  // Ownership filters uploads, not the screen. Untagged and anon rows in this db stay visible.
   const all = Object.values(db[col] ?? {}).filter((r) => !r.deleted && (!SCOPED.includes(col) || (r.babyId ?? "default") === activeBabyId()));
   const visible = !plusAccess && THIN.includes(col) ? all.filter((r) => typeof r.at !== "number" || r.at >= now - FREE_WINDOW_MS) : all;
   return visible.sort((a, b) => (b.at ?? b.updatedAt) - (a.at ?? a.updatedAt));
@@ -95,13 +113,15 @@ export function list(col: Collection, now = Date.now()): Rec[] {
 export const hasHidden = (now = Date.now()) =>
   !plusAccess && THIN.some((col) => Object.values(db[col] ?? {}).some((r) => !r.deleted && (r.babyId ?? "default") === activeBabyId() && typeof r.at === "number" && r.at < now - FREE_WINDOW_MS));
 
-/** Changes waiting to be pushed. */
+/** Changes this account may upload. Untagged, anon, and other owners stay on the device. */
 export function pending() {
+  if (!recordOwner) return [];
   return [...dirty].flatMap((key) => {
     const [collection, id] = key.split("/") as [Collection, string];
     const r = db[collection]?.[id];
-    if (!r || !plusAccess && (collection === "baby" || SCOPED.includes(collection) && (r.babyId ?? "default") !== "default")) return [];
-    const { id: _id, updatedAt, deleted, updatedBy: _by, ...data } = r;
+    if (!r || r.ownerId !== recordOwner) return [];
+    if (!plusAccess && (collection === "baby" || SCOPED.includes(collection) && (r.babyId ?? "default") !== "default")) return [];
+    const { id: _id, updatedAt, deleted, updatedBy: _by, ownerId: _owner, ...data } = r;
     return [{ collection, id, updatedAt, deleted: !!deleted, data: deleted ? null : data }];
   });
 }
@@ -114,23 +134,30 @@ export function markPushed(keys: { collection: string; id: string; updatedAt: nu
   commit(false);
 }
 
-/** After joining a household, everything local goes up again so both phones merge. */
+/** Queue this account's own rows. Other owners, anon, and untagged rows are not uploaded. */
 export function markAllDirty() {
-  for (const [col, recs] of Object.entries(db)) for (const id of Object.keys(recs ?? {})) dirty.add(`${col}/${id}`);
+  if (!recordOwner) return;
+  for (const [col, recs] of Object.entries(db)) {
+    for (const [id, rec] of Object.entries(recs ?? {})) if (rec?.ownerId === recordOwner) dirty.add(`${col}/${id}`);
+  }
   commit(false);
 }
 
 export type RemoteChange = { collection: string; id: string; data: any; deleted: boolean; updatedAt: number; updatedBy?: string };
 
 export function applyRemote(changes: RemoteChange[]) {
-  if (!changes.length) return;
+  if (!changes.length || !recordOwner) return;
   for (const ch of changes) {
     const col = ch.collection as Collection;
     const local = db[col]?.[ch.id];
+    // Another owner, an anon row, or a legacy untagged row stays put. Do not overwrite or retag it.
+    if (local && local.ownerId !== recordOwner) continue;
     if (local && local.updatedAt >= ch.updatedAt) continue;
+    const data = ch.data && typeof ch.data === "object" ? { ...ch.data } : {};
+    delete data.ownerId;
     const rec: Rec = ch.deleted
-      ? { id: ch.id, updatedAt: ch.updatedAt, deleted: true }
-      : { ...ch.data, id: ch.id, updatedAt: ch.updatedAt, updatedBy: ch.updatedBy };
+      ? { id: ch.id, updatedAt: ch.updatedAt, deleted: true, ownerId: recordOwner }
+      : { ...data, id: ch.id, updatedAt: ch.updatedAt, updatedBy: ch.updatedBy, ownerId: recordOwner };
     db = { ...db, [col]: { ...db[col], [ch.id]: rec } };
     dirty.delete(`${col}/${ch.id}`);
   }
@@ -208,7 +235,6 @@ export function clearAccountRecords() {
 
 const OWNER_KEY = "bb_data_user";
 const BUNDLE_PREFIX = "bb_user_bundle:";
-export const ANON_OWNER = "anon";
 
 export function localOwner() {
   try { return localStorage.getItem(OWNER_KEY); } catch { return null; }
@@ -256,8 +282,8 @@ function activeHasLocalData() {
 
 /**
  * Point the open notes at this account.
- * Untagged notes (written before an owner existed) stay and are claimed by the first account
- * that does not already have its own snapshot. They are not deleted.
+ * Untagged or anon notes stay on screen for the first account that has no snapshot.
+ * They are not deleted, and they are not tagged with that account, so they are not uploaded.
  * Another account's notes are parked under that account and this account gets its own snapshot.
  */
 export function adoptLocalOwner(userId: string): "kept" | "restored" | "claimed" | "fresh" {
