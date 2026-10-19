@@ -363,6 +363,123 @@ export function inviteShowsGoogleError(input: { returnedWithoutSession: boolean;
   return input.returnedWithoutSession;
 }
 
+/** Session cache of tokens POST /household/join already rejected. Keyed per token. */
+export const INVITE_INVALID_CACHE = "bb_invite_invalid:";
+
+export function rememberInviteInvalid(token: string, session: Bag = sessionStorage) {
+  if (!isInviteToken(token)) return false;
+  session.setItem(INVITE_INVALID_CACHE + token, "1");
+  return true;
+}
+
+export function readInviteInvalid(token: string, session: Bag = sessionStorage) {
+  return isInviteToken(token) && session.getItem(INVITE_INVALID_CACHE + token) === "1";
+}
+
+/** Raw `invite` query value, including tokens that fail the format check. */
+export function inviteParamFromHash(hash: string) {
+  const query = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : "";
+  return new URLSearchParams(query).get("invite");
+}
+
+export function inviteTokenFromHash(hash: string) {
+  const token = inviteParamFromHash(hash);
+  return token && isInviteToken(token) ? token : null;
+}
+
+/**
+ * House name for this token only.
+ * A saved name belongs to the stored token. A different token does not inherit it.
+ */
+export function houseNameForInvite(token: string | null, hash: string, storage: Bag = localStorage, session: Bag = sessionStorage) {
+  if (!token || !isInviteToken(token)) return "";
+  if (inviteTokenFromHash(hash) === token) {
+    const fromHash = inviteOwnerName(hash);
+    if (fromHash) return fromHash;
+  }
+  if (storedToken(storage, session) === token) return readInviteName(storage, session);
+  return "";
+}
+
+export type InvitePreview =
+  | { status: "invalid" }
+  | { status: "unknown" }
+  | { status: "valid"; houseName?: string };
+
+/** What the client can prove before any preview request. */
+export function localInvitePreview(token: string | null, session: Bag = sessionStorage): InvitePreview {
+  if (!token || !isInviteToken(token) || readInviteInvalid(token, session)) return { status: "invalid" };
+  return { status: "unknown" };
+}
+
+/**
+ * Read-only preview seam. momong-api does not ship GET /household/invite/:token yet.
+ * `requestInvitePreview` stays null until that endpoint exists.
+ * Null falls back to local knowledge: invalid stays invalid, everything else stays unknown.
+ * Unknown keeps today's confirm step after the check state.
+ */
+export async function requestInvitePreview(_token: string): Promise<InvitePreview | null> {
+  return null;
+}
+
+export async function fetchInvitePreview(token: string, session: Bag = sessionStorage): Promise<InvitePreview> {
+  const local = localInvitePreview(token, session);
+  if (local.status === "invalid") return local;
+  try {
+    const remote = await requestInvitePreview(token);
+    return remote ?? local;
+  } catch {
+    return local;
+  }
+}
+
+export type GabungPhase = "checking" | "ask" | "joining" | "error";
+
+export function gabungPhaseForToken(token: string | null, session: Bag = sessionStorage): { phase: GabungPhase; joinCode: string } {
+  if (!token) return { phase: "error", joinCode: "" };
+  if (!isInviteToken(token) || readInviteInvalid(token, session)) return { phase: "error", joinCode: "invite_invalid" };
+  return { phase: "checking", joinCode: "" };
+}
+
+/** Null when the token is unchanged. A new token drops phase, error code, and the previous house. */
+export function gabungOnTokenChange(current: string | null, next: string | null, session: Bag = sessionStorage) {
+  if (next === current) return null;
+  return { token: next, ...gabungPhaseForToken(next, session) };
+}
+
+export function gabungAfterPreview(phase: GabungPhase, preview: InvitePreview): GabungPhase {
+  if (preview.status === "invalid") return "error";
+  if (phase === "checking" && (preview.status === "unknown" || preview.status === "valid")) return "ask";
+  return phase;
+}
+
+export function houseNameAfterPreview(current: string, preview: InvitePreview) {
+  if (preview.status !== "valid") return current;
+  const name = preview.houseName?.trim().slice(0, 80) ?? "";
+  return name || current;
+}
+
+/**
+ * The confirm sheet opens only after a check that did not prove the token invalid.
+ * Format failures and a cached invite_invalid result never open it.
+ * `checking` is the neutral wait. `unknown` is today's confirm step.
+ */
+export function gabungSheetOpen(input: {
+  token: string | null;
+  phase: GabungPhase;
+  joinCode: string;
+  signedIn: boolean;
+  hasPartner: boolean;
+  session?: Bag;
+}) {
+  const session = input.session ?? sessionStorage;
+  if (!input.token || !isInviteToken(input.token)) return false;
+  if (readInviteInvalid(input.token, session)) return false;
+  if (input.joinCode === "invite_invalid") return false;
+  if (!input.signedIn || input.hasPartner) return false;
+  return input.phase === "ask" || input.phase === "joining";
+}
+
 export const INVITE_INVALID_TITLE = "Tautan tidak valid atau sudah kedaluwarsa";
 
 export function joinFailureMessage(code: string) {
