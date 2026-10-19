@@ -6,15 +6,15 @@ import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, partnerSyncScreen, useHousehold } from "../household";
 import {
-  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungErrorActions, gabungHouseName, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview,
-  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteInvalid, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
+  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungErrorActions, gabungHouseName, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromHash, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview,
+  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInviteInvalid, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
   type GabungPhase,
 } from "../invite";
 import { go } from "../route";
 import { getPrefs, setPrefs } from "../store";
 import {
   HAS_API, setSyncEnabled, abandonGoogleStart, ApiError, acceptInvite, consumePendingInvite, createInvite, googlePhase, inviteReadyFor, removeMember, takeGoogleReturn,
-  requestMagicLink, signOut, startGoogle, syncNow, refreshMe, useAccount, authDestination, verifyMagicLink, type HouseholdInvite,
+  requestMagicLink, signOut, startGoogle, syncNow, refreshMe, useAccount, destinationAfterLogin, verifyMagicLink, type HouseholdInvite,
 } from "../sync";
 import { Sheet, toast, TopBar } from "../ui";
 
@@ -429,6 +429,7 @@ function JoinCodeSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
   const [confirmName, setConfirmName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const joinLock = useRef({ held: false });
+  const account = useAccount();
   useEffect(() => {
     if (open) return;
     setScanning(false);
@@ -452,7 +453,10 @@ function JoinCodeSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
     setBusy(true);
     setError("");
     try {
-      rememberInvite(token, localStorage, sessionStorage, { name: confirmName });
+      rememberInvite(token, localStorage, sessionStorage, {
+        name: confirmName,
+        ...(account.me?.user.id ? { accountId: account.me.user.id } : {}),
+      });
       const result = await acceptInvite(token);
       if (result === "skipped") {
         joinLock.current.held = false;
@@ -522,12 +526,13 @@ export function MagicLanding({ token }: { token: string | null }) {
       try {
         if (!verifying.has(token)) verifying.set(token, verifyMagicLink(token));
         await verifying.get(token);
-        const pendingInvite = readInvite();
-        if (pendingInvite) {
-          go(`#/gabung?invite=${encodeURIComponent(pendingInvite)}`);
+        const next = await destinationAfterLogin("#/");
+        if (inviteTokenFromHash(next)) {
+          go(next);
           return;
-        } else toast("Sudah masuk. Selamat datang kembali!");
-        go(authDestination("#/"));
+        }
+        toast("Sudah masuk. Selamat datang kembali!");
+        go(next);
       } catch {
         setState("error");
       }
@@ -624,17 +629,17 @@ export function JoinLanding({ invite }: { invite: string | null }) {
 
   useEffect(() => {
     if (!valid || !liveInvite || inApp) return;
+    const accountId = h.me?.user.id;
     rememberInvite(liveInvite, localStorage, sessionStorage, {
       name: inviteOwnerName(location.hash),
-      accountId: h.me?.user.id ?? null,
+      ...(accountId ? { accountId } : {}),
     });
     if (!h.signedIn) {
       const back = inviteReturnHash(liveInvite);
       if (isSafeInviteReturn(back)) sessionStorage.setItem("bb_auth_return", back);
       return;
     }
-    const result = reconcilePendingInvite(h.me?.user.id ?? null);
-    setForeignInvite(result === "foreign");
+    setForeignInvite(false);
   }, [liveInvite, valid, inApp, h.signedIn, h.me?.user.id]);
 
   useEffect(() => {

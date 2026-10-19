@@ -25,6 +25,7 @@ test("logged-out invite survives Google and waits for confirm", async () => {
   let me = structuredClone(solo);
   let joinStatus = 200;
   let allowSession = false;
+  let previewBody: Record<string, unknown> | null = null;
   globalThis.fetch = (async (url: string, init?: RequestInit) => {
     const path = new URL(url).pathname;
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
@@ -32,8 +33,10 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     if (path === "/api/auth/sign-in/social") return Response.json({ url: "https://accounts.google.com/o/oauth2/v2/auth" });
     if (path === "/api/auth/get-session") {
       if (!allowSession) return Response.json({}, { status: 401 });
-      assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "the invite hash is restored before the session call");
       return Response.json({ session: { token: "google-session" } }, { headers: { "set-auth-token": "google-session" } });
+    }
+    if (path.startsWith("/household/invite/") && path.endsWith("/preview")) {
+      return Response.json(previewBody ?? { ok: true });
     }
     if (path === "/me") return Response.json(me);
     if (path === "/household/join") {
@@ -90,7 +93,7 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     loc.hash = "#/";
 
     saveInvite();
-    assert.equal(sync.authDestination("#/"), "#/gabung?invite=inviteTok1", "after sign-in a saved invite opens the confirm step");
+    assert.equal(sync.authDestination("#/"), "#/", "a saved invite with no owner does not open before the account is known");
 
     memory.set("bb_auth_return", "#/gabung?invite=inviteTok1");
     await sync.startGoogle();
@@ -106,9 +109,8 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     await sync.finishGoogle();
     assert.equal(calls.filter((call) => call.path === "/household/join").length, 0, "Google return does not join before confirm");
     assert.equal(sync.account().token, "google-session");
-    assert.equal(memory.get("bb_pending_invite"), "inviteTok1");
-    assert.equal(memory.get("bb_pending_invite_user"), "u2");
-    assert.equal(loc.hash, "#/gabung?invite=inviteTok1");
+    assert.equal(memory.has("bb_pending_invite"), false, "a saved invite with no owner is cleared on login");
+    assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "this session's invite return still opens");
     assert.equal(memory.has("bb_auth_return"), false);
     assert.equal(await sync.acceptInvite("inviteTok1"), "joined");
     assert.equal(calls.filter((call) => call.path === "/household/join").length, 1);
@@ -122,10 +124,54 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     memory.set("bb_google", "away");
     loc.hash = "#/profil";
     await sync.finishGoogle();
-    assert.equal(memory.get("bb_pending_invite"), "inviteTok1", "a different account keeps the saved invite");
-    assert.equal(memory.get("bb_pending_invite_user"), "someone-else");
-    assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "a different account opens the invite so they can choose");
+    assert.equal(memory.has("bb_pending_invite"), false, "a different account clears the saved invite");
+    assert.equal(memory.has("bb_pending_invite_user"), false);
+    assert.equal(loc.hash, "#/profil", "a different account does not open the saved invite");
     assert.equal(calls.filter((call) => call.path === "/household/join").length, 1);
+
+    await sync.signOut();
+    saveInvite();
+    memory.delete("bb_pending_invite_user");
+    memory.delete("bb_auth_return");
+    memory.set("bb_google", "away");
+    loc.hash = "#/profil";
+    await sync.finishGoogle();
+    assert.equal(memory.has("bb_pending_invite"), false, "a missing owner is stale on the next sign-in");
+    assert.equal(loc.hash, "#/profil");
+
+    await sync.signOut();
+    saveInvite();
+    memory.set("bb_pending_invite_user", "u2");
+    memory.delete("bb_auth_return");
+    previewBody = { status: "used", householdName: null, seatsFilled: 2, seatsTotal: 2, full: true };
+    memory.set("bb_google", "away");
+    loc.hash = "#/profil";
+    await sync.finishGoogle();
+    assert.equal(memory.has("bb_pending_invite"), false, "a used invite is dropped instead of opened");
+    assert.equal(loc.hash, "#/profil");
+    assert.equal(calls.some((call) => call.path.endsWith("/preview")), true);
+    previewBody = { status: "expired", householdName: null, seatsFilled: 1, seatsTotal: 2, full: false };
+    await sync.signOut();
+    saveInvite();
+    memory.set("bb_pending_invite_user", "u2");
+    memory.set("bb_google", "away");
+    loc.hash = "#/profil";
+    await sync.finishGoogle();
+    assert.equal(loc.hash, "#/profil", "an expired invite is dropped instead of opened");
+    previewBody = null;
+
+    await sync.signOut();
+    saveInvite();
+    memory.set("bb_pending_invite_user", "u2");
+    memory.delete("bb_auth_return");
+    previewBody = { status: "valid", householdName: "Sari", seatsFilled: 1, seatsTotal: 2, full: false };
+    memory.set("bb_google", "away");
+    loc.hash = "#/profil";
+    await sync.finishGoogle();
+    assert.equal(memory.get("bb_pending_invite"), "inviteTok1", "the same account keeps a live saved invite");
+    assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "the same account opens a live saved invite");
+    previewBody = null;
+
     await sync.signOut();
     me = structuredClone(solo);
     joinStatus = 410;
@@ -137,7 +183,7 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     assert.equal(sync.account().token, "google-session", "a bad invite does not throw away the new session");
     assert.equal(loc.hash, "#/gabung?invite=inviteTok1");
     assert.notEqual(loc.hash, "#/masuk-akun");
-    assert.equal(memory.get("bb_pending_invite"), "inviteTok1");
+    assert.equal(memory.has("bb_pending_invite"), false, "an unowned invite is cleared even when this session returns to it");
     await assert.rejects(() => sync.acceptInvite("inviteTok1"));
     assert.equal(sync.account().token, "google-session");
     assert.equal(sync.account().syncEnabled, true);

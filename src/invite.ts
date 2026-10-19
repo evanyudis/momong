@@ -104,12 +104,14 @@ export function rememberInvite(
     storage.removeItem(PENDING_INVITE_NAME);
     session.removeItem(PENDING_INVITE_NAME);
   }
-  if (meta.accountId) {
-    storage.setItem(PENDING_INVITE_USER, meta.accountId);
-    session.setItem(PENDING_INVITE_USER, meta.accountId);
-  } else {
-    storage.removeItem(PENDING_INVITE_USER);
-    session.removeItem(PENDING_INVITE_USER);
+  if ("accountId" in meta) {
+    if (meta.accountId) {
+      storage.setItem(PENDING_INVITE_USER, meta.accountId);
+      session.setItem(PENDING_INVITE_USER, meta.accountId);
+    } else {
+      storage.removeItem(PENDING_INVITE_USER);
+      session.removeItem(PENDING_INVITE_USER);
+    }
   }
   return true;
 }
@@ -143,21 +145,40 @@ export function readInviteName(storage: Bag = localStorage, session: Bag = sessi
   return (session.getItem(PENDING_INVITE_NAME) || storage.getItem(PENDING_INVITE_NAME) || "").trim().slice(0, 80);
 }
 
+/** Owner recorded with the saved invite. Session wins when both exist; localStorage covers a new browser session. */
+export function readInviteOwner(storage: Bag = localStorage, session: Bag = sessionStorage) {
+  return session.getItem(PENDING_INVITE_USER) || storage.getItem(PENDING_INVITE_USER) || null;
+}
+
 /**
- * A link opened before login is claimed by the account that signs in.
- * An invite saved for a different account stays until that person chooses.
+ * On login, a saved invite stays only when its owner is the account that just signed in.
+ * A different owner is cleared. A missing owner is a leftover from another session and is cleared too.
+ * Logged-out reads do not clear it, so the invite page can still set a return for this session.
  */
 export function reconcilePendingInvite(currentAccountId: string | null, now = Date.now(), storage: Bag = localStorage, session: Bag = sessionStorage) {
   const token = readInvite(storage, session, now);
   if (!token) return "cleared" as const;
-  const stored = session.getItem(PENDING_INVITE_USER) || storage.getItem(PENDING_INVITE_USER);
-  if (currentAccountId && stored && stored !== currentAccountId) return "foreign" as const;
-  if (currentAccountId && !stored) {
-    storage.setItem(PENDING_INVITE_USER, currentAccountId);
-    session.setItem(PENDING_INVITE_USER, currentAccountId);
-    return "claimed" as const;
-  }
-  return "kept" as const;
+  if (!currentAccountId) return "kept" as const;
+  if (readInviteOwner(storage, session) === currentAccountId) return "kept" as const;
+  clearInvite(storage, session);
+  return "cleared" as const;
+}
+
+/**
+ * Whether login may navigate to an invite.
+ * An explicit return is a link opened in this browser session.
+ * A preview of invalid, expired, or used drops the invite. A failed preview does not.
+ */
+export function loginInviteChoice(input: {
+  accountId: string | null;
+  ownerId: string | null;
+  explicit: boolean;
+  preview: InvitePreview | null;
+}): "open" | "drop" {
+  if (input.preview?.status === "invalid") return "drop";
+  if (input.explicit) return "open";
+  if (input.accountId && input.ownerId === input.accountId) return "open";
+  return "drop";
 }
 
 /** Use a saved invite on the account that is signed in now. */

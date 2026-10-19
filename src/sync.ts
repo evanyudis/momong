@@ -1,6 +1,6 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
-import { bindInvitePreview, clearInvite, googleReturnAction, inviteReturnHash, isInviteToken, isSafeInviteReturn, mapServerInvitePreview, navigationType, readInvite, reconcilePendingInvite, type InvitePreview } from "./invite";
+import { bindInvitePreview, clearInvite, googleReturnAction, inviteReturnHash, inviteTokenFromHash, isInviteToken, isSafeInviteReturn, loginInviteChoice, mapServerInvitePreview, navigationType, readInvite, readInviteOwner, reconcilePendingInvite, type InvitePreview } from "./invite";
 import { PLUS_ENABLED } from "./release";
 import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
 import { setPlusAccess, isPlus, applyRemote, clearAccountRecords, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
@@ -116,8 +116,36 @@ export function authDestination(fallback = "#/profil") {
   if (target === "#/plus" || target === "#/pasangan") return target;
   if (target && isSafeInviteReturn(target)) return target;
   const pending = readInvite();
-  if (pending) return inviteReturnHash(pending);
+  const accountId = state.me?.user.id ?? null;
+  if (pending && accountId && readInviteOwner() === accountId) return inviteReturnHash(pending);
   return fallback;
+}
+
+/** After login: drop a leftover or dead invite, then open one that belongs to this account or this session. */
+export async function destinationAfterLogin(fallback = "#/profil") {
+  const target = sessionStorage.getItem("bb_auth_return");
+  sessionStorage.removeItem("bb_auth_return");
+  if (target === "#/plus" || target === "#/pasangan") return target;
+
+  const explicitToken = target && isSafeInviteReturn(target) ? inviteTokenFromHash(target) : null;
+  const saved = readInvite();
+  const ownerId = readInviteOwner();
+  const accountId = state.me?.user.id ?? null;
+  if (saved && (!accountId || ownerId !== accountId)) clearInvite();
+
+  const candidate = explicitToken || (accountId && ownerId === accountId ? saved : null);
+  if (!candidate) return fallback;
+  const preview = await loadInvitePreview(candidate);
+  if (loginInviteChoice({
+    accountId,
+    ownerId: ownerId === accountId ? ownerId : null,
+    explicit: !!explicitToken,
+    preview,
+  }) === "drop") {
+    if (readInvite() === candidate) clearInvite();
+    return fallback;
+  }
+  return inviteReturnHash(candidate);
 }
 
 function clearSession() {
@@ -343,7 +371,7 @@ export async function resumeAuthAttempt() {
       return;
     }
     finishAuthAttempt(null);
-    assignHash(authDestination(attempt.mode === "daftar" ? "#/" : "#/profil"));
+    assignHash(await destinationAfterLogin(attempt.mode === "daftar" ? "#/" : "#/profil"));
   } catch (error) {
     if (error instanceof ApiError && error.code === "created") {
       finishAuthAttempt({ id: ++authResultId, status: 409, failure: "created" });
@@ -469,7 +497,8 @@ function callbackHash() {
 }
 
 /** Boot after Google: the callback left a Better Auth session cookie on this origin. Trade it for the bearer, then the same session path as email.
- *  A stored invite returns to the confirm step. It is not joined until that tap. No session: sign-in reads the marker.
+ *  A saved invite opens only when it belongs to this account, or this session returned to it, and the preview is not dead.
+ *  It is not joined until that tap. No session: sign-in reads the marker.
  *  iOS can drop the sessionStorage marker on the way back from Google. The callback hash and cookie are still a new session. */
 export async function finishGoogle() {
   const marker = sessionStorage.getItem(GOOGLE_AWAY);
@@ -491,11 +520,6 @@ export async function finishGoogle() {
     return;
   }
   sessionStorage.setItem(GOOGLE_AWAY, "finishing");
-  const pending = readInvite();
-  if (pending) {
-    const dest = inviteReturnHash(pending);
-    if (isSafeInviteReturn(dest) && location.hash !== dest) location.hash = dest;
-  }
   try {
     const token = await readCookieSession();
     if (!token) throw new ApiError(401, "no_session");
@@ -506,8 +530,7 @@ export async function finishGoogle() {
     return;
   }
   sessionStorage.removeItem(GOOGLE_AWAY);
-  if (landAfterSession()) return;
-  location.hash = authDestination();
+  await goAfterLogin("#/profil");
 }
 
 /** A cookie with no local token is the OAuth return after iOS drops `bb_google`. Same restore as a marked return. */
@@ -516,18 +539,13 @@ async function claimCookieSession() {
     const token = await readCookieSession();
     if (!token) return;
     await sessionEstablished(token);
-    landAfterSession();
+    await goAfterLogin(location.hash || "#/profil");
   } catch { /* no cookie session */ }
 }
 
-function landAfterSession() {
-  const pendingNow = readInvite();
-  if (pendingNow && isInviteToken(pendingNow)) {
-    sessionStorage.removeItem("bb_auth_return");
-    location.hash = inviteReturnHash(pendingNow);
-    return true;
-  }
-  return false;
+async function goAfterLogin(fallback: string) {
+  const next = await destinationAfterLogin(fallback);
+  if (next && location.hash !== next) location.hash = next;
 }
 
 export async function refreshMe() {
