@@ -25,6 +25,7 @@ test("logged-out invite survives Google and waits for confirm", async () => {
   let me = structuredClone(solo);
   let joinStatus = 200;
   let allowSession = false;
+  let expectPasanganBeforeMe = false;
   let previewBody: Record<string, unknown> | null = null;
   globalThis.fetch = (async (url: string, init?: RequestInit) => {
     const path = new URL(url).pathname;
@@ -38,10 +39,19 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     if (path.startsWith("/household/invite/") && path.endsWith("/preview")) {
       return Response.json(previewBody ?? { ok: true });
     }
-    if (path === "/me") return Response.json(me);
+    if (path === "/me") {
+      if (expectPasanganBeforeMe) {
+        assert.equal(loc.hash, "#/pasangan", "a successful join replaces the route before /me");
+        assert.equal(memory.has("bb_pending_invite"), false, "the saved invite is cleared before /me");
+        assert.equal(memory.has("bb_pending_invite_user"), false, "the saved invite owner is cleared before /me");
+        expectPasanganBeforeMe = false;
+      }
+      return Response.json(me);
+    }
     if (path === "/household/join") {
       assert.equal(body.token, "inviteTok1");
       if (joinStatus !== 200) return Response.json({ error: "invite_invalid" }, { status: joinStatus });
+      expectPasanganBeforeMe = true;
       me = structuredClone(solo);
       me.household.members.push({ id: "u1", email: "adit@example.com", name: "Adit", role: "owner" });
       return Response.json({ ok: true });
@@ -112,11 +122,15 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     assert.equal(memory.has("bb_pending_invite"), false, "a saved invite with no owner is cleared on login");
     assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "this session's invite return still opens");
     assert.equal(memory.has("bb_auth_return"), false);
+    saveInvite();
+    memory.set("bb_pending_invite_user", "u2");
     assert.equal(await sync.acceptInvite("inviteTok1"), "joined");
     assert.equal(calls.filter((call) => call.path === "/household/join").length, 1);
     assert.equal(sync.account().syncEnabled, true, "joining the invite turns sync on");
     assert.equal(memory.has("bb_pending_invite"), false);
-    assert.equal(loc.hash, "#/gabung?invite=inviteTok1");
+    assert.equal(memory.has("bb_pending_invite_user"), false);
+    assert.equal(loc.hash, "#/pasangan", "join success leaves Gabung for Pasangan");
+    assert.equal(expectPasanganBeforeMe, false, "the route was replaced before /me refreshed the pair");
 
     await sync.signOut();
     saveInvite();
@@ -185,6 +199,8 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     assert.notEqual(loc.hash, "#/masuk-akun");
     assert.equal(memory.has("bb_pending_invite"), false, "an unowned invite is cleared even when this session returns to it");
     await assert.rejects(() => sync.acceptInvite("inviteTok1"));
+    assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "a failed join stays on Gabung");
+    assert.equal(expectPasanganBeforeMe, false, "a failed join does not pretend the route moved");
     assert.equal(sync.account().token, "google-session");
     assert.equal(sync.account().syncEnabled, true);
 

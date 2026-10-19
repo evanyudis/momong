@@ -245,6 +245,22 @@ function assignHash(hash: string) {
   try { location.hash = hash; } catch { /* non-browser tests */ }
 }
 
+/** Replace the current history entry so Back does not return to the invite that was just used. */
+function replaceHash(hash: string) {
+  try {
+    if (typeof location.replace === "function") {
+      location.replace(hash);
+      return;
+    }
+  } catch { /* test doubles */ }
+  assignHash(hash);
+}
+
+let ownJoinToken: string | null = null;
+export function markOwnJoin(token: string) { ownJoinToken = token; }
+export function ownJoinActive() { return ownJoinToken !== null; }
+export function clearOwnJoin() { ownJoinToken = null; }
+
 function publishCreatedLogin(email: string) {
   sessionStorage.setItem(SIGNIN_DRAFT_KEY, JSON.stringify({ mode: "masuk", email, failure: "created" }));
   sessionStorage.setItem(AUTH_NOTICE_KEY, "created");
@@ -676,6 +692,12 @@ export async function joinHousehold(token: string) {
   run = (async () => {
     syncVersion++;
     await api("/household/join", { method: "POST", body: JSON.stringify({ token }), signal: AbortSignal.timeout(JOIN_TIMEOUT_MS) });
+    // The 200 already moved membership. Drop the invite and leave Gabung before /me
+    // can render this account as already paired.
+    clearInvite();
+    publishedInvite = null;
+    markOwnJoin(token);
+    replaceHash("#/pasangan");
     set({ hasSynced: false });
     localStorage.removeItem("bb_cursor");
     markAllDirty();

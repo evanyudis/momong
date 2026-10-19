@@ -492,9 +492,20 @@ export function gabungOnTokenChange(current: string | null, next: string | null,
 }
 
 export function gabungAfterPreview(phase: GabungPhase, preview: InvitePreview): GabungPhase {
+  if (phase === "joining") return "joining";
   if (preview.status === "invalid" || preview.status === "full") return "error";
   if (phase === "checking" && (preview.status === "unknown" || preview.status === "valid")) return "ask";
   return phase;
+}
+
+/**
+ * Already-paired is only for someone who opened Gabung that way.
+ * A join that just succeeded, or one still in flight, leaves for Pasangan instead.
+ */
+export function gabungJoinScreen(input: { hasPartner: boolean; phase: GabungPhase; ownJoin: boolean }): "joining" | "connected" | "continue" {
+  if (input.ownJoin || input.phase === "joining") return "joining";
+  if (input.hasPartner) return "connected";
+  return "continue";
 }
 
 export function joinCodeAfterPreview(current: string, preview: InvitePreview) {
