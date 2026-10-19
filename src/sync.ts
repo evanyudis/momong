@@ -4,7 +4,7 @@ import { bindInvitePreview, clearInvite, googleReturnAction, householdInviteRequ
 import { PLUS_ENABLED } from "./release";
 import { hasProfile } from "./onboarding";
 import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, isAuthScreen, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
-import { setPlusAccess, isPlus, adoptLocalOwner, applyRemote, getPrefs, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, setPrefs, settings } from "./store";
+import { setPlusAccess, isPlus, adoptLocalOwner, applyRemote, getPrefs, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, setPrefs, setRecordOwner, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
  *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
@@ -80,8 +80,13 @@ setPlusAccess(!!state.token && entitled(state.me));
 let sessionVersion = 0;
 let syncVersion = 0;
 const listeners = new Set<() => void>();
+function syncRecordOwner() {
+  setRecordOwner(state.token && state.me?.user?.id ? state.me.user.id : null);
+}
+
 function set(patch: Partial<State>) {
   state = { ...state, ...patch };
+  syncRecordOwner();
   const plus = !!state.token && entitled(state.me);
   if (plus && !isPlus()) { localStorage.removeItem("bb_cursor"); syncVersion++; }
   setPlusAccess(plus);
@@ -90,6 +95,7 @@ function set(patch: Partial<State>) {
   localStorage.setItem("bb_last_sync", JSON.stringify(state.lastSyncAt));
   listeners.forEach((l) => l());
 }
+syncRecordOwner();
 export const useAccount = () =>
   useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l); }, () => state, () => state);
 export const account = () => state;
@@ -779,7 +785,7 @@ export function syncNow(): Promise<void> {
   inFlight = (async () => {
     set({ status: "syncing" });
     try {
-      const changes = pending().slice(0, 1000);
+      const changes = pending().slice(0, 1000); // pending() is only this account's ownerId
       const since = Number(localStorage.getItem("bb_cursor") ?? 0);
       const { data } = await api<{ cursor: number; changes: any[]; hasMore?: boolean }>("/sync", {
         method: "POST",

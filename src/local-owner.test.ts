@@ -40,5 +40,7 @@ test("a solo account keeps its profile on the same device, and another account d
   assert.equal(store.settings().babyName, "Bayi I");
   assert.equal(store.getPrefs().name, "qa-d-1018");
   assert.equal(store.get("bottle", "note-d")?.ml, 40);
-  assert.equal(store.pending().some((row) => row.id === "note-d"), true, "the restored queue is still what sync would upload");
+  assert.equal(store.get("bottle", "note-d")?.ownerId, "anon", "claiming a logged-out note does not tag it with the account");
+  store.setRecordOwner("qa-d");
+  assert.equal(store.pending().some((row) => row.id === "note-d"), false, "claiming a logged-out note does not make it uploadable");
 });
