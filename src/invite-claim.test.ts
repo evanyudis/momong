@@ -105,7 +105,7 @@ test("a logged-out invite is claimed by the account created or signed in during 
     memory.delete("bb_auth_return");
     await sync.authEmail("masuk", "ada@example.com", "password123");
     assert.equal(memory.has("bb_pending_invite"), false, "a leftover invite from another account is cleared");
-    assert.equal(await sync.destinationAfterLogin("#/profil"), "#/profil");
+    assert.equal(await sync.destinationAfterLogin("#/profil"), "#/", "a solo re-login with a profile opens Beranda");
     assert.equal(store.settings().babyName, "Bayi Ada");
   } finally {
     globalThis.fetch = realFetch;

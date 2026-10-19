@@ -4,7 +4,7 @@ import { bindInvitePreview, clearInvite, googleReturnAction, householdInviteRequ
 import { PLUS_ENABLED } from "./release";
 import { hasProfile } from "./onboarding";
 import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, isAuthScreen, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
-import { setPlusAccess, isPlus, adoptLocalOwner, applyRemote, getPrefs, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, setPrefs, setRecordOwner, settings } from "./store";
+import { setPlusAccess, isPlus, adoptLocalOwner, applyRemote, getPrefs, markAllDirty, markPushed, onLocalChange, parkProfileForJoin, pending, resetDeviceData, setPrefs, setRecordOwner, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
  *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
@@ -153,13 +153,14 @@ export async function destinationAfterLogin(fallback = "#/profil") {
   const saved = readInvite();
   const ownerId = readInviteOwner();
   const candidate = accountId && saved && ownerId === accountId ? saved : null;
-  if (!candidate) return fallback;
+  const onboarded = hasProfile(settings());
+  if (!candidate) return postLoginRoute({ fallback, invite: null, onboarded });
   const preview = await loadInvitePreview(candidate);
   if (loginInviteChoice({ accountId, ownerId, explicit: false, preview }) === "drop") {
     if (readInvite() === candidate) clearInvite();
-    return fallback;
+    return postLoginRoute({ fallback, invite: null, onboarded });
   }
-  return postLoginRoute({ fallback, invite: candidate, onboarded: hasProfile(settings()) });
+  return postLoginRoute({ fallback, invite: candidate, onboarded });
 }
 
 function clearSession() {
@@ -712,6 +713,8 @@ export async function acceptInvite(token: string): Promise<"joined" | "skipped">
     clearInvite();
     return "skipped";
   }
+  // Park before the sync that setSyncEnabled starts, so that request cannot carry this profile into the new house.
+  parkProfileForJoin(state.me.user.id);
   if (!state.syncEnabled) setSyncEnabled(true);
   await joinHousehold(token);
   clearInvite();
@@ -755,11 +758,15 @@ export async function joinHousehold(token: string) {
     clearInvite();
     publishedInvite = null;
     markOwnJoin(token);
+    // The house already has a profile. This phone's copy is set aside, not uploaded and not deleted.
+    if (state.me?.user.id) parkProfileForJoin(state.me.user.id);
     replaceHash("#/pasangan");
     set({ hasSynced: false });
     localStorage.removeItem("bb_cursor");
     markAllDirty();
     await refreshMe();
+    // A sync that started before membership moved ignores its response. The next one pulls the house.
+    await syncNow();
     await syncNow();
   })().finally(() => {
     if (joinFlight.get(token) === run) joinFlight.delete(token);

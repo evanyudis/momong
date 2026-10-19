@@ -309,6 +309,43 @@ export function adoptLocalOwner(userId: string): "kept" | "restored" | "claimed"
   return "fresh";
 }
 
+/** Profile this phone had before joining a house. Not the account bundle, so re-login does not put it back on screen. */
+export const PREJOIN_PROFILE_PREFIX = "bb_prejoin_profile:";
+
+export function readParkedProfile(userId: string): { settings: Record<string, Rec>; baby: Record<string, Rec> } | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PREJOIN_PROFILE_PREFIX + userId) ?? "");
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      settings: parsed.settings && typeof parsed.settings === "object" ? parsed.settings : {},
+      baby: parsed.baby && typeof parsed.baby === "object" ? parsed.baby : {},
+    };
+  } catch { return null; }
+}
+
+/**
+ * Take this phone's profile and baby rows out of the open database before a join upload.
+ * They stay on the device. They are not tombstoned, so the house profile is not deleted.
+ * A second call with nothing left does not wipe the copy already parked.
+ */
+export function parkProfileForJoin(userId: string) {
+  if (!userId) return;
+  const settingsRows = db.settings ?? {};
+  const babyRows = db.baby ?? {};
+  if (!Object.keys(settingsRows).length && !Object.keys(babyRows).length) return;
+  const parked = readParkedProfile(userId) ?? { settings: {}, baby: {} };
+  localStorage.setItem(PREJOIN_PROFILE_PREFIX + userId, JSON.stringify({
+    settings: { ...parked.settings, ...settingsRows },
+    baby: { ...parked.baby, ...babyRows },
+  }));
+  const next = { ...db };
+  delete next.settings;
+  delete next.baby;
+  db = next;
+  for (const key of [...dirty]) if (key.startsWith("settings/") || key.startsWith("baby/")) dirty.delete(key);
+  commit(false);
+}
+
 export type Backup = { data: DB; preferences: Prefs; records: number };
 export const deviceHasData = () => Object.values(db).some((rows) => Object.keys(rows ?? {}).length > 0);
 const collections: Collection[] = ["baby", "settings", "contractions", "kicks", "symptoms", "bag", "bottle", "breast", "pump", "diaper", "wishlist"];
