@@ -6,14 +6,14 @@ import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, partnerSyncScreen, useHousehold } from "../household";
 import {
-  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungErrorActions, gabungHouseName, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromHash, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview,
+  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromHash, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview,
   isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInviteInvalid, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
   type GabungPhase,
 } from "../invite";
 import { go } from "../route";
 import { getPrefs, setPrefs } from "../store";
 import {
-  HAS_API, setSyncEnabled, abandonGoogleStart, ApiError, acceptInvite, consumePendingInvite, createInvite, googlePhase, inviteReadyFor, removeMember, takeGoogleReturn,
+  HAS_API, setSyncEnabled, abandonGoogleStart, ApiError, acceptInvite, clearOwnJoin, consumePendingInvite, createInvite, googlePhase, inviteReadyFor, ownJoinActive, removeMember, takeGoogleReturn,
   requestMagicLink, signOut, startGoogle, syncNow, refreshMe, useAccount, destinationAfterLogin, verifyMagicLink, type HouseholdInvite,
 } from "../sync";
 import { Sheet, toast, TopBar } from "../ui";
@@ -576,6 +576,8 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   const [serverName, setServerName] = useState("");
   const [nameSource, setNameSource] = useState<"pending" | "server" | "fallback">("pending");
   const joinLock = useRef({ held: false });
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
   void hashTick;
   const liveInvite = inviteParamFromHash(location.hash) ?? invite;
   const valid = !!liveInvite && isInviteToken(liveInvite);
@@ -604,7 +606,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     phase,
     joinCode,
     signedIn: h.signedIn,
-    hasPartner: !!h.partner,
+    hasPartner: phase === "joining" ? false : !!h.partner,
   });
 
   useEffect(() => {
@@ -617,7 +619,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     if (!liveInvite || !isInviteToken(liveInvite) || readInviteInvalid(liveInvite)) return;
     let cancel = false;
     void fetchInvitePreview(liveInvite).then((preview) => {
-      if (cancel) return;
+      if (cancel || ownJoinActive() || phaseRef.current === "joining") return;
       if (preview.status === "invalid") rememberInviteInvalid(liveInvite);
       setNameSource(preview.status === "unknown" ? "fallback" : "server");
       setServerName((current) => houseNameAfterPreview(current, preview));
@@ -627,8 +629,10 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     return () => { cancel = true; };
   }, [liveInvite]);
 
+  useEffect(() => () => { clearOwnJoin(); }, []);
+
   useEffect(() => {
-    if (!valid || !liveInvite || inApp) return;
+    if (!valid || !liveInvite || inApp || phase === "joining" || ownJoinActive()) return;
     const accountId = h.me?.user.id;
     rememberInvite(liveInvite, localStorage, sessionStorage, {
       name: inviteOwnerName(location.hash),
@@ -640,7 +644,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
       return;
     }
     setForeignInvite(false);
-  }, [liveInvite, valid, inApp, h.signedIn, h.me?.user.id]);
+  }, [liveInvite, valid, inApp, phase, h.signedIn, h.me?.user.id]);
 
   useEffect(() => {
     if (!valid || !h.signedIn || inApp || !h.partner) return;
@@ -703,14 +707,15 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     if (!token || !claimJoinClick(joinLock.current)) return;
     flushSync(() => setPhase("joining"));
     const result = await consumePendingInvite(token);
-    if (inviteParamFromHash(location.hash) !== token) {
-      joinLock.current.held = false;
-      return;
-    }
     const next = gabungAfterJoin(result);
     if (next.joined) {
+      clearInvite();
       toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
-      if (joinResultRoute("joined") === "pasangan") go("#/pasangan");
+      if (location.hash !== "#/pasangan") go("#/pasangan");
+      return;
+    }
+    if (inviteParamFromHash(location.hash) !== token) {
+      joinLock.current.held = false;
       return;
     }
     joinLock.current.held = false;
@@ -721,7 +726,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
 
   if (!HAS_API) return <><TopBar title="Gabung" /><NoServer /></>;
   if (!liveInvite) return <><TopBar title="Gabung" /><div className="card solid empty"><strong>Tautan tidak lengkap</strong>Minta pasangan kirim ulang undangan.</div></>;
-  if (!valid || joinCode === "invite_invalid" || readInviteInvalid(liveInvite)) {
+  if (phase !== "joining" && (!valid || joinCode === "invite_invalid" || readInviteInvalid(liveInvite))) {
     return (
       <>
         <TopBar title="Gabung" />
@@ -737,6 +742,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   const phaseNow = googlePhase();
   const showGoogleError = inviteShowsGoogleError({ returnedWithoutSession: returned, startFailed });
   const entry = inviteEntry({ signedIn: h.signedIn, validInvite: valid, hasPartner: !!h.partner });
+  const arrival = gabungJoinScreen({ hasPartner: !!h.partner, phase, ownJoin: ownJoinActive() });
   if (foreignInvite && h.signedIn) {
     return (
       <>
@@ -749,7 +755,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
       </>
     );
   }
-  if (entry === "connected") {
+  if (arrival === "connected") {
     return (
       <>
         <TopBar title="Gabung" />

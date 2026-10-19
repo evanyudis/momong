@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungClickResult, gabungErrorActions, gabungHouseName, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, googleReturnAction, houseNameForInvite, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, mapServerInvitePreview,
+  claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungClickResult, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, googleReturnAction, houseNameForInvite, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, mapServerInvitePreview,
   isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, loginInviteChoice, markInviteSent, pairSteps, readInvite, readInviteOwner, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
 } from "./invite.ts";
 
@@ -318,6 +318,8 @@ test("preview maps invalid, full, and valid house names", () => {
   assert.equal(gabungAfterPreview("checking", { status: "full" }), "error");
   assert.equal(gabungAfterPreview("checking", { status: "valid", houseName: "Sari" }), "ask");
   assert.equal(gabungAfterPreview("joining", { status: "unknown" }), "joining");
+  assert.equal(gabungAfterPreview("joining", { status: "invalid" }), "joining");
+  assert.equal(gabungAfterPreview("joining", { status: "full" }), "joining");
   assert.equal(joinCodeAfterPreview("", { status: "full" }), "seats_full");
   assert.equal(joinCodeAfterPreview("", { status: "invalid" }), "invite_invalid");
   assert.equal(joinCodeAfterPreview("kept", { status: "valid", houseName: "Sari" }), "kept");
@@ -330,6 +332,13 @@ test("preview maps invalid, full, and valid house names", () => {
   assert.equal(gabungHouseName({ serverName: "Sari", fallbackName: "Dari", source: "server" }), "Sari");
   assert.equal(gabungHouseName({ serverName: "", fallbackName: "Dari", source: "server" }), "");
   assert.equal(gabungHouseName({ serverName: "", fallbackName: "Dari", source: "fallback" }), "Dari");
+});
+
+test("your own join leaves for Pasangan instead of the already-paired screen", () => {
+  assert.equal(gabungJoinScreen({ hasPartner: true, phase: "ask", ownJoin: false }), "connected");
+  assert.equal(gabungJoinScreen({ hasPartner: true, phase: "joining", ownJoin: false }), "joining");
+  assert.equal(gabungJoinScreen({ hasPartner: true, phase: "error", ownJoin: true }), "joining");
+  assert.equal(gabungJoinScreen({ hasPartner: false, phase: "ask", ownJoin: false }), "continue");
 });
 
 test("a full house offers only Kembali", () => {
