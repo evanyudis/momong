@@ -13,6 +13,7 @@ import { Drawer } from "vaul";
 import { PLUS_COPY, PLUS_FEATURES, type PlusVariant } from "./content";
 import { dayLabel } from "./dates";
 import { keyboardInset, sheetKeyboardMaxHeight } from "./sheet-keyboard";
+import { pickSheetFocus } from "./sheet-focus";
 
 /**
  * Native date/time picker that fits its container: full width, value left-aligned, calendar glyph on the right.
@@ -36,10 +37,8 @@ function useSheetFocus(initialFocus?: RefObject<HTMLElement | null>) {
       event.preventDefault();
       previous.current = document.activeElement as HTMLElement;
       const dialog = event.currentTarget as HTMLElement;
-      const target = initialFocus?.current ?? (matchMedia("(pointer: coarse)").matches
-        ? dialog.querySelector<HTMLElement>("h3")
-        : dialog.querySelector<HTMLElement>('button:not(:disabled), [role="button"], input:not(:disabled), a[href]'));
-      (target ?? dialog).focus({ preventScroll: true });
+      const target = pickSheetFocus(dialog, initialFocus?.current ?? null);
+      if (target instanceof HTMLElement) target.focus({ preventScroll: true });
     },
     onCloseAutoFocus(event: Event) {
       event.preventDefault();

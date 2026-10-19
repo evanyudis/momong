@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungClickResult, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, googleReturnAction, houseNameForInvite, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, mapServerInvitePreview,
+  claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungClickResult, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, googleReturnAction, houseNameForInvite, householdInviteRequest, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, mapServerInvitePreview,
   isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, loginInviteChoice, markInviteSent, pairSteps, readInvite, readInviteOwner, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
 } from "./invite.ts";
 
@@ -332,6 +332,23 @@ test("preview maps invalid, full, and valid house names", () => {
   assert.equal(gabungHouseName({ serverName: "Sari", fallbackName: "Dari", source: "server" }), "Sari");
   assert.equal(gabungHouseName({ serverName: "", fallbackName: "Dari", source: "server" }), "");
   assert.equal(gabungHouseName({ serverName: "", fallbackName: "Dari", source: "fallback" }), "Dari");
+});
+
+test("an expired invite is the invalid link screen", () => {
+  const preview = mapServerInvitePreview({ status: "expired", householdName: null, full: false });
+  assert.equal(preview?.status, "invalid");
+  assert.equal(joinCodeAfterPreview("", preview!), "invite_invalid");
+  assert.equal(gabungAfterPreview("checking", preview!), "error");
+  assert.equal(INVITE_INVALID_TITLE, "Tautan tidak valid atau sudah kedaluwarsa");
+  assert.deepEqual(gabungErrorActions("invite_invalid"), { back: true, retry: false });
+});
+
+test("only an owner of an open house may request an invite", () => {
+  assert.deepEqual(householdInviteRequest({ settling: true, isOwner: true, full: false }), { ok: false, code: "household_settling" });
+  assert.deepEqual(householdInviteRequest({ settling: false, isOwner: false, full: false }), { ok: false, code: "not_owner" });
+  assert.deepEqual(householdInviteRequest({ settling: false, isOwner: true, full: true }), { ok: false, code: "seats_full" });
+  assert.deepEqual(householdInviteRequest({ settling: false, isOwner: true, full: false }), { ok: true, path: "/household/invite", body: {} });
+  assert.deepEqual(householdInviteRequest({ settling: false, isOwner: true, full: false, rotate: true }), { ok: true, path: "/household/invite?rotate=true", body: { rotate: true } });
 });
 
 test("your own join leaves for Pasangan instead of the already-paired screen", () => {

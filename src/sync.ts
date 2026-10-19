@@ -1,8 +1,8 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
-import { bindInvitePreview, clearInvite, googleReturnAction, inviteReturnHash, inviteTokenFromHash, isInviteToken, isSafeInviteReturn, loginInviteChoice, mapServerInvitePreview, navigationType, readInvite, readInviteOwner, reconcilePendingInvite, type InvitePreview } from "./invite";
+import { bindInvitePreview, clearInvite, googleReturnAction, householdInviteRequest, inviteReturnHash, inviteTokenFromHash, isInviteToken, isSafeInviteReturn, loginInviteChoice, mapServerInvitePreview, navigationType, readInvite, readInviteOwner, reconcilePendingInvite, type InvitePreview } from "./invite";
 import { PLUS_ENABLED } from "./release";
-import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
+import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, isAuthScreen, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
 import { setPlusAccess, isPlus, applyRemote, clearAccountRecords, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
@@ -387,7 +387,7 @@ export async function resumeAuthAttempt() {
       return;
     }
     finishAuthAttempt(null);
-    assignHash(await destinationAfterLogin(attempt.mode === "daftar" ? "#/" : "#/profil"));
+    leaveAuthScreen(await destinationAfterLogin(attempt.mode === "daftar" ? "#/" : "#/profil"));
   } catch (error) {
     if (error instanceof ApiError && error.code === "created") {
       finishAuthAttempt({ id: ++authResultId, status: 409, failure: "created" });
@@ -559,15 +559,47 @@ async function claimCookieSession() {
   } catch { /* no cookie session */ }
 }
 
-async function goAfterLogin(fallback: string) {
-  const next = await destinationAfterLogin(fallback);
-  if (next && location.hash !== next) location.hash = next;
+/** Leave login or signup without leaving that page under the next one. Other routes still push. */
+export function leaveAuthScreen(next: string) {
+  if (isAuthScreen(location.hash)) replaceHash(next);
+  else assignHash(next);
 }
 
+async function goAfterLogin(fallback: string) {
+  const next = await destinationAfterLogin(fallback);
+  if (next && location.hash !== next) leaveAuthScreen(next);
+}
+
+/** Membership snapshot from before a join. Pasangan stays on a placeholder until /me differs. */
+let householdHold: { householdId: string; memberIds: string } | null = null;
+
+function memberIds(me: Me | null | undefined) {
+  return (me?.household.members ?? []).map((member) => member.id).sort().join(",");
+}
+
+export function holdHouseholdForJoin() {
+  householdHold = { householdId: state.me?.household.id ?? "", memberIds: memberIds(state.me) };
+}
+
+export function householdSettling() {
+  if (!householdHold || !state.me) return householdHold !== null;
+  return state.me.household.id === householdHold.householdId && memberIds(state.me) === householdHold.memberIds;
+}
+
+function releaseHouseholdHold(me: Me) {
+  if (!householdHold) return;
+  if (me.household.id !== householdHold.householdId || memberIds(me) !== householdHold.memberIds) householdHold = null;
+}
+
+let meRequest = 0;
+
 export async function refreshMe() {
+  const request = ++meRequest;
   const { data } = await api<Me>("/me");
   if (!data?.user?.id || typeof data.user.email !== "string" || typeof data.user.name !== "string" || !data.household?.id ||
     !Array.isArray(data.household.members) || !data.entitlement || !["free", "trial", "monthly", "plus_lifetime"].includes(data.entitlement.plan)) throw new ApiError(502, "invalid_account");
+  if (request !== meRequest) return state.me ?? data;
+  releaseHouseholdHold(data);
   set({ me: data, verifiedAt: Date.now() });
   return data;
 }
@@ -616,9 +648,19 @@ export function inviteReadyFor(householdId: string) {
   return publishedInvite?.householdId === householdId ? publishedInvite.invite : null;
 }
 
-export async function createInvite() {
-  const { data } = await api<HouseholdInvite>("/household/invite", { method: "POST", body: "{}" });
-  if (data?.token && data?.url && state.me?.household.id) publishedInvite = { householdId: state.me.household.id, invite: data };
+export async function createInvite(options?: { rotate?: boolean }) {
+  const me = state.me;
+  const request = householdInviteRequest({
+    settling: householdSettling(),
+    isOwner: !!me?.household.members.some((member) => member.id === me.user.id && member.role === "owner"),
+    full: !!me && me.household.members.length >= me.household.seats,
+    rotate: options?.rotate === true,
+  });
+  if (!request.ok) throw new ApiError(409, request.code);
+  const householdId = me!.household.id;
+  const { data } = await api<HouseholdInvite>(request.path, { method: "POST", body: JSON.stringify(request.body) });
+  if (!data?.token || !data?.url || householdSettling() || state.me?.household.id !== householdId) return null;
+  publishedInvite = { householdId, invite: data };
   return data;
 }
 
@@ -692,8 +734,9 @@ export async function joinHousehold(token: string) {
   run = (async () => {
     syncVersion++;
     await api("/household/join", { method: "POST", body: JSON.stringify({ token }), signal: AbortSignal.timeout(JOIN_TIMEOUT_MS) });
-    // The 200 already moved membership. Drop the invite and leave Gabung before /me
-    // can render this account as already paired.
+    // The 200 already moved membership. Hold the old house, drop the invite, and leave
+    // Gabung before /me can paint the previous seats or an already-paired Gabung.
+    holdHouseholdForJoin();
     clearInvite();
     publishedInvite = null;
     markOwnJoin(token);
