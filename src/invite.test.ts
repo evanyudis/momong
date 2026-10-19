@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, googleChoiceResume, googleReturnAction, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
-  claimForeignInvite, isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, shouldClearStaleGoogle,
+  claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterPreview, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, googleReturnAction, houseNameForInvite, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  claimForeignInvite, isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
 } from "./invite.ts";
 
 const bag = () => {
@@ -208,6 +208,72 @@ test("join errors stay in Indonesian", () => {
   assert.equal(joinResultRoute("skipped"), "stay");
   assert.match(joinFailureMessage("not_ready"), /Masuk dulu/);
   assert.match(joinFailureMessage(""), /Cek koneksi/);
+});
+
+test("gabung state resets when the invite token changes", () => {
+  const local = bag();
+  const session = bag();
+  const house = "Qa.vansken.prod.a+1019";
+  const tokenA = "inviteAAAA";
+  const tokenB = "inviteBBBB";
+  const hashA = `#/gabung?invite=${tokenA}&dari=${encodeURIComponent(house)}`;
+  const hashB = `#/gabung?invite=${tokenB}`;
+  rememberInvite(tokenA, local.storage, session.storage, { name: house });
+  assert.equal(houseNameForInvite(tokenA, hashA, local.storage, session.storage), house);
+  assert.equal(joinConfirmCopy(houseNameForInvite(tokenA, hashA, local.storage, session.storage)), `Gabung ke rumah ${house}?`);
+
+  const same = gabungOnTokenChange(tokenA, inviteParamFromHash(hashA), session.storage);
+  assert.equal(same, null, "a dari change on the same token does not reset gabung");
+
+  const next = gabungOnTokenChange(tokenA, inviteParamFromHash(hashB), session.storage);
+  assert.equal(next?.token, tokenB);
+  assert.equal(next?.phase, "checking");
+  assert.equal(next?.joinCode, "");
+  assert.equal(houseNameForInvite(tokenB, hashB, local.storage, session.storage), "");
+  assert.equal(joinConfirmCopy(houseNameForInvite(tokenB, hashB, local.storage, session.storage)), "Gabung ke rumah ini?");
+  assert.equal(joinConfirmCopy(houseNameForInvite(tokenB, hashB, local.storage, session.storage)).includes(house), false);
+  const sheet = gabungSheetOpen({
+    token: tokenB,
+    phase: next?.phase ?? "ask",
+    joinCode: next?.joinCode ?? "",
+    signedIn: true,
+    hasPartner: false,
+    session: session.storage,
+  });
+  assert.equal(sheet, false, "the new token starts closed, without the previous house");
+  assert.equal(houseNameForInvite(tokenA, hashA, local.storage, session.storage), house, "the previous token keeps its own name");
+});
+
+test("an invalid invite never opens the Gabung sheet", async () => {
+  const session = bag();
+  const signedIn = { signedIn: true, hasPartner: false, session: session.storage };
+  const malformed = "short";
+  const malformedPhase = gabungPhaseForToken(malformed, session.storage);
+  assert.equal(malformedPhase.phase, "error");
+  assert.equal(malformedPhase.joinCode, "invite_invalid");
+  assert.equal(gabungSheetOpen({ token: malformed, phase: "ask", joinCode: "", ...signedIn }), false);
+  assert.equal(gabungSheetOpen({ token: malformed, phase: malformedPhase.phase, joinCode: malformedPhase.joinCode, ...signedIn }), false);
+  assert.equal((await fetchInvitePreview(malformed, session.storage)).status, "invalid");
+
+  const cached = "invalidtoken123";
+  rememberInviteInvalid(cached, session.storage);
+  const cachedPhase = gabungPhaseForToken(cached, session.storage);
+  assert.equal(cachedPhase.joinCode, "invite_invalid");
+  assert.equal((await fetchInvitePreview(cached, session.storage)).status, "invalid");
+  assert.equal(gabungAfterPreview("checking", { status: "invalid" }), "error");
+  assert.equal(gabungSheetOpen({ token: cached, phase: "ask", joinCode: "", ...signedIn }), false);
+  assert.equal(gabungSheetOpen({ token: cached, phase: "checking", joinCode: "", ...signedIn }), false);
+  assert.equal(gabungSheetOpen({ token: cached, phase: "error", joinCode: "invite_invalid", ...signedIn }), false);
+
+  const fresh = "inviteFresh1";
+  const freshPhase = gabungPhaseForToken(fresh, session.storage);
+  assert.equal(freshPhase.phase, "checking");
+  assert.equal(gabungSheetOpen({ token: fresh, phase: freshPhase.phase, joinCode: freshPhase.joinCode, ...signedIn }), false);
+  const preview = await fetchInvitePreview(fresh, session.storage);
+  assert.equal(preview.status, "unknown");
+  const after = gabungAfterPreview(freshPhase.phase, preview);
+  assert.equal(after, "ask");
+  assert.equal(gabungSheetOpen({ token: fresh, phase: after, joinCode: "", ...signedIn }), true);
 });
 
 test("Nanti leaves Gabung for Beranda and keeps the saved invite", () => {
