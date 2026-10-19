@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { installPress } from "./press";
 import { startReminders } from "./reminders";
 import { App } from "./App";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -16,6 +17,8 @@ import.meta.hot?.dispose(stopErrorLogging);
 applyTheme(getPrefs().theme);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme(getPrefs().theme));
 startSync();
+const stopPress = installPress();
+import.meta.hot?.dispose(stopPress);
 const stopReminders = startReminders();
 import.meta.hot?.dispose(stopReminders);
 void finishGoogle().finally(() => { void resumeAuthAttempt(); }); // back from Google, or a sign-up interrupted by a reload

@@ -94,6 +94,9 @@ test("saved invite expires after seven days and drops for a different account", 
 
   assert.equal(postLoginRoute({ fallback: "#/profil", invite: "inviteTok1", onboarded: false }), "#/profil");
   assert.equal(postLoginRoute({ fallback: "#/profil", invite: "inviteTok1", onboarded: true }), "#/gabung?invite=inviteTok1");
+  assert.equal(postLoginRoute({ fallback: "#/profil", invite: null, onboarded: true }), "#/", "a solo re-login with a profile opens Beranda");
+  assert.equal(postLoginRoute({ fallback: "#/", invite: null, onboarded: true }), "#/");
+  assert.equal(postLoginRoute({ fallback: "#/profil", invite: null, onboarded: false }), "#/profil", "a new account still finishes setup");
   assert.equal(onboardingExitHash({ accountId: "user-new", ownerId: "user-new", token: "inviteTok1" }), "#/gabung?invite=inviteTok1");
   assert.equal(onboardingExitHash({ accountId: "user-new", ownerId: "user-old", token: "inviteTok1" }), "#/");
   assert.equal(onboardingExitHash({ accountId: null, ownerId: null, token: "inviteTok1" }), "#/");

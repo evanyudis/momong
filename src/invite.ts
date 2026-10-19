@@ -195,9 +195,10 @@ export function reconcilePendingInvite(currentAccountId: string | null, now = Da
   return "cleared" as const;
 }
 
-/** After login, Gabung waits until this account has a profile. The claimed invite stays saved. */
+/** After login, Gabung waits until this account has a profile. A profile that is already here opens Beranda. */
 export function postLoginRoute(input: { fallback: string; invite: string | null; onboarded: boolean }) {
   if (input.invite && input.onboarded) return inviteReturnHash(input.invite);
+  if (input.onboarded && input.fallback === "#/profil") return "#/";
   return input.fallback;
 }
 
