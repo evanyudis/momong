@@ -5,8 +5,12 @@ import { saveSettings, setPrefs, type Settings } from "./store";
 export const motherNameFromAccount = (user: { name: string; email: string }) =>
   user.name.trim() || nameFromEmail(user.email);
 
+export function hasProfile(s: Settings) {
+  return s.birthMode === "postpartum" || !!s.hpl;
+}
+
 export function onboardingStep(s: Settings, account: { token: string | null; me: unknown; checking?: boolean; restoreError?: boolean }, guest = false) {
-  if (s.birthMode === "postpartum" || s.hpl) return "ready";
+  if (hasProfile(s)) return "ready";
   if (account.token && account.checking) return "restoring";
   if (account.token && account.restoreError) return "restore-error";
   return guest || (account.token && account.me) ? "setup" : "signin";

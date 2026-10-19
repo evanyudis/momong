@@ -7,7 +7,7 @@ import { Bell, ChevronRight, Download, Sun, Moon, Monitor } from "lucide-react";
 import { useState } from "react";
 import type { PlusVariant } from "../content";
 import { todayISO } from "../dates";
-import { useHousehold } from "../household";
+import { profileName, useHousehold } from "../household";
 import { addBaby, babyProfiles, activeBabyId, isPlus, exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
 import { resetGuestData, signOut, updateDisplayName } from "../sync";
 import { SyncDot } from "./Partner";
@@ -64,8 +64,8 @@ export function Profil() {
       <div className="stack">
         <section className="stack profile-summary">
           <div className="profile-identity">
-            <span className="avatar blue" aria-hidden="true">{(prefs.name || h.me?.user.email || "M").slice(0, 1).toUpperCase()}</span>
-            <div className="profile-copy"><h2>{prefs.name || "Teman Momong"}</h2><p className="muted">{h.me?.user.email || "Catatan lokal · tanpa akun"}</p><p className="card-sub">Si kecil · {s.babyName || "Belum diisi"}</p></div>
+            <span className="avatar blue" aria-hidden="true">{(profileName({ saved: prefs.name, account: h.me?.user.name }) || h.me?.user.email || "M").slice(0, 1).toUpperCase()}</span>
+            <div className="profile-copy"><h2>{profileName({ saved: prefs.name, account: h.me?.user.name }) || "Teman Momong"}</h2><p className="muted">{h.me?.user.email || "Catatan lokal · tanpa akun"}</p><p className="card-sub">Si kecil · {s.babyName || "Belum diisi"}</p></div>
             <div className="profile-actions">
               <button type="button" className="btn btn-soft sm profile-edit" aria-haspopup="dialog" onClick={() => setEditingProfile(true)}>Edit profil</button>
               {!h.signedIn && <a className="btn sm btn-signin" href="#/masuk-akun">Masuk</a>}

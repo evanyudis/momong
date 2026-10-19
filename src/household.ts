@@ -1,10 +1,19 @@
 import { useAccount, type Me } from "./sync";
 
 /** Kursi keluarga label. Source is that member on GET /me: the saved name, or the Google account name if they never saved one. */
+/** Member name as stored. A saved name is not recapitalized. Email is only a fallback when the name is blank. */
 export function seatNameFromMember(member?: { name?: string | null; email?: string | null } | null) {
   const saved = member?.name?.trim() || "";
-  const raw = saved || member?.email?.trim().split("@")[0] || "";
-  return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "";
+  if (saved) return saved;
+  const local = member?.email?.trim().split("@")[0] || "";
+  return local ? local.charAt(0).toUpperCase() + local.slice(1) : "";
+}
+
+/** Profil header. The name saved for this owner wins. The account name fills an empty profile. */
+export function profileName(input: { saved?: string | null; account?: string | null }) {
+  const saved = input.saved?.trim() || "";
+  if (saved) return saved;
+  return input.account?.trim() || "";
 }
 
 export function seatNames(me: Me | null | undefined) {

@@ -1,9 +1,10 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
-import { bindInvitePreview, clearInvite, googleReturnAction, householdInviteRequest, inviteReturnHash, inviteTokenFromHash, isInviteToken, isSafeInviteReturn, loginInviteChoice, mapServerInvitePreview, navigationType, readInvite, readInviteOwner, reconcilePendingInvite, type InvitePreview } from "./invite";
+import { bindInvitePreview, clearInvite, googleReturnAction, householdInviteRequest, inviteFlowActive, inviteReturnHash, inviteTokenFromHash, isInviteToken, isSafeInviteReturn, loginInviteChoice, mapServerInvitePreview, navigationType, postLoginRoute, readInvite, readInviteOwner, reconcilePendingInvite, type InvitePreview } from "./invite";
 import { PLUS_ENABLED } from "./release";
+import { hasProfile } from "./onboarding";
 import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, isAuthScreen, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
-import { setPlusAccess, isPlus, applyRemote, clearAccountRecords, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
+import { setPlusAccess, isPlus, adoptLocalOwner, applyRemote, getPrefs, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, setPrefs, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
  *  Production calls its own origin (empty base); Vercel rewrites API paths to the server, so HTTPS never fetches HTTP. */
@@ -22,8 +23,6 @@ type State = { checking?: boolean; restoreError?: boolean; verifiedAt?: number; 
 const load = <T,>(k: string, d: T): T => {
   try { return JSON.parse(localStorage.getItem(k) ?? "") ?? d; } catch { return d; }
 };
-const DATA_USER = "bb_data_user";
-
 function syncFlagKey(userId: string) {
   return `bb_sync_enabled:${userId}`;
 }
@@ -42,11 +41,15 @@ function storedSyncEnabled(me: Me | null) {
   return Number.isFinite(cursor) && cursor > 0;
 }
 
-/** Local notes belong to the account that wrote them. A different login starts clean. Sync flags stay. */
+/** Local notes and the profile name belong to the account that wrote them. A different login parks the previous set. */
 function adoptAccountData(userId: string) {
-  const previous = localStorage.getItem(DATA_USER);
-  if (previous && previous !== userId) clearAccountRecords();
-  localStorage.setItem(DATA_USER, userId);
+  adoptLocalOwner(userId);
+}
+
+function rememberProfileName(name: string) {
+  const next = name.trim();
+  if (!next || getPrefs().name?.trim()) return;
+  setPrefs({ name: next });
 }
 
 /** Cache Storage and IndexedDB can keep a previous account after a wipe. */
@@ -121,31 +124,36 @@ export function authDestination(fallback = "#/profil") {
   return fallback;
 }
 
-/** After login: drop a leftover or dead invite, then open one that belongs to this account or this session. */
+/** True when this sign-in started from the logged-out invite, not from a leftover link. */
+export function pendingInviteSameFlow(now = Date.now()) {
+  if (inviteFlowActive(now)) return true;
+  const token = readInvite();
+  const target = sessionStorage.getItem("bb_auth_return");
+  return !!token && !!target && isSafeInviteReturn(target) && inviteTokenFromHash(target) === token;
+}
+
+/** After login: claim a same-flow invite, drop a leftover, and open Gabung only once this account has a profile. */
 export async function destinationAfterLogin(fallback = "#/profil") {
   const target = sessionStorage.getItem("bb_auth_return");
   sessionStorage.removeItem("bb_auth_return");
   if (target === "#/plus" || target === "#/pasangan") return target;
 
-  const explicitToken = target && isSafeInviteReturn(target) ? inviteTokenFromHash(target) : null;
+  const accountId = state.me?.user.id ?? null;
+  if (accountId) {
+    const explicit = target && isSafeInviteReturn(target) ? inviteTokenFromHash(target) : null;
+    const sameFlow = pendingInviteSameFlow() || (!!explicit && explicit === readInvite());
+    reconcilePendingInvite(accountId, Date.now(), localStorage, sessionStorage, sameFlow);
+  }
   const saved = readInvite();
   const ownerId = readInviteOwner();
-  const accountId = state.me?.user.id ?? null;
-  if (saved && (!accountId || ownerId !== accountId)) clearInvite();
-
-  const candidate = explicitToken || (accountId && ownerId === accountId ? saved : null);
+  const candidate = accountId && saved && ownerId === accountId ? saved : null;
   if (!candidate) return fallback;
   const preview = await loadInvitePreview(candidate);
-  if (loginInviteChoice({
-    accountId,
-    ownerId: ownerId === accountId ? ownerId : null,
-    explicit: !!explicitToken,
-    preview,
-  }) === "drop") {
+  if (loginInviteChoice({ accountId, ownerId, explicit: false, preview }) === "drop") {
     if (readInvite() === candidate) clearInvite();
     return fallback;
   }
-  return inviteReturnHash(candidate);
+  return postLoginRoute({ fallback, invite: candidate, onboarded: hasProfile(settings()) });
 }
 
 function clearSession() {
@@ -406,7 +414,7 @@ async function signedIn() {
     clearSession();
     throw new ApiError(502, "invalid_account");
   }
-  reconcilePendingInvite(state.me.user.id);
+  reconcilePendingInvite(state.me.user.id, Date.now(), localStorage, sessionStorage, pendingInviteSameFlow());
 }
 
 /** Restore saved household data before offering setup. A solo account still needs sync consent. A paired account does not. */
@@ -417,6 +425,7 @@ export async function restoreAccount() {
     await refreshMe();
     if (version !== sessionVersion) return;
     adoptAccountData(state.me!.user.id);
+    rememberProfileName(state.me!.user.name);
     // Read the flag and cursor first. Deleting the cursor is a full pull, not a consent reset.
     // A second member on /me is already paired. A fresh device has no local flag, so turn sync on and pull.
     const paired = state.me!.household.members.some((member) => member.id !== state.me!.user.id);

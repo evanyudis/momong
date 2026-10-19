@@ -122,8 +122,9 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     await sync.finishGoogle();
     assert.equal(calls.filter((call) => call.path === "/household/join").length, 0, "Google return does not join before confirm");
     assert.equal(sync.account().token, "google-session");
-    assert.equal(memory.has("bb_pending_invite"), false, "a saved invite with no owner is cleared on login");
-    assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "this session's invite return still opens");
+    assert.equal(memory.get("bb_pending_invite"), "inviteTok1", "a same-flow invite is claimed, not dropped");
+    assert.equal(memory.get("bb_pending_invite_user"), "u2");
+    assert.equal(loc.hash, "#/profil", "onboarding finishes before Gabung when this account has no profile");
     assert.equal(memory.has("bb_auth_return"), false);
     saveInvite();
     memory.set("bb_pending_invite_user", "u2");
@@ -191,7 +192,7 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     loc.hash = "#/profil";
     await sync.finishGoogle();
     assert.equal(memory.get("bb_pending_invite"), "inviteTok1", "the same account keeps a live saved invite");
-    assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "the same account opens a live saved invite");
+    assert.equal(loc.hash, "#/profil", "Gabung waits until this account has a profile");
     previewBody = null;
 
     await sync.signOut();
@@ -203,11 +204,12 @@ test("logged-out invite survives Google and waits for confirm", async () => {
     loc.hash = "#/profil";
     await sync.finishGoogle();
     assert.equal(sync.account().token, "google-session", "a bad invite does not throw away the new session");
-    assert.equal(loc.hash, "#/gabung?invite=inviteTok1");
+    assert.equal(loc.hash, "#/profil", "onboarding still comes before Gabung");
     assert.notEqual(loc.hash, "#/masuk-akun");
-    assert.equal(memory.has("bb_pending_invite"), false, "an unowned invite is cleared even when this session returns to it");
+    assert.equal(memory.get("bb_pending_invite"), "inviteTok1", "the same-flow invite stays for after onboarding");
+    assert.equal(memory.get("bb_pending_invite_user"), "u2");
     await assert.rejects(() => sync.acceptInvite("inviteTok1"));
-    assert.equal(loc.hash, "#/gabung?invite=inviteTok1", "a failed join stays on Gabung");
+    assert.equal(loc.hash, "#/profil", "a failed join does not leave the screen the account is already on");
     assert.equal(expectPasanganBeforeMe, false, "a failed join does not pretend the route moved");
     assert.equal(sync.account().token, "google-session");
     assert.equal(sync.account().syncEnabled, true);

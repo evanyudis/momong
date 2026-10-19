@@ -206,6 +206,83 @@ export function clearAccountRecords() {
   listeners.forEach((l) => l());
 }
 
+const OWNER_KEY = "bb_data_user";
+const BUNDLE_PREFIX = "bb_user_bundle:";
+export const ANON_OWNER = "anon";
+
+export function localOwner() {
+  try { return localStorage.getItem(OWNER_KEY); } catch { return null; }
+}
+
+function bundleKey(owner: string) {
+  return BUNDLE_PREFIX + owner;
+}
+
+type LocalBundle = { db: DB; prefs: Prefs; dirty: string[] };
+
+function readBundle(owner: string): LocalBundle | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(bundleKey(owner)) ?? "");
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      db: parsed.db && typeof parsed.db === "object" ? parsed.db : {},
+      prefs: parsed.prefs && typeof parsed.prefs === "object" ? parsed.prefs : {},
+      dirty: Array.isArray(parsed.dirty) ? parsed.dirty.filter((key: unknown) => typeof key === "string") : [],
+    };
+  } catch { return null; }
+}
+
+function writeBundle(owner: string) {
+  if (!owner) return;
+  localStorage.setItem(bundleKey(owner), JSON.stringify({ db, prefs, dirty: [...dirty] }));
+}
+
+function installBundle(bundle: LocalBundle) {
+  db = bundle.db;
+  prefs = bundle.prefs;
+  dirty = new Set(bundle.dirty);
+  persistedDB = db;
+  persistedDirty = new Set(dirty);
+  localStorage.setItem(DB_KEY, JSON.stringify(db));
+  localStorage.setItem(DIRTY_KEY, JSON.stringify([...dirty]));
+  localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  version++;
+  listeners.forEach((listener) => listener());
+}
+
+function activeHasLocalData() {
+  return deviceHasData() || Object.keys(prefs).length > 0;
+}
+
+/**
+ * Point the open notes at this account.
+ * Untagged notes (written before an owner existed) stay and are claimed by the first account
+ * that does not already have its own snapshot. They are not deleted.
+ * Another account's notes are parked under that account and this account gets its own snapshot.
+ */
+export function adoptLocalOwner(userId: string): "kept" | "restored" | "claimed" | "fresh" {
+  if (!userId) return "fresh";
+  const previous = localOwner();
+  if (previous === userId) return "kept";
+  const stored = readBundle(userId);
+  if (stored) {
+    if (previous) writeBundle(previous);
+    else if (activeHasLocalData()) writeBundle(ANON_OWNER);
+    installBundle(stored);
+    localStorage.setItem(OWNER_KEY, userId);
+    return "restored";
+  }
+  if (!previous && activeHasLocalData()) {
+    localStorage.setItem(OWNER_KEY, userId);
+    writeBundle(userId);
+    return "claimed";
+  }
+  if (previous) writeBundle(previous);
+  installBundle({ db: {}, prefs: {}, dirty: [] });
+  localStorage.setItem(OWNER_KEY, userId);
+  return "fresh";
+}
+
 export type Backup = { data: DB; preferences: Prefs; records: number };
 export const deviceHasData = () => Object.values(db).some((rows) => Object.keys(rows ?? {}).length > 0);
 const collections: Collection[] = ["baby", "settings", "contractions", "kicks", "symptoms", "bag", "bottle", "breast", "pump", "diaper", "wishlist"];

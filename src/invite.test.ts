@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungClickResult, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, googleReturnAction, houseNameForInvite, householdInviteRequest, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, mapServerInvitePreview,
-  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, loginInviteChoice, markInviteSent, pairSteps, readInvite, readInviteOwner, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
+  gabungConfirmOpen, gabungNantiAction, inviteFlowActive, isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, loginInviteChoice, markInviteFlow, markInviteSent, onboardingExitHash, pairSteps, postLoginRoute, readInvite, readInviteOwner, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, settleGabungNanti, shouldClearStaleGoogle,
 } from "./invite.ts";
 
 const bag = () => {
@@ -81,6 +81,42 @@ test("saved invite expires after seven days and drops for a different account", 
   assert.equal(reconcilePendingInvite("user-f", now, local.storage, freshSession.storage), "cleared");
   assert.equal(local.storage.getItem("bb_pending_invite"), null, "a new session still sees the saved owner");
 
+  assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: null }), true);
+  markInviteFlow(now, local.storage);
+  assert.equal(reconcilePendingInvite("user-new", now, local.storage, session.storage), "claimed");
+  assert.equal(readInvite(local.storage, session.storage, now), "inviteTok1");
+  assert.equal(readInviteOwner(local.storage, session.storage), "user-new");
+  assert.equal(inviteFlowActive(now, local.storage), false);
+  markInviteFlow(now, local.storage);
+  assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: "user-a" }), true);
+  assert.equal(reconcilePendingInvite("user-b", now, local.storage, session.storage, true), "cleared", "a different owner is still a leftover during a new flow");
+  assert.equal(readInvite(local.storage, session.storage, now), null);
+
+  assert.equal(postLoginRoute({ fallback: "#/profil", invite: "inviteTok1", onboarded: false }), "#/profil");
+  assert.equal(postLoginRoute({ fallback: "#/profil", invite: "inviteTok1", onboarded: true }), "#/gabung?invite=inviteTok1");
+  assert.equal(onboardingExitHash({ accountId: "user-new", ownerId: "user-new", token: "inviteTok1" }), "#/gabung?invite=inviteTok1");
+  assert.equal(onboardingExitHash({ accountId: "user-new", ownerId: "user-old", token: "inviteTok1" }), "#/");
+  assert.equal(onboardingExitHash({ accountId: null, ownerId: null, token: "inviteTok1" }), "#/");
+  const nanti = gabungNantiAction({ phase: "ask", leaving: false, authReturn: "#/gabung?invite=inviteTok1" });
+  assert.equal(nanti.type, "leave");
+  if (nanti.type === "leave") {
+    assert.equal(nanti.hash, "#/");
+    assert.equal(nanti.authReturn, null);
+  }
+  assert.deepEqual(gabungNantiAction({ phase: "left", leaving: true, authReturn: null }), { type: "ignore" });
+  assert.deepEqual(gabungNantiAction({ phase: "joining", leaving: false, authReturn: null }), { type: "ignore" });
+  const asking = { phase: "ask", leaving: false, dismissed: false, hash: "#/gabung?invite=inviteTok1", authReturn: "#/gabung?invite=inviteTok1", invite: "inviteTok1" };
+  assert.equal(gabungConfirmOpen(asking), true);
+  const firstTap = settleGabungNanti(asking);
+  assert.equal(firstTap.hash, "#/", "one tap leaves for Beranda");
+  assert.equal(firstTap.invite, "inviteTok1", "Nanti keeps the saved invite");
+  assert.equal(firstTap.authReturn, null);
+  assert.equal(gabungConfirmOpen(firstTap), false, "the sheet closes on that tap");
+  const dismissAfter = settleGabungNanti(firstTap);
+  assert.equal(dismissAfter, firstTap, "the close that follows the tap does not run again");
+  assert.equal(gabungConfirmOpen({ ...firstTap, phase: "ask" }), false, "a saved invite does not reopen the sheet");
+  assert.equal(gabungConfirmOpen(settleGabungNanti({ ...asking, phase: "joining" })), true, "joining is not dismissed");
+
   assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: "user-b", name: "Sari" }), true);
   assert.equal(readInvite(local.storage, session.storage, now + 8 * day), null);
   assert.equal(local.storage.getItem("bb_pending_invite"), null);
@@ -125,6 +161,10 @@ test("join warning only when this account already has notes or a sync cursor", (
 test("confirm step names the household from the shared link", () => {
   const link = inviteLinkWithOwner("https://momong.evanyudis.com/#/gabung?invite=inviteTok1", "Sari");
   assert.equal(inviteOwnerName(link), "Sari");
+  const asStored = inviteLinkWithOwner("https://momong.evanyudis.com/#/gabung?invite=inviteTok1", "qa-d-1018");
+  assert.equal(inviteOwnerName(asStored), "qa-d-1018");
+  assert.equal(asStored.includes("Qa-d-1018"), false, "dari= uses the name as stored");
+  assert.equal(gabungHouseName({ serverName: "qa-d-1018", fallbackName: "Qa-d-1018", source: "server" }), "qa-d-1018");
   assert.equal(inviteTokenFromInput(link), "inviteTok1");
   assert.equal(joinConfirmCopy("Sari"), "Gabung ke rumah Sari?");
   assert.equal(joinConfirmCopy("  "), "Gabung ke rumah ini?");
