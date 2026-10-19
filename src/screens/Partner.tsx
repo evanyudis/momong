@@ -6,7 +6,7 @@ import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, partnerSyncScreen, useHousehold } from "../household";
 import {
-  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, householdInviteRequest, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromHash, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview,
+  claimForeignInvite, claimJoinClick, clearInvite, clearInviteFlow, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungConfirmOpen, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, householdInviteRequest, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromHash, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, markInviteFlow, settleGabungNanti,
   isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInviteInvalid, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
   type GabungPhase,
 } from "../invite";
@@ -616,10 +616,13 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   const [trackedInvite, setTrackedInvite] = useState(invite);
   const [phase, setPhase] = useState<GabungPhase>(opened.phase);
   const [foreignInvite, setForeignInvite] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const [joinCode, setJoinCode] = useState(opened.joinCode);
   const [serverName, setServerName] = useState("");
   const [nameSource, setNameSource] = useState<"pending" | "server" | "fallback">("pending");
   const joinLock = useRef({ held: false });
+  const leavingJoin = useRef(false);
+  const leaveHash = useRef<string | null>(null);
   const phaseRef = useRef(phase);
   phaseRef.current = phase;
   void hashTick;
@@ -632,6 +635,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
       setPhase(next.phase);
       setJoinCode(next.joinCode);
       setForeignInvite(false);
+      if (!leavingJoin.current) setDismissed(false);
       setServerName("");
       setNameSource("pending");
       setGoogleBusy(false);
@@ -680,9 +684,10 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     const accountId = h.me?.user.id;
     rememberInvite(liveInvite, localStorage, sessionStorage, {
       name: inviteOwnerName(location.hash),
-      ...(accountId ? { accountId } : {}),
+      ...(accountId ? { accountId } : { accountId: null }),
     });
     if (!h.signedIn) {
+      markInviteFlow();
       const back = inviteReturnHash(liveInvite);
       if (isSafeInviteReturn(back)) sessionStorage.setItem("bb_auth_return", back);
       return;
@@ -734,17 +739,46 @@ export function JoinLanding({ invite }: { invite: string | null }) {
 
   function skipAccount() {
     setPrefs({ guest: true });
+    clearInviteFlow();
     sessionStorage.removeItem("bb_auth_return");
     sessionStorage.removeItem("bb_google");
     go("#/");
   }
 
   function leaveJoinConfirm() {
-    const next = declineJoin({ authReturn: sessionStorage.getItem("bb_auth_return") });
+    const current = {
+      phase: phaseRef.current,
+      leaving: leavingJoin.current,
+      dismissed,
+      hash: location.hash,
+      authReturn: sessionStorage.getItem("bb_auth_return"),
+      invite: liveInvite,
+    };
+    const next = settleGabungNanti(current);
+    if (next === current) return;
+    leavingJoin.current = true;
+    leaveHash.current = next.hash;
     if (next.authReturn) sessionStorage.setItem("bb_auth_return", next.authReturn);
     else sessionStorage.removeItem("bb_auth_return");
-    location.replace(`${location.pathname}${location.search}#/`);
+    // Close before navigating. Vaul keeps the sheet open while `open` is still true, and on
+    // iOS it also locks the body; a hash change in that same press is dropped until a second tap.
+    flushSync(() => setDismissed(true));
   }
+
+  useEffect(() => {
+    const hash = leaveHash.current;
+    if (!dismissed || !hash) return;
+    leaveHash.current = null;
+    const body = document.body;
+    if (body?.style.position === "fixed") {
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.height = "";
+    }
+    location.replace(`${location.pathname}${location.search}${hash}`);
+  }, [dismissed]);
 
   async function confirmJoin() {
     const token = liveInvite;
@@ -867,12 +901,12 @@ export function JoinLanding({ invite }: { invite: string | null }) {
       <>
         <TopBar title="Gabung" />
         <Hero title="Kamu diundang mencatat bersama" body="Cek dulu rumah yang kamu ikuti. Gabung setelah kamu yakin." />
-        <Sheet open={phase === "ask" || phase === "joining"} onOpenChange={(open) => { if (!open && phase !== "joining") leaveJoinConfirm(); }} title={joinConfirmCopy(houseName)}>
+        <Sheet open={gabungConfirmOpen({ phase, dismissed })} onOpenChange={(open) => { if (!open) leaveJoinConfirm(); }} title={joinConfirmCopy(houseName)}>
           <div className="stack" style={{ marginTop: 16 }}>
             <p>Catatan di HP ini ikut ke rumah itu. Kamu tetap di akun ini kalau memilih nanti.</p>
             <JoinDataNote />
-            <button type="button" className="btn btn-blue lg block" disabled={phase === "joining"} aria-busy={phase === "joining"} onClick={() => void confirmJoin()}>{phase === "joining" ? "Menggabungkan…" : "Gabung"}</button>
-            <button type="button" className="btn btn-soft block" disabled={phase === "joining"} onClick={leaveJoinConfirm}>Nanti</button>
+            <button type="button" className="btn btn-blue lg block" data-vaul-no-drag disabled={phase === "joining"} aria-busy={phase === "joining"} onClick={() => void confirmJoin()}>{phase === "joining" ? "Menggabungkan…" : "Gabung"}</button>
+            <button type="button" className="btn btn-soft block" data-vaul-no-drag disabled={phase === "joining"} onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.stopPropagation(); leaveJoinConfirm(); }} onClick={leaveJoinConfirm}>Nanti</button>
           </div>
         </Sheet>
       </>

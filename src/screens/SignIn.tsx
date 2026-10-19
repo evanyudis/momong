@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useReducer, useRef, useState, useSyncExterna
 import { Button, FieldError, Form, Input, Label, TextField } from "react-aria-components";
 import { deviceHasData, setPrefs } from "../store";
 import { reducedMotion } from "../motion";
+import { clearInviteFlow } from "../invite";
 import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, FAILURE_TEXT, SIGNIN_DRAFT_KEY, isAuthScreen, parseAuthAttempt, parseSignInDraft, signIn, signInDraft, signInInitial } from "../signin";
 import { ApiError, authEmail, authMemoryPassword, authUi, destinationAfterLogin, leaveAuthScreen, startGoogle, subscribeAuthUi, takeGoogleReturn, useAccount } from "../sync";
 
@@ -192,6 +193,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
         </Form>
         <button type="button" className="btn btn-soft block" style={{ marginTop: 20 }} onClick={() => {
           setPrefs({ guest: true });
+          clearInviteFlow();
           sessionStorage.removeItem("bb_auth_return");
           sessionStorage.removeItem("bb_plus_plan");
           location.hash = "#/";

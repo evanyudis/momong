@@ -4,6 +4,10 @@ export const PENDING_INVITE = "bb_pending_invite";
 export const PENDING_INVITE_AT = "bb_pending_invite_at";
 export const PENDING_INVITE_USER = "bb_pending_invite_user";
 export const PENDING_INVITE_NAME = "bb_pending_invite_name";
+/** Set when a logged-out visit starts sign-in. Survives the OAuth round trip. */
+export const PENDING_INVITE_FLOW = "bb_pending_invite_flow";
+/** Long enough for email sign-up and a Google round trip, short of a later leftover login. */
+export const INVITE_FLOW_MS = 60 * 60 * 1000;
 /** Matches the server invite lifetime. A saved link does not outlive that. */
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const INVITE_SENT = "bb_invite_sent";
@@ -150,18 +154,93 @@ export function readInviteOwner(storage: Bag = localStorage, session: Bag = sess
   return session.getItem(PENDING_INVITE_USER) || storage.getItem(PENDING_INVITE_USER) || null;
 }
 
+export function markInviteFlow(now = Date.now(), storage: Bag = localStorage) {
+  storage.setItem(PENDING_INVITE_FLOW, String(now));
+}
+
+export function inviteFlowActive(now = Date.now(), storage: Bag = localStorage) {
+  const at = Number(storage.getItem(PENDING_INVITE_FLOW) ?? "");
+  return Number.isFinite(at) && at > 0 && now >= at && now - at <= INVITE_FLOW_MS;
+}
+
+export function clearInviteFlow(storage: Bag = localStorage) {
+  storage.removeItem(PENDING_INVITE_FLOW);
+}
+
 /**
- * On login, a saved invite stays only when its owner is the account that just signed in.
- * A different owner is cleared. A missing owner is a leftover from another session and is cleared too.
- * Logged-out reads do not clear it, so the invite page can still set a return for this session.
+ * On login, a saved invite stays when its owner is the account that just signed in.
+ * An invite saved while logged out is claimed only during the sign-in that started from that link.
+ * A different owner, or a missing owner with no flow marker, is a leftover and is cleared.
+ * Logged-out reads do not clear it.
  */
-export function reconcilePendingInvite(currentAccountId: string | null, now = Date.now(), storage: Bag = localStorage, session: Bag = sessionStorage) {
+export function reconcilePendingInvite(currentAccountId: string | null, now = Date.now(), storage: Bag = localStorage, session: Bag = sessionStorage, sameFlow = inviteFlowActive(now, storage)) {
   const token = readInvite(storage, session, now);
-  if (!token) return "cleared" as const;
+  if (!token) {
+    clearInviteFlow(storage);
+    return "cleared" as const;
+  }
   if (!currentAccountId) return "kept" as const;
-  if (readInviteOwner(storage, session) === currentAccountId) return "kept" as const;
+  const owner = readInviteOwner(storage, session);
+  if (owner === currentAccountId) {
+    clearInviteFlow(storage);
+    return "kept" as const;
+  }
+  if (!owner && sameFlow) {
+    claimForeignInvite(currentAccountId, storage, session, now);
+    clearInviteFlow(storage);
+    return "claimed" as const;
+  }
   clearInvite(storage, session);
+  clearInviteFlow(storage);
   return "cleared" as const;
+}
+
+/** After login, Gabung waits until this account has a profile. The claimed invite stays saved. */
+export function postLoginRoute(input: { fallback: string; invite: string | null; onboarded: boolean }) {
+  if (input.invite && input.onboarded) return inviteReturnHash(input.invite);
+  return input.fallback;
+}
+
+/** Onboarding ends on the confirm sheet when the saved invite belongs to this account. */
+export function onboardingExitHash(input: { accountId: string | null; ownerId: string | null; token: string | null }) {
+  if (input.token && input.accountId && input.ownerId === input.accountId) return inviteReturnHash(input.token);
+  return "#/" as const;
+}
+
+/**
+ * Nanti and the sheet dismiss share one exit. The first event leaves for Beranda.
+ * A second event from the same press does not run again. Joining cannot be dismissed.
+ */
+export function gabungNantiAction(input: { phase: string; leaving: boolean; authReturn: string | null }):
+  | { type: "ignore" }
+  | { type: "leave"; hash: "#/"; authReturn: string | null } {
+  if (input.leaving || input.phase === "joining" || input.phase === "left") return { type: "ignore" };
+  const next = declineJoin({ authReturn: input.authReturn });
+  return { type: "leave", hash: next.hash, authReturn: next.authReturn };
+}
+
+/** Confirm sheet. It stays shut after Nanti even while the saved invite still exists. */
+export function gabungConfirmOpen(input: { phase: string; dismissed: boolean }) {
+  return (input.phase === "ask" || input.phase === "joining") && !input.dismissed;
+}
+
+export type GabungNantiView = {
+  phase: string;
+  leaving: boolean;
+  dismissed: boolean;
+  hash: string;
+  authReturn: string | null;
+  invite: string | null;
+};
+
+/**
+ * The first press or dismiss closes the sheet and leaves for Beranda.
+ * The saved invite stays. A second event from that same press does not open the sheet again.
+ */
+export function settleGabungNanti(state: GabungNantiView): GabungNantiView {
+  const action = gabungNantiAction({ phase: state.phase, leaving: state.leaving, authReturn: state.authReturn });
+  if (action.type === "ignore") return state;
+  return { ...state, leaving: true, dismissed: true, hash: action.hash, authReturn: action.authReturn };
 }
 
 /**
@@ -327,6 +406,7 @@ export function clearInvite(storage: Bag = localStorage, session: Bag = sessionS
     bag.removeItem(PENDING_INVITE_AT);
     bag.removeItem(PENDING_INVITE_USER);
     bag.removeItem(PENDING_INVITE_NAME);
+    bag.removeItem(PENDING_INVITE_FLOW);
   }
 }
 
