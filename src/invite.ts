@@ -8,8 +8,11 @@ export const PENDING_INVITE_NAME = "bb_pending_invite_name";
 export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const INVITE_SENT = "bb_invite_sent";
 
-/** Opaque invite tokens and server-issued codes. No spaces, slashes, or query breaks. */
-const TOKEN = /^[A-Za-z0-9._~+=-]{6,512}$/;
+/**
+ * Opaque invite tokens. momong-api issues `randomBytes(18).toString("base64url")` (24 chars).
+ * The check stays wider than that so a longer base64url token still passes.
+ */
+const TOKEN = /^[A-Za-z0-9_-]{6,128}$/;
 
 export type SyncStepStatus = "local" | "offline" | "syncing" | "synced" | "error";
 export type PairStepState = "done" | "current" | "pending" | "error";
@@ -404,6 +407,7 @@ export function houseNameForInvite(token: string | null, hash: string, storage: 
 export type InvitePreview =
   | { status: "invalid" }
   | { status: "unknown" }
+  | { status: "full"; houseName?: string }
   | { status: "valid"; houseName?: string };
 
 /** What the client can prove before any preview request. */
@@ -412,14 +416,33 @@ export function localInvitePreview(token: string | null, session: Bag = sessionS
   return { status: "unknown" };
 }
 
+/** Server preview body. A bad body is null so the caller falls back to local knowledge. */
+export function mapServerInvitePreview(body: unknown): InvitePreview | null {
+  if (!body || typeof body !== "object") return null;
+  const row = body as { status?: unknown; householdName?: unknown; full?: unknown };
+  const status = row.status;
+  if (status !== "valid" && status !== "invalid" && status !== "expired" && status !== "used") return null;
+  if (status !== "valid") return { status: "invalid" };
+  const houseName = typeof row.householdName === "string" ? row.householdName.trim().slice(0, 80) : "";
+  if (row.full === true) return { status: "full", ...(houseName ? { houseName } : {}) };
+  return { status: "valid", ...(houseName ? { houseName } : {}) };
+}
+
+type PreviewLoader = (token: string) => Promise<InvitePreview | null>;
+let previewLoader: PreviewLoader | null = null;
+
+/** sync.ts registers the bearer call. Tests that never load it keep the local fallback. */
+export function bindInvitePreview(loader: PreviewLoader) {
+  previewLoader = loader;
+}
+
 /**
- * Read-only preview seam. momong-api does not ship GET /household/invite/:token yet.
- * `requestInvitePreview` stays null until that endpoint exists.
- * Null falls back to local knowledge: invalid stays invalid, everything else stays unknown.
- * Unknown keeps today's confirm step after the check state.
+ * GET /household/invite/:token/preview when sync has registered it.
+ * Null means the route is missing, the session is missing, or the network failed.
  */
-export async function requestInvitePreview(_token: string): Promise<InvitePreview | null> {
-  return null;
+export async function requestInvitePreview(token: string): Promise<InvitePreview | null> {
+  if (!previewLoader) return null;
+  return previewLoader(token);
 }
 
 export async function fetchInvitePreview(token: string, session: Bag = sessionStorage): Promise<InvitePreview> {
@@ -448,15 +471,27 @@ export function gabungOnTokenChange(current: string | null, next: string | null,
 }
 
 export function gabungAfterPreview(phase: GabungPhase, preview: InvitePreview): GabungPhase {
-  if (preview.status === "invalid") return "error";
+  if (preview.status === "invalid" || preview.status === "full") return "error";
   if (phase === "checking" && (preview.status === "unknown" || preview.status === "valid")) return "ask";
   return phase;
 }
 
+export function joinCodeAfterPreview(current: string, preview: InvitePreview) {
+  if (preview.status === "invalid") return "invite_invalid";
+  if (preview.status === "full") return "seats_full";
+  return current;
+}
+
 export function houseNameAfterPreview(current: string, preview: InvitePreview) {
-  if (preview.status !== "valid") return current;
+  if (preview.status !== "valid" && preview.status !== "full") return current;
   const name = preview.houseName?.trim().slice(0, 80) ?? "";
   return name || current;
+}
+
+/** `dari=` is only a name when the preview request itself failed. A server name replaces it. */
+export function gabungHouseName(input: { serverName: string; fallbackName: string; source: "pending" | "server" | "fallback" }) {
+  if (input.source === "fallback") return input.serverName.trim() || input.fallbackName.trim();
+  return input.serverName.trim();
 }
 
 /**
@@ -475,7 +510,7 @@ export function gabungSheetOpen(input: {
   const session = input.session ?? sessionStorage;
   if (!input.token || !isInviteToken(input.token)) return false;
   if (readInviteInvalid(input.token, session)) return false;
-  if (input.joinCode === "invite_invalid") return false;
+  if (input.joinCode === "invite_invalid" || input.joinCode === "seats_full") return false;
   if (!input.signedIn || input.hasPartner) return false;
   return input.phase === "ask" || input.phase === "joining";
 }
@@ -486,5 +521,39 @@ export function joinFailureMessage(code: string) {
   if (code === "seats_full") return "Keluarga sudah memiliki dua anggota. Minta pasangan memeriksa akses keluarga.";
   if (code === "invite_invalid") return `${INVITE_INVALID_TITLE}. Minta tautan baru dari pasangan.`;
   if (code === "not_ready") return "Masuk dulu, lalu tempel kode undangan.";
+  if (code === "already_paired") return "Kamu sudah terhubung dengan pasangan.";
+  if (code === "timeout") return "Terlalu lama. Cek koneksi lalu coba lagi.";
   return "Belum bisa bergabung. Cek koneksi lalu coba lagi.";
+}
+
+/** A full house and a dead link go back to Beranda. Everything else can be retried. */
+export function gabungErrorActions(code: string): { back: boolean; retry: boolean } {
+  if (code === "invite_invalid" || code === "seats_full" || code === "already_paired") return { back: true, retry: false };
+  return { back: false, retry: true };
+}
+
+export type GabungJoinResult = { ok: "joined" | "skipped" } | { ok: "failed"; code: string } | { ok: "timeout" };
+
+/** Every finished join is success or a visible error. Skipped is not a silent return to the sheet. */
+export function gabungAfterJoin(result: GabungJoinResult): { joined: true } | { joined: false; joinCode: string } {
+  if (result.ok === "joined") return { joined: true };
+  if (result.ok === "timeout") return { joined: false, joinCode: "timeout" };
+  if (result.ok === "failed") return { joined: false, joinCode: result.code || "request_failed" };
+  return { joined: false, joinCode: "already_paired" };
+}
+
+/**
+ * First click shows loading. The outcome is never "the button is still Gabung and nothing happened".
+ * Onboarding is not an input. A missing session is an error, not a reason to ignore the tap.
+ */
+export function gabungClickResult(input: { token: string | null; lockHeld: boolean; result?: GabungJoinResult }):
+  | { kind: "ignore" }
+  | { kind: "loading" }
+  | { kind: "joined" }
+  | { kind: "error"; joinCode: string; lockHeld: false } {
+  if (!input.token || input.lockHeld) return { kind: "ignore" };
+  if (!input.result) return { kind: "loading" };
+  const next = gabungAfterJoin(input.result);
+  if (next.joined) return { kind: "joined" };
+  return { kind: "error", joinCode: next.joinCode, lockHeld: false };
 }
