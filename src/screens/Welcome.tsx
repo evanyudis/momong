@@ -2,7 +2,7 @@ import { Baby, Check, ChevronLeft, Heart } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { animate } from "../motion";
 import { todayISO } from "../dates";
-import { onboardingExitHash, readInvite, readInviteOwner } from "../invite";
+import { fetchInvitePreview, onboardingExitHash, readInvite, readInviteOwner, releaseDeadInvite } from "../invite";
 import { motherNameFromAccount, saveOnboarding } from "../onboarding";
 import { setPrefs, type Settings } from "../store";
 import { DateInput, toast } from "../ui";
@@ -26,15 +26,20 @@ export function Welcome({ user }: { user?: { id?: string; name: string; email: s
     return animate(body.current, [{ opacity: 0, transform: `translateX(${details ? 12 : -12}px)` }, { opacity: 1, transform: "none" }], 220);
   }, [details]);
 
-  function start(e: React.FormEvent) {
+  async function start(e: React.FormEvent) {
     e.preventDefault();
     if (submitted.current) return;
     submitted.current = true;
     try {
-      if (saveOnboarding({ mode, name, hpl, babyBirth: birth, babyName })) {
-        toast("Profil tersimpan. Selamat datang di Momong!");
-        location.hash = onboardingExitHash({ accountId: user?.id ?? null, ownerId: readInviteOwner(), token: readInvite() });
-      } else submitted.current = false;
+      if (!saveOnboarding({ mode, name, hpl, babyBirth: birth, babyName })) {
+        submitted.current = false;
+        return;
+      }
+      toast("Profil tersimpan. Selamat datang di Momong!");
+      const token = readInvite();
+      const preview = token ? await fetchInvitePreview(token) : null;
+      if (preview?.status === "invalid") releaseDeadInvite(token);
+      location.hash = onboardingExitHash({ accountId: user?.id ?? null, ownerId: readInviteOwner(), token: readInvite(), preview });
     } catch { submitted.current = false; setError("Profil belum tersimpan. Coba lagi."); }
   }
 

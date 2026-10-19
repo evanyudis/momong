@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungClickResult, gabungErrorActions, gabungHouseName, gabungJoinScreen, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, googleReturnAction, houseNameForInvite, householdInviteRequest, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, mapServerInvitePreview,
-  gabungConfirmOpen, gabungNantiAction, inviteFlowActive, isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, loginInviteChoice, markInviteFlow, markInviteSent, onboardingExitHash, pairSteps, postLoginRoute, readInvite, readInviteOwner, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, settleGabungNanti, shouldClearStaleGoogle,
+  gabungConfirmOpen, gabungNantiAction, inviteFlowActive, isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, loginInviteChoice, markInviteFlow, markInviteSent, onboardingExitHash, pairSteps, postLoginRoute, readInvite, readInviteInvalid, readInviteOwner, reconcilePendingInvite, releaseDeadInvite, rememberInvite, rememberInviteInvalid, settleGabungNanti, shouldClearStaleGoogle,
 } from "./invite.ts";
 
 const bag = () => {
@@ -97,9 +97,18 @@ test("saved invite expires after seven days and drops for a different account", 
   assert.equal(postLoginRoute({ fallback: "#/profil", invite: null, onboarded: true }), "#/", "a solo re-login with a profile opens Beranda");
   assert.equal(postLoginRoute({ fallback: "#/", invite: null, onboarded: true }), "#/");
   assert.equal(postLoginRoute({ fallback: "#/profil", invite: null, onboarded: false }), "#/profil", "a new account still finishes setup");
+  assert.equal(postLoginRoute({ fallback: "#/", invite: "inviteTok1", onboarded: true, preview: { status: "invalid" } }), "#/", "a dead preview does not auto-open Gabung");
   assert.equal(onboardingExitHash({ accountId: "user-new", ownerId: "user-new", token: "inviteTok1" }), "#/gabung?invite=inviteTok1");
+  assert.equal(onboardingExitHash({ accountId: "user-new", ownerId: "user-new", token: "inviteTok1", preview: { status: "invalid" } }), "#/", "onboarding does not open an invalid, expired, or used invite");
   assert.equal(onboardingExitHash({ accountId: "user-new", ownerId: "user-old", token: "inviteTok1" }), "#/");
   assert.equal(onboardingExitHash({ accountId: null, ownerId: null, token: "inviteTok1" }), "#/");
+  rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: "user-new" });
+  markInviteFlow(now, local.storage);
+  assert.equal(releaseDeadInvite("inviteTok1", local.storage, session.storage), true);
+  assert.equal(readInvite(local.storage, session.storage, now), null, "a rejected invite is cleared");
+  assert.equal(readInviteOwner(local.storage, session.storage), null);
+  assert.equal(inviteFlowActive(now, local.storage), false, "the flow marker is cleared with the invite");
+  assert.equal(readInviteInvalid("inviteTok1", session.storage), true, "a link opened directly can still show the invalid screen once");
   const nanti = gabungNantiAction({ phase: "ask", leaving: false, authReturn: "#/gabung?invite=inviteTok1" });
   assert.equal(nanti.type, "leave");
   if (nanti.type === "leave") {

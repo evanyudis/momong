@@ -195,17 +195,29 @@ export function reconcilePendingInvite(currentAccountId: string | null, now = Da
   return "cleared" as const;
 }
 
-/** After login, Gabung waits until this account has a profile. A profile that is already here opens Beranda. */
-export function postLoginRoute(input: { fallback: string; invite: string | null; onboarded: boolean }) {
-  if (input.invite && input.onboarded) return inviteReturnHash(input.invite);
+/** After login, Gabung waits until this account has a profile. A profile that is already here opens Beranda.
+ *  A preview of invalid, expired, or used never opens Gabung on its own. */
+export function postLoginRoute(input: { fallback: string; invite: string | null; onboarded: boolean; preview?: InvitePreview | null }) {
+  const invite = input.preview?.status === "invalid" ? null : input.invite;
+  if (invite && input.onboarded) return inviteReturnHash(invite);
   if (input.onboarded && input.fallback === "#/profil") return "#/";
   return input.fallback;
 }
 
-/** Onboarding ends on the confirm sheet when the saved invite belongs to this account. */
-export function onboardingExitHash(input: { accountId: string | null; ownerId: string | null; token: string | null }) {
+/** Onboarding ends on the confirm sheet when the saved invite belongs to this account and the preview is still live. */
+export function onboardingExitHash(input: { accountId: string | null; ownerId: string | null; token: string | null; preview?: InvitePreview | null }) {
+  if (input.preview?.status === "invalid") return "#/" as const;
   if (input.token && input.accountId && input.ownerId === input.accountId) return inviteReturnHash(input.token);
   return "#/" as const;
+}
+
+/** Drop a saved invite the server has rejected, including its owner and flow marker.
+ *  The session remembers the token so a link opened directly can show the invalid screen once. */
+export function releaseDeadInvite(token: string | null, storage: Bag = localStorage, session: Bag = sessionStorage) {
+  if (!token || !isInviteToken(token)) return false;
+  rememberInviteInvalid(token, session);
+  if (readInvite(storage, session) === token) clearInvite(storage, session);
+  return true;
 }
 
 /**
