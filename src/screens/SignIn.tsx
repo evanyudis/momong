@@ -5,7 +5,7 @@ import { Button, FieldError, Form, Input, Label, TextField } from "react-aria-co
 import { deviceHasData, setPrefs } from "../store";
 import { reducedMotion } from "../motion";
 import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, FAILURE_TEXT, SIGNIN_DRAFT_KEY, parseAuthAttempt, parseSignInDraft, signIn, signInDraft, signInInitial } from "../signin";
-import { ApiError, authDestination, authEmail, authMemoryPassword, authUi, startGoogle, subscribeAuthUi, takeGoogleReturn } from "../sync";
+import { ApiError, authEmail, authMemoryPassword, authUi, destinationAfterLogin, startGoogle, subscribeAuthUi, takeGoogleReturn } from "../sync";
 
 const EXIT_MS = 150; // matches the quiet exit in styles.css; enter (settle-in) is 200ms
 
@@ -87,7 +87,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
       await authEmail(s.mode, email, s.password);
       sessionStorage.removeItem(SIGNIN_DRAFT_KEY);
       sessionStorage.removeItem(AUTH_NOTICE_KEY);
-      location.hash = authDestination(onboarding ? "#/" : "#/profil");
+      location.hash = await destinationAfterLogin(onboarding ? "#/" : "#/profil");
     } catch (err) {
       // The module publishes the failure so a remount still shows it. Status 0 is a lost response, never success.
       if (!(err instanceof ApiError)) dispatch({ type: "fail", status: 0 });

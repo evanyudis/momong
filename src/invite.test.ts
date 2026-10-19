@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungClickResult, gabungErrorActions, gabungHouseName, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, googleReturnAction, houseNameForInvite, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, mapServerInvitePreview,
-  claimForeignInvite, isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
+  isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, loginInviteChoice, markInviteSent, pairSteps, readInvite, readInviteOwner, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
 } from "./invite.ts";
 
 const bag = () => {
@@ -63,19 +63,44 @@ test("saved invite expires after seven days and drops for a different account", 
   assert.equal(readInvite(local.storage, session.storage, now + 6 * day), "inviteTok1");
   assert.equal(reconcilePendingInvite("user-a", now + 6 * day, local.storage, session.storage), "kept");
   assert.equal(readInvite(local.storage, session.storage, now + 6 * day), "inviteTok1");
-  assert.equal(reconcilePendingInvite("user-b", now + day, local.storage, session.storage), "foreign");
-  assert.equal(readInvite(local.storage, session.storage, now + day), "inviteTok1", "a different account does not drop the invite");
-  assert.equal(claimForeignInvite("user-b", local.storage, session.storage, now + day), true);
-  assert.equal(reconcilePendingInvite("user-b", now + day, local.storage, session.storage), "kept");
+  assert.equal(reconcilePendingInvite("user-b", now + day, local.storage, session.storage), "cleared");
+  assert.equal(readInvite(local.storage, session.storage, now + day), null, "a different account drops the invite");
 
   assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, name: "Sari" }), true);
-  assert.equal(reconcilePendingInvite("user-b", now, local.storage, session.storage), "claimed");
-  assert.equal(readInvite(local.storage, session.storage, now), "inviteTok1");
-  assert.equal(local.storage.getItem("bb_pending_invite_user"), "user-b");
+  assert.equal(readInviteOwner(local.storage, session.storage), null);
+  assert.equal(reconcilePendingInvite("user-b", now, local.storage, session.storage), "cleared");
+  assert.equal(readInvite(local.storage, session.storage, now), null, "a missing owner is stale");
+  assert.equal(local.storage.getItem("bb_pending_invite_user"), null);
+
+  assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: "user-a", name: "Sari" }), true);
+  assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, name: "Sari" }), true);
+  assert.equal(readInviteOwner(local.storage, session.storage), "user-a", "omitting the owner does not erase one");
+  const freshSession = bag();
+  assert.equal(readInviteOwner(local.storage, freshSession.storage), "user-a");
+  assert.equal(reconcilePendingInvite("user-a", now, local.storage, freshSession.storage), "kept");
+  assert.equal(reconcilePendingInvite("user-f", now, local.storage, freshSession.storage), "cleared");
+  assert.equal(local.storage.getItem("bb_pending_invite"), null, "a new session still sees the saved owner");
 
   assert.equal(rememberInvite("inviteTok1", local.storage, session.storage, { at: now, accountId: "user-b", name: "Sari" }), true);
   assert.equal(readInvite(local.storage, session.storage, now + 8 * day), null);
   assert.equal(local.storage.getItem("bb_pending_invite"), null);
+});
+
+test("login does not open a stale or dead saved invite", () => {
+  const dead = { status: "invalid" as const };
+  const live = { status: "valid" as const, houseName: "Sari" };
+  const full = { status: "full" as const, houseName: "Sari" };
+  assert.equal(loginInviteChoice({ accountId: "user-a", ownerId: "user-a", explicit: false, preview: null }), "open");
+  assert.equal(loginInviteChoice({ accountId: "user-a", ownerId: "user-a", explicit: false, preview: live }), "open");
+  assert.equal(loginInviteChoice({ accountId: "user-a", ownerId: "user-a", explicit: false, preview: full }), "open");
+  assert.equal(loginInviteChoice({ accountId: "user-a", ownerId: "user-a", explicit: false, preview: dead }), "drop");
+  assert.equal(loginInviteChoice({ accountId: "user-f", ownerId: "user-g", explicit: false, preview: live }), "drop");
+  assert.equal(loginInviteChoice({ accountId: "user-f", ownerId: null, explicit: false, preview: null }), "drop");
+  assert.equal(loginInviteChoice({ accountId: "user-f", ownerId: null, explicit: true, preview: null }), "open");
+  assert.equal(loginInviteChoice({ accountId: "user-f", ownerId: "user-g", explicit: true, preview: live }), "open");
+  assert.equal(loginInviteChoice({ accountId: "user-f", ownerId: "user-g", explicit: true, preview: dead }), "drop");
+  assert.equal(mapServerInvitePreview({ status: "expired", householdName: null, full: false })?.status, "invalid");
+  assert.equal(mapServerInvitePreview({ status: "used", householdName: null, full: true })?.status, "invalid");
 });
 
 test("a profile with no log entries does not warn on join", () => {
