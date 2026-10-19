@@ -1,11 +1,12 @@
 import { Check, CloudOff, LoaderCircle, LogOut, Mail, MessageCircle, QrCode, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Button, Form, Input, Label, TextField } from "react-aria-components";
 import { encode } from "uqr";
 import { agoLabel } from "../dates";
 import { initial, partnerSyncScreen, useHousehold } from "../household";
 import {
-  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterPreview, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
+  claimForeignInvite, claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungErrorActions, gabungHouseName, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, houseNameAfterPreview, houseNameForInvite, INVITE_INVALID_TITLE, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview,
   isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, navigationType, pairStepLabel, pairSteps, readInvite, readInviteInvalid, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
   type GabungPhase,
 } from "../invite";
@@ -455,7 +456,7 @@ function JoinCodeSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o
       const result = await acceptInvite(token);
       if (result === "skipped") {
         joinLock.current.held = false;
-        setError(joinFailureMessage("seats_full"));
+        setError(joinFailureMessage("already_paired"));
         setBusy(false);
         setConfirmToken(null);
         return;
@@ -568,6 +569,7 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   const [foreignInvite, setForeignInvite] = useState(false);
   const [joinCode, setJoinCode] = useState(opened.joinCode);
   const [serverName, setServerName] = useState("");
+  const [nameSource, setNameSource] = useState<"pending" | "server" | "fallback">("pending");
   const joinLock = useRef({ held: false });
   void hashTick;
   const liveInvite = inviteParamFromHash(location.hash) ?? invite;
@@ -580,13 +582,18 @@ export function JoinLanding({ invite }: { invite: string | null }) {
       setJoinCode(next.joinCode);
       setForeignInvite(false);
       setServerName("");
+      setNameSource("pending");
       setGoogleBusy(false);
       setStartFailed(false);
       setReturned(false);
       joinLock.current.held = false;
     }
   }
-  const houseName = serverName || houseNameForInvite(liveInvite, location.hash);
+  const houseName = gabungHouseName({
+    serverName,
+    fallbackName: liveInvite ? houseNameForInvite(liveInvite, location.hash) : "",
+    source: nameSource,
+  });
   const sheetOpen = gabungSheetOpen({
     token: liveInvite,
     phase,
@@ -607,8 +614,9 @@ export function JoinLanding({ invite }: { invite: string | null }) {
     void fetchInvitePreview(liveInvite).then((preview) => {
       if (cancel) return;
       if (preview.status === "invalid") rememberInviteInvalid(liveInvite);
+      setNameSource(preview.status === "unknown" ? "fallback" : "server");
       setServerName((current) => houseNameAfterPreview(current, preview));
-      setJoinCode((current) => preview.status === "invalid" ? "invite_invalid" : current);
+      setJoinCode((current) => joinCodeAfterPreview(current, preview));
       setPhase((current) => gabungAfterPreview(current, preview));
     });
     return () => { cancel = true; };
@@ -688,25 +696,22 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   async function confirmJoin() {
     const token = liveInvite;
     if (!token || !claimJoinClick(joinLock.current)) return;
-    setPhase("joining");
+    flushSync(() => setPhase("joining"));
     const result = await consumePendingInvite(token);
     if (inviteParamFromHash(location.hash) !== token) {
       joinLock.current.held = false;
       return;
     }
-    if (result.ok === "failed") {
-      joinLock.current.held = false;
-      if (result.code === "invite_invalid") rememberInviteInvalid(token);
-      setJoinCode(result.code);
-      setPhase("error");
-      return;
-    }
-    if (result.ok === "joined") {
+    const next = gabungAfterJoin(result);
+    if (next.joined) {
       toast("Sudah terhubung dengan pasangan. Catatan bisa dikelola bersama.");
       if (joinResultRoute("joined") === "pasangan") go("#/pasangan");
       return;
     }
-    setPhase("ask");
+    joinLock.current.held = false;
+    if (next.joinCode === "invite_invalid") rememberInviteInvalid(token);
+    setJoinCode(next.joinCode);
+    setPhase("error");
   }
 
   if (!HAS_API) return <><TopBar title="Gabung" /><NoServer /></>;
@@ -775,13 +780,18 @@ export function JoinLanding({ invite }: { invite: string | null }) {
   }
   if (phase === "error") {
     const invalid = joinCode === "invite_invalid";
+    const full = joinCode === "seats_full";
+    const actions = gabungErrorActions(joinCode);
+    const title = invalid ? INVITE_INVALID_TITLE : full ? "Rumah ini sudah penuh" : "Gabung belum berhasil";
+    const body = invalid ? "Minta pasangan kirim tautan yang baru." : joinFailureMessage(joinCode);
     return (
       <>
         <TopBar title="Gabung" />
-        <Hero title={invalid ? INVITE_INVALID_TITLE : "Gabung belum berhasil"} body={invalid ? "Minta pasangan kirim tautan yang baru." : joinFailureMessage(joinCode)} />
+        <Hero title={title} body={body} />
         <div className="stack">
-          {!invalid && <p role="alert" style={{ color: "var(--field-danger)" }}>{joinFailureMessage(joinCode)}</p>}
-          {invalid ? <a className="btn btn-soft block" href="#/">Kembali</a> : <button className="btn btn-blue lg block" onClick={() => setPhase("ask")}>Coba lagi</button>}
+          {!invalid && !full && <p role="alert" style={{ color: "var(--field-danger)" }}>{body}</p>}
+          {actions.retry && <button className="btn btn-blue lg block" onClick={() => { joinLock.current.held = false; setPhase("ask"); }}>Coba lagi</button>}
+          {actions.back && <a className="btn btn-soft block" href="#/">Kembali</a>}
         </div>
       </>
     );

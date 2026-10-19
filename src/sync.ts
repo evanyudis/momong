@@ -1,6 +1,6 @@
 import { reportError } from "./telemetry";
 import { useSyncExternalStore } from "react";
-import { clearInvite, googleReturnAction, inviteReturnHash, isInviteToken, isSafeInviteReturn, navigationType, readInvite, reconcilePendingInvite } from "./invite";
+import { bindInvitePreview, clearInvite, googleReturnAction, inviteReturnHash, isInviteToken, isSafeInviteReturn, mapServerInvitePreview, navigationType, readInvite, reconcilePendingInvite, type InvitePreview } from "./invite";
 import { PLUS_ENABLED } from "./release";
 import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
 import { setPlusAccess, isPlus, applyRemote, clearAccountRecords, markAllDirty, markPushed, onLocalChange, pending, resetDeviceData, settings } from "./store";
@@ -588,6 +588,23 @@ export async function createInvite() {
   return data;
 }
 
+export const JOIN_TIMEOUT_MS = 15_000;
+
+/** Read-only. 401, 404, and network errors return null so Gabung keeps today's confirm step. */
+export async function loadInvitePreview(token: string): Promise<InvitePreview | null> {
+  if (!isInviteToken(token) || !state.token || !HAS_API) return null;
+  try {
+    const { data } = await api<unknown>(`/household/invite/${encodeURIComponent(token)}/preview`, {
+      signal: AbortSignal.timeout(JOIN_TIMEOUT_MS),
+    });
+    return mapServerInvitePreview(data);
+  } catch {
+    return null;
+  }
+}
+
+bindInvitePreview(loadInvitePreview);
+
 export type InviteConsume = { ok: "joined" | "skipped" } | { ok: "failed"; code: string };
 
 const inviteFlight = new Map<string, Promise<InviteConsume>>();
@@ -595,7 +612,11 @@ const inviteFlight = new Map<string, Promise<InviteConsume>>();
 /** Enable sync if needed, join, and clear the stored invite. Already-paired households skip the request. */
 export async function acceptInvite(token: string): Promise<"joined" | "skipped"> {
   if (!isInviteToken(token)) throw new ApiError(400, "invite_invalid");
-  if (!state.token || !state.me) throw new ApiError(401, "not_ready");
+  if (!state.token) throw new ApiError(401, "not_ready");
+  if (!state.me) {
+    try { await refreshMe(); } catch { /* the guard below reports not_ready */ }
+  }
+  if (!state.me) throw new ApiError(401, "not_ready");
   if (state.me.household.members.some((member) => member.id !== state.me!.user.id)) {
     clearInvite();
     return "skipped";
@@ -606,17 +627,21 @@ export async function acceptInvite(token: string): Promise<"joined" | "skipped">
   return "joined";
 }
 
-/** One join per token while the request is in flight, including a React remount during OAuth return. */
+function inviteFailure(error: unknown): InviteConsume {
+  if (isTimeout(error)) return { ok: "failed", code: "timeout" };
+  if (error instanceof ApiError) return { ok: "failed", code: error.code || "request_failed" };
+  return { ok: "failed", code: "" };
+}
+
+/** One join per token while the request is in flight, including a React remount during OAuth return.
+ *  The token on screen wins over a different saved invite. A missing session is a failure, not a skip. */
 export function consumePendingInvite(fallback?: string | null): Promise<InviteConsume> {
-  const token = readInvite() || (fallback && isInviteToken(fallback) ? fallback : null);
-  if (!token) return Promise.resolve({ ok: "skipped" });
+  const token = (fallback && isInviteToken(fallback) ? fallback : null) || readInvite();
+  if (!token) return Promise.resolve({ ok: "failed", code: "not_ready" });
   const existing = inviteFlight.get(token);
   if (existing) return existing;
   let run!: Promise<InviteConsume>;
-  run = acceptInvite(token).then((ok) => ({ ok })).catch((error: unknown): InviteConsume => {
-    if (error instanceof ApiError && error.code === "not_ready") return { ok: "skipped" };
-    return { ok: "failed", code: error instanceof ApiError ? error.code : "" };
-  }).finally(() => {
+  run = acceptInvite(token).then((ok) => ({ ok })).catch((error: unknown): InviteConsume => inviteFailure(error)).finally(() => {
     if (inviteFlight.get(token) === run) inviteFlight.delete(token);
   });
   inviteFlight.set(token, run);
@@ -632,7 +657,7 @@ export async function joinHousehold(token: string) {
   let run!: Promise<void>;
   run = (async () => {
     syncVersion++;
-    await api("/household/join", { method: "POST", body: JSON.stringify({ token }) });
+    await api("/household/join", { method: "POST", body: JSON.stringify({ token }), signal: AbortSignal.timeout(JOIN_TIMEOUT_MS) });
     set({ hasSynced: false });
     localStorage.removeItem("bb_cursor");
     markAllDirty();

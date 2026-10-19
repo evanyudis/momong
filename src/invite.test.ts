@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterPreview, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, googleReturnAction, houseNameForInvite, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent,
-  claimForeignInvite, isAndroid, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
+  claimJoinClick, clearInvite, declineJoin, displayInviteCode, externalBrowserHref, fetchInvitePreview, gabungAfterJoin, gabungAfterPreview, gabungClickResult, gabungErrorActions, gabungHouseName, gabungOnTokenChange, gabungPhaseForToken, gabungSheetOpen, googleChoiceResume, googleReturnAction, houseNameForInvite, inviteEntry, inviteLinkWithOwner, inviteOwnerName, inviteParamFromHash, inviteReturnHash, inviteShowsGoogleError, inviteTokenFromInput, inviteWasSent, joinCodeAfterPreview, mapServerInvitePreview,
+  claimForeignInvite, isAndroid, isInviteToken, isSafeInviteReturn, isWhatsAppBrowser, joinConfirmCopy, joinDataWarning, joinFailureMessage, joinResultRoute, localLogCount, markInviteSent, pairSteps, readInvite, reconcilePendingInvite, rememberInvite, rememberInviteInvalid, shouldClearStaleGoogle,
 } from "./invite.ts";
 
 const bag = () => {
@@ -18,7 +18,8 @@ const bag = () => {
 };
 
 test("invite token is read from a hash link, a query link, or the raw code", () => {
-  const token = "abC123._~";
+  const token = "abC123_-AAAAAAAAAAAAAAAA";
+  assert.equal(token.length, 24);
   assert.equal(inviteTokenFromInput(`https://momong.evanyudis.com/#/gabung?invite=${token}`), token);
   assert.equal(inviteTokenFromInput(`https://momong.evanyudis.com/gabung?invite=${token}`), token);
   assert.equal(inviteTokenFromInput(`  ${token}  `), token);
@@ -26,6 +27,7 @@ test("invite token is read from a hash link, a query link, or the raw code", () 
   assert.equal(inviteTokenFromInput("javascript:alert(1)"), null);
   assert.equal(inviteTokenFromInput("short"), null);
   assert.equal(inviteTokenFromInput("has space"), null);
+  assert.equal(inviteTokenFromInput("abC123._~"), null);
 });
 
 test("auth return accepts only the invite hash", () => {
@@ -274,6 +276,56 @@ test("an invalid invite never opens the Gabung sheet", async () => {
   const after = gabungAfterPreview(freshPhase.phase, preview);
   assert.equal(after, "ask");
   assert.equal(gabungSheetOpen({ token: fresh, phase: after, joinCode: "", ...signedIn }), true);
+});
+
+test("preview maps invalid, full, and valid house names", () => {
+  const base = { householdName: "Sari", seatsFilled: 1, seatsTotal: 2, full: false };
+  assert.deepEqual(mapServerInvitePreview({ ...base, status: "expired" }), { status: "invalid" });
+  assert.deepEqual(mapServerInvitePreview({ ...base, status: "used" }), { status: "invalid" });
+  assert.deepEqual(mapServerInvitePreview({ ...base, status: "invalid", householdName: null }), { status: "invalid" });
+  assert.deepEqual(mapServerInvitePreview({ ...base, status: "valid", full: true, seatsFilled: 2 }), { status: "full", houseName: "Sari" });
+  assert.deepEqual(mapServerInvitePreview({ ...base, status: "valid" }), { status: "valid", houseName: "Sari" });
+  assert.deepEqual(mapServerInvitePreview({ status: "valid", householdName: null, full: false }), { status: "valid" });
+  assert.equal(mapServerInvitePreview(null), null);
+  assert.equal(mapServerInvitePreview({ status: "nope" }), null);
+
+  assert.equal(gabungAfterPreview("checking", { status: "invalid" }), "error");
+  assert.equal(gabungAfterPreview("checking", { status: "full" }), "error");
+  assert.equal(gabungAfterPreview("checking", { status: "valid", houseName: "Sari" }), "ask");
+  assert.equal(gabungAfterPreview("joining", { status: "unknown" }), "joining");
+  assert.equal(joinCodeAfterPreview("", { status: "full" }), "seats_full");
+  assert.equal(joinCodeAfterPreview("", { status: "invalid" }), "invite_invalid");
+  assert.equal(joinCodeAfterPreview("kept", { status: "valid", houseName: "Sari" }), "kept");
+
+  const token = "A".repeat(24);
+  const session = bag();
+  const signedIn = { signedIn: true, hasPartner: false, session: session.storage };
+  assert.equal(gabungSheetOpen({ token, phase: "error", joinCode: "seats_full", ...signedIn }), false);
+  assert.equal(gabungSheetOpen({ token, phase: "ask", joinCode: "seats_full", ...signedIn }), false);
+  assert.equal(gabungHouseName({ serverName: "Sari", fallbackName: "Dari", source: "server" }), "Sari");
+  assert.equal(gabungHouseName({ serverName: "", fallbackName: "Dari", source: "server" }), "");
+  assert.equal(gabungHouseName({ serverName: "", fallbackName: "Dari", source: "fallback" }), "Dari");
+});
+
+test("a full house offers only Kembali", () => {
+  assert.deepEqual(gabungErrorActions("seats_full"), { back: true, retry: false });
+  assert.deepEqual(gabungErrorActions("invite_invalid"), { back: true, retry: false });
+  assert.deepEqual(gabungErrorActions("timeout"), { back: false, retry: true });
+  assert.deepEqual(gabungErrorActions("not_ready"), { back: false, retry: true });
+  assert.match(joinFailureMessage("seats_full"), /dua anggota/);
+});
+
+test("Gabung never fails silently", () => {
+  const token = "A".repeat(24);
+  assert.equal(gabungClickResult({ token, lockHeld: false }).kind, "loading");
+  assert.deepEqual(gabungClickResult({ token, lockHeld: false, result: { ok: "skipped" } }), { kind: "error", joinCode: "already_paired", lockHeld: false });
+  assert.deepEqual(gabungClickResult({ token, lockHeld: false, result: { ok: "failed", code: "not_ready" } }), { kind: "error", joinCode: "not_ready", lockHeld: false });
+  assert.deepEqual(gabungClickResult({ token, lockHeld: false, result: { ok: "timeout" } }), { kind: "error", joinCode: "timeout", lockHeld: false });
+  assert.deepEqual(gabungClickResult({ token, lockHeld: false, result: { ok: "failed", code: "seats_full" } }), { kind: "error", joinCode: "seats_full", lockHeld: false });
+  assert.equal(gabungClickResult({ token, lockHeld: false, result: { ok: "joined" } }).kind, "joined");
+  assert.equal(gabungClickResult({ token, lockHeld: true, result: { ok: "failed", code: "not_ready" } }).kind, "ignore");
+  assert.equal(gabungAfterJoin({ ok: "skipped" }).joined, false);
+  assert.equal(isInviteToken(token), true);
 });
 
 test("Nanti leaves Gabung for Beranda and keeps the saved invite", () => {
