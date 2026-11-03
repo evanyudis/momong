@@ -8,16 +8,23 @@ import { PLUS_FEATURES } from "../content";
 import { isPlus } from "../store";
 import { PlanPicker, selectedPlan } from "../billing";
 import { PlusBadge, TopBar } from "../ui";
-import { checkoutErrorCopy, checkoutRequest, planAvailable, readConsent, sumopodPaymentLink, sumopodPlans, writeConsent } from "../checkout";
+import { encode } from "uqr";
+import { blocksCheckout, checkoutErrorCode, checkoutErrorCopy, checkoutRequest, expiredPayment, finishedPayment, orderNotice, paymentLabel, planAvailable, readConsent, sumopodPaymentLink, sumopodPlans, writeConsent, type PaymentOrder } from "../checkout";
 
 export { MONTHLY_CONSENT_VERSION } from "../checkout";
 export const TERMS_HREF = "#/syarat-ketentuan";
 
-export type PaymentOrder = { orderId: string; status: string; grantedAt: string | null; plan?: string; amount?: number; createdAt?: string; redirectUrl?: string; paymentCode?: string };
-export const paymentLabel = (order: PaymentOrder) => order.grantedAt ? order.plan === "monthly" ? "Plus · Bulanan aktif" : "Plus · Lifetime aktif" : ({
-  deny: "Pembayaran ditolak", cancel: "Pembayaran dibatalkan", expire: "Pembayaran kedaluwarsa", failure: "Pembayaran gagal",
-} as Record<string, string>)[order.status] ?? "Menunggu konfirmasi pembayaran";
-export const finishedPayment = (order: PaymentOrder) => !!order.grantedAt || ["deny", "cancel", "expire", "failure"].includes(order.status);
+export { finishedPayment, paymentLabel, type PaymentOrder } from "../checkout";
+
+/** QRIS dari paymentCode saat Sumopod tidak memberi link hosted. Warna terang tetap (invite-qr) supaya tema gelap tidak membalik kode. */
+function PaymentQr({ value }: { value: string }) {
+  const qr = encode(value, { ecc: "M", border: 4 });
+  const n = qr.size;
+  return <svg className="invite-qr" viewBox={`0 0 ${n} ${n}`} role="img" aria-label="Kode QRIS pembayaran">
+    <rect width={n} height={n} fill="var(--surface)" />
+    {qr.data.flatMap((row, y) => row.map((on, x) => on ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="currentColor" /> : null))}
+  </svg>;
+}
 
 function FeatureIcon({ index }: { index: number }) {
   const Icon = FEATURE_ICONS[index];
@@ -78,6 +85,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
   const setConsent = (value: boolean) => { writeConsent(sessionStorage, userId, "monthly", value); setConsentState(value); };
   const [online, setOnline] = useState(navigator.onLine);
   const [plans, setPlans] = useState<any>(null);
+  const [plansFailed, setPlansFailed] = useState(false);
   const [billing, setBilling] = useState<any>(null);
   const idempotency = useRef(crypto.randomUUID());
   const lifetime = acc.me?.entitlement.plan === "plus_lifetime";
@@ -112,10 +120,10 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
   }, []);
   useEffect(() => {
     let cancelled = false;
-    void api<any>("/billing/plans").then(({ data }) => { if (!cancelled) setPlans(data); }).catch(() => { if (!cancelled) setError("Konfigurasi pembayaran belum bisa dimuat. Cek koneksi lalu coba lagi."); });
+    void api<any>("/billing/plans").then(({ data }) => { if (!cancelled) { setPlans(data); setPlansFailed(false); } }).catch(() => { if (!cancelled) { setPlansFailed(true); setError("Konfigurasi pembayaran belum bisa dimuat. Cek koneksi lalu coba lagi."); } });
     if (userId) void api<any>("/billing/account").then(({ data }) => {
       if (cancelled) return; setBilling(data);
-      const pending = data.orders.find((o: PaymentOrder) => !finishedPayment(o));
+      const pending = data.orders.find((o: PaymentOrder) => blocksCheckout(o));
       if (pending) { localStorage.setItem(key, pending.orderId); setOrderId(pending.orderId); setPlan(pending.plan === "monthly" ? "monthly" : "plus_lifetime"); }
     }).catch(() => {});
     return () => { cancelled = true; };
@@ -160,14 +168,23 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
       const { data } = await api<{ orderId: string; grossAmount?: number; redirectUrl?: string; paymentCode?: string }>(request.path, { method: "POST", body: JSON.stringify(request.body) });
       if (data.orderId) { localStorage.setItem(key, data.orderId); setOrderId(data.orderId); }
       const url = sumopodPaymentLink(data.redirectUrl);
-      if (!url) throw new Error("invalid_checkout");
-      writeConsent(sessionStorage, userId, "monthly", false);
-      location.assign(url.href);
+      if (url) {
+        writeConsent(sessionStorage, userId, "monthly", false);
+        location.assign(url.href);
+        return;
+      }
+      // Respons QR saja: tampilkan QRIS di halaman ini dan pantau statusnya, jangan kunci checkout 24 jam.
+      if (!data.orderId || !data.paymentCode) throw new Error("invalid_checkout");
+      writeConsent(sessionStorage, userId, "monthly", false); setConsentState(false);
+      setOrder({ orderId: data.orderId, status: "pending", grantedAt: null, plan, paymentCode: data.paymentCode });
+      lock.current = false; setBusy(false);
     } catch (e) {
-      if (e instanceof ApiError && e.code === "already_plus") await refreshMe().catch(() => {});
-      if (e instanceof ApiError && e.code === "checkout_expired") idempotency.current = crypto.randomUUID();
-      if (e instanceof ApiError && e.code === "checkout_pending") setRound((r) => r + 1);
-      setError(checkoutErrorCopy(e instanceof ApiError ? e.code : e instanceof Error ? e.message : undefined));
+      const code = e instanceof ApiError ? checkoutErrorCode(e.status, e.code) : e instanceof Error ? e.message : undefined;
+      if (code === "already_plus") await refreshMe().catch(() => {});
+      // Order gagal/kedaluwarsa dijawab checkout_expired untuk kunci yang sama; setelah 502 order-nya juga sudah gagal. Kunci baru = satu kali coba lagi cukup.
+      if (code === "checkout_expired" || code === "provider_failed") idempotency.current = crypto.randomUUID();
+      if (code === "checkout_pending") setRound((r) => r + 1);
+      setError(checkoutErrorCopy(code));
       lock.current = false; setBusy(false);
     }
   }
@@ -177,7 +194,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
     {celebrate && <p className="plus-activation" role="status">Selamat datang di Momong Plus ✦</p>}
     <div className="stack">
       <section className="card plus-glass plus-hero stack"><PlusBadge size="medium" />
-        <span className="pill plus-chip">Momong Plus · Sandbox</span>
+        {plans?.sandbox === true && <span className="pill plus-chip">Momong Plus · Sandbox</span>}
         <h1>{active ? "Lebih dekat dengan polanya." : expired ? "Masa Plusmu sudah berakhir." : "Hari kecil. Cerita besar."}</h1>
         <p>{active ? "Semua fitur Plus siap dibuka dari perangkat ini." : expired ? "Catatanmu tetap tersimpan. Periksa perpanjangan atau pilih Lifetime untuk membuka Plus lagi." : "Pahami pola, simpan kenangan, dan bagi persiapan dengan orang tersayang."}</p>
         {active && <p className="plus-membership">{lifetime ? "Plus · Lifetime" : "Plus · Bulanan"}{billing?.shared ? " · Dari pasangan" : ""}</p>}
@@ -200,19 +217,21 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
           </label>
         </>}
         {plan === "plus_lifetime" && <p className="muted">Dengan menekan Konfirmasi, kamu setuju dengan <a className="inline-link" href={TERMS_HREF}>Syarat & Ketentuan</a>.</p>}
-        <p className="muted">{plans?.sandbox === false ? "Pembayaran lewat QRIS, diproses Sumopod." : "Uji pembayaran sandbox. Tidak ada uang nyata yang ditagih."} Sinkron dan pasangan tetap Free.</p>
+        <p className="muted">{!plans ? plansFailed ? "Info pembayaran belum termuat." : "Memuat info pembayaran…" : plans.sandbox === false ? "Pembayaran lewat QRIS, diproses Sumopod." : "Uji pembayaran sandbox. Tidak ada uang nyata yang ditagih."} Sinkron dan pasangan tetap Free.</p>
         {!online && <p role="status">Kamu offline. Status tersimpan tetap bisa dilihat; checkout membutuhkan koneksi.</p>}
         {online && plans && !qris && <p role="status">Pembayaran QRIS belum aktif di server. Coba lagi nanti.</p>}
         {online && plans && qris && !available && <p role="status">Paket ini belum bisa dibayar. Pilih paket lain atau coba lagi setelah konfigurasi siap.</p>}
-        <button className="btn btn-coral lg block" disabled={busy || !online || !available || active && billing?.shared || plan === "monthly" && (!consent || active) || !!orderId && (!order || !finishedPayment(order))} aria-busy={busy} onClick={checkout}>
+        <button className="btn btn-coral lg block" disabled={busy || !online || !available || active && billing?.shared || plan === "monthly" && (!consent || active) || !!orderId && (!order || blocksCheckout(order))} aria-busy={busy} onClick={checkout}>
           {busy ? "Menyiapkan checkout…" : "Konfirmasi · " + (plan === "monthly" ? "Rp39.000/bulan" : "Rp199.000 Lifetime")}
         </button>
       </section>}
       {error && <div className="stack"><p role="alert" className="signin-error">{error}</p><button className="btn btn-soft block" onClick={() => setRound((r) => r + 1)}>Coba lagi</button></div>}
       {order && <section className="card plus-glass stack"><p role="status">{paymentLabel(order)}</p>
+        {orderNotice(order) && <p className="muted">{orderNotice(order)}</p>}
         {!finishedPayment(order) && <p className="muted">Akses aktif setelah pembayaran dikonfirmasi server.</p>}
         {!finishedPayment(order) && sumopodPaymentLink(order.redirectUrl) && <a className="btn btn-coral block" href={sumopodPaymentLink(order.redirectUrl)!.href}>Buka link pembayaran</a>}
-        {finishedPayment(order) && !order.grantedAt && <p className="muted">Link ini sudah tidak bisa dipakai. Pilih paket lalu tekan Konfirmasi untuk membuat link baru.</p>}
+        {!finishedPayment(order) && !sumopodPaymentLink(order.redirectUrl) && order.paymentCode && <><PaymentQr value={order.paymentCode} /><p className="muted">Pindai QRIS ini dari aplikasi bank atau e-wallet.</p></>}
+        {expiredPayment(order) && <p className="muted">Link ini sudah tidak bisa dipakai. Pilih paket lalu tekan Konfirmasi untuk membuat link baru.</p>}
         {userId && orderId && !lifetime && <button className="btn btn-soft block" onClick={() => setRound((r) => r + 1)}>Cek lagi</button>}
       </section>}
       <section className="card plus-glass stack">

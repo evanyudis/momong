@@ -1,10 +1,14 @@
 import { useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { navigate } from "./motion";
+import { parseHash, stripPaymentReturn } from "./route-parse";
 
 const ALIASES: Record<string, string> = { "/pengaturan": "/profil" };
+// Sumopod returns to APP_URL/?payment_return=1#/plus. #/plus resumes the stored order itself, so the marker is only noise.
+const returned = stripPaymentReturn(location.href);
+if (returned !== null) history.replaceState(history.state, "", returned);
 function parse() {
-  let [path, query = ""] = (location.hash.replace(/^#/, "") || "/").split("?");
+  let { path, query } = parseHash(location.hash);
   if (ALIASES[path]) {
     path = ALIASES[path];
     history.replaceState(history.state, "", `#${path}${query ? `?${query}` : ""}`);
