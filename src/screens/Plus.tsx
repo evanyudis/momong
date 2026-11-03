@@ -9,6 +9,10 @@ import { isPlus } from "../store";
 import { PlanPicker, selectedPlan } from "../billing";
 import { PlusBadge, TopBar } from "../ui";
 
+/** Versi teks persetujuan Plus Bulanan. Naikkan setiap kali kalimat checkbox berubah. */
+export const MONTHLY_CONSENT_VERSION = "monthly-v2";
+export const TERMS_HREF = "#/syarat-ketentuan";
+
 export type PaymentOrder = { orderId: string; status: string; grantedAt: string | null; plan?: string; amount?: number; createdAt?: string; redirectUrl?: string };
 export const paymentLabel = (order: PaymentOrder) => order.grantedAt ? order.plan === "monthly" ? "Plus · Bulanan aktif" : "Plus · Lifetime aktif" : ({
   deny: "Pembayaran ditolak", cancel: "Pembayaran dibatalkan", expire: "Pembayaran kedaluwarsa", failure: "Pembayaran gagal",
@@ -150,7 +154,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
     if (lock.current || lifetime || !userId || !online || !available || active && billing?.shared || plan === "monthly" && (!consent || active)) return;
     lock.current = true; setBusy(true); setError("");
     try {
-      const { data } = await api<{ orderId: string; redirectUrl: string }>(plan === "monthly" ? "/billing/monthly" : "/billing/lifetime", { method: "POST", body: JSON.stringify(plan === "monthly" ? { method, consent, idempotencyKey: idempotency.current } : {}) });
+      const { data } = await api<{ orderId: string; redirectUrl: string }>(plan === "monthly" ? "/billing/monthly" : "/billing/lifetime", { method: "POST", body: JSON.stringify(plan === "monthly" ? { method, consent, consentVersion: MONTHLY_CONSENT_VERSION, idempotencyKey: idempotency.current } : {}) });
       const url = new URL(data.redirectUrl);
       if (url.protocol !== "https:" || url.hostname !== "app.sandbox.midtrans.com") throw new Error("invalid_checkout");
       localStorage.setItem(key, data.orderId);
@@ -193,9 +197,10 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
             <option value="credit_card">Kartu</option><option value="gopay">GoPay</option>
           </select></label>
           <label className="plus-consent"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-            <span>Saya setuju perpanjangan otomatis Rp39.000 setiap bulan. Bisa dibatalkan; akses berlaku sampai akhir periode yang dibayar. Tanpa trial atau grace period.</span>
+            <span>Saya paham Plus Bulanan Rp39.000 tidak diperpanjang otomatis, dan saya setuju dengan <a className="inline-link" href={TERMS_HREF}>Syarat & Ketentuan</a>.</span>
           </label>
         </>}
+        {plan === "plus_lifetime" && <p className="muted">Dengan menekan Konfirmasi, kamu setuju dengan <a className="inline-link" href={TERMS_HREF}>Syarat & Ketentuan</a>.</p>}
         <p className="muted">Uji pembayaran sandbox. Tidak ada uang nyata yang ditagih. Sinkron dan pasangan tetap Free.</p>
         {!online && <p role="status">Kamu offline. Status tersimpan tetap bisa dilihat; checkout membutuhkan koneksi.</p>}
         {online && plans && !available && <p role="status">Metode sandbox ini belum diaktifkan. Pilih paket lain atau coba lagi setelah konfigurasi siap.</p>}
