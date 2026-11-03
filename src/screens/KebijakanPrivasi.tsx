@@ -1,22 +1,16 @@
-import type { ReactNode } from "react";
 import { TopBar } from "../ui";
 
-/** Isi statis dari momong-legal/kebijakan-privasi-v1.md. Placeholder sengaja tetap terlihat sebagai TODO sampai Evan mengisinya. */
-export const PRIVACY_SOURCE = "kebijakan-privasi-v1";
+/** Isi statis dari momong-legal/kebijakan-privasi-v2.md. */
+export const PRIVACY_SOURCE = "kebijakan-privasi-v2";
 export const PRIVACY_HREF = "#/kebijakan-privasi";
 
-function Todo({ children }: { children: ReactNode }) {
-  return <span className="pill coral legal-todo">TODO: {children}</span>;
-}
-
 const EMAIL = "contact.evanyudis@gmail.com";
+const SUMOPOD_PRIVACY = "https://sumopod.com/privacy-policy";
 
 export function KebijakanPrivasi() {
   return <>
     <TopBar title="Kebijakan Privasi" back="#/profil" />
     <div className="stack legal">
-      <p className="pill coral legal-todo" role="note">TODO: Draf v1, belum dipublikasikan, bukan nasihat hukum. Sisa placeholder diisi saat publish.</p>
-
       <article className="card solid stack" aria-labelledby="kebijakan-privasi">
         <h1 id="kebijakan-privasi">Kebijakan Privasi Momong</h1>
         <p className="muted">Berlaku sejak: 3 November 2026 · Versi: <code>privasi-v1</code></p>
@@ -105,7 +99,7 @@ export function KebijakanPrivasi() {
               <tr><td>Vercel</td><td>Menyajikan aplikasi web dan meneruskan permintaan aplikasi ke server API</td><td>Global (CDN)</td></tr>
               <tr><td>Cloudflare</td><td>Jalur aman (tunnel) dari internet ke server kami</td><td>Global</td></tr>
               <tr><td>Google</td><td>Masuk dengan Google, hanya kalau kamu memilihnya</td><td>Amerika Serikat dan lainnya</td></tr>
-              <tr><td>Sumopod</td><td>Payment gateway QRIS</td><td><Todo>lokasi pemrosesan Sumopod</Todo></td></tr>
+              <tr><td>Sumopod</td><td>Payment gateway QRIS</td><td>Diproses Sumopod (PT Koding Kreasi Indonesia) sesuai <a className="inline-link" href={SUMOPOD_PRIVACY} target="_blank" rel="noopener noreferrer">kebijakan privasinya</a>; lokasinya tidak dicantumkan di sana</td></tr>
               <tr><td>Resend</td><td>Pengiriman email</td><td>Amerika Serikat</td></tr>
               <tr><td>PostHog</td><td>Statistik opsional dan laporan error</td><td>Amerika Serikat</td></tr>
             </tbody>
@@ -116,10 +110,10 @@ export function KebijakanPrivasi() {
         <h2>10. Berapa lama data disimpan</h2>
         <ul>
           <li><strong>Data di perangkat:</strong> sampai kamu menghapusnya.</li>
-          <li><strong>Akun dan catatan sinkron:</strong> selama akunmu ada, termasuk setelah Plus berakhir. Saat akun dihapus, data akun, keanggotaan household, dan catatan household yang hanya berisi kamu ikut dihapus.</li>
-          <li><strong>Data pembayaran:</strong> disimpan selama <Todo>masa simpan data pembayaran</Todo> untuk keperluan pembukuan dan pajak, juga setelah akun dihapus.</li>
+          <li><strong>Akun dan catatan sinkron:</strong> selama akunmu ada, termasuk setelah Plus berakhir. Saat akun dihapus, data akun, keanggotaan household, dan catatan household yang hanya berisi kamu ikut dihapus. Catatan order pembayaran tidak dihapus, tapi dianonimkan (dilepas dari akun dan identitasmu), lihat poin berikut.</li>
+          <li><strong>Data pembayaran:</strong> catatan order dan transaksi disimpan selama <strong>10 tahun</strong> untuk memenuhi kewajiban pembukuan dan perpajakan, juga setelah akun dihapus. Setelah akun dihapus, order itu dianonimkan: tidak lagi terhubung ke akun, email, atau namamu. Data rekening atau e-wallet untuk refund hanya dipakai untuk transfer itu.</li>
           <li><strong>Cadangan server:</strong> dibuat setiap hari dan disimpan <strong>14 hari</strong>, lalu terhapus otomatis. Data yang sudah kamu hapus bisa masih ada di cadangan sampai masa itu lewat.</li>
-          <li><strong>Log teknis server:</strong> disimpan <Todo>masa simpan log server</Todo> untuk keperluan operasional dan keamanan.</li>
+          <li><strong>Log teknis server:</strong> disimpan <strong>30 hari</strong> untuk keperluan operasional dan keamanan, lalu terhapus otomatis.</li>
           <li><strong>Tautan masuk:</strong> 15 menit. <strong>Tautan wishlist bersama:</strong> 7 hari.</li>
         </ul>
 
@@ -133,7 +127,7 @@ export function KebijakanPrivasi() {
           <li><strong>Menarik persetujuan</strong> kapan saja: matikan "Bantu tingkatkan Momong", keluar dari household, atau minta akunmu dihapus. Menarik persetujuan tidak membatalkan pemrosesan yang sudah terjadi sebelumnya.</li>
           <li><strong>Mengajukan keberatan</strong> atas pemrosesan tertentu, dan mengadu ke lembaga pelindungan data pribadi yang berwenang.</li>
         </ol>
-        <p>Caranya: email <strong>{EMAIL}</strong> dari email yang terdaftar di akun Momong, dengan subjek <strong>"Privasi Momong"</strong> dan apa yang kamu minta. Kami mungkin meminta konfirmasi untuk memastikan itu memang kamu. Kami tanggapi paling lambat <strong>3 x 24 jam</strong>. Akses dan koreksi kami selesaikan dalam waktu itu. Penghapusan akun kami selesaikan paling lama <strong>14 hari kerja</strong>.</p>
+        <p>Caranya: email <strong>{EMAIL}</strong> dari email yang terdaftar di akun Momong, dengan subjek <strong>"Privasi Momong"</strong> dan apa yang kamu minta. Kami mungkin meminta konfirmasi untuk memastikan itu memang kamu. Kami tanggapi paling lambat <strong>3 x 24 jam</strong>. Akses dan koreksi kami selesaikan dalam waktu itu. Penghapusan akun kami selesaikan paling lama <strong>14 hari kerja</strong>. Catatan order pembayaran dianonimkan, bukan dihapus (lihat pasal 10).</p>
         <p>Menghapus akun tidak menghapus catatan yang masih ada di perangkatmu, dan tidak otomatis mengembalikan dana Plus. Kalau kamu anggota household orang lain, catatan bersama tetap ada di household itu setelah kamu keluar.</p>
 
         <h2>12. Keamanan</h2>

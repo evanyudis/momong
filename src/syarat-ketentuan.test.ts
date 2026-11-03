@@ -5,7 +5,7 @@ import { createServer } from "vite";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-test("S&K page renders both documents with placeholders visible as TODO and a way back to Plus", async () => {
+test("S&K page renders both documents with no placeholders left and a way back to Plus", async () => {
   const server = await createServer({ server: { middlewareMode: true }, logLevel: "silent" });
   try {
     const { SyaratKetentuan } = await server.ssrLoadModule("/src/screens/SyaratKetentuan.tsx");
@@ -16,7 +16,10 @@ test("S&K page renders both documents with placeholders visible as TODO and a wa
     assert.equal((html.match(/Berlaku sejak: 3 November 2026/g) ?? []).length, 2);
     assert.ok(!html.includes("TODO: link Kebijakan Privasi"));
     assert.match(html, /href="#\/kebijakan-privasi"/);
-    assert.match(html, /TODO: domisili pengadilan/);
+    assert.match(html, /Pengadilan Negeri Depok/);
+    assert.ok(!html.includes("TODO") && !html.includes("legal-todo"), "no TODO left on S&K");
+    assert.match(html, /3 x 24 jam/);
+    assert.match(html, /14 hari kerja/);
     assert.ok(!html.includes("[link]") && !html.includes("[domisili]"), "raw markdown placeholders are not left behind");
     assert.match(html, /href="#\/plus"/);
   } finally { await server.close(); }
@@ -35,6 +38,12 @@ test("privacy page renders with effective date, controller, rights, processors a
     assert.match(html, /bersifat spesifik/);
     for (const name of ["Sumopod", "PostHog", "Resend", "Vercel", "Cloudflare", "Tencent Cloud"]) assert.ok(html.includes(name), name);
     assert.ok(!html.includes("Neon"), "no stale Neon mention");
+    assert.ok(!html.includes("TODO") && !html.includes("legal-todo"), "no TODO left on privacy page");
+    assert.match(html, /<strong>10 tahun<\/strong>/);
+    assert.match(html, /dianonimkan/);
+    assert.match(html, /<strong>30 hari<\/strong>/);
+    assert.match(html, /3 x 24 jam/);
+    assert.match(html, /href="https:\/\/sumopod\.com\/privacy-policy"/);
     assert.match(html, /href="#\/syarat-ketentuan"/);
   } finally { await server.close(); }
   const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
