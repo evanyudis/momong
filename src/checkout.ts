@@ -16,13 +16,16 @@ export function checkoutRequest(plan: CheckoutPlan, idempotencyKey: string) {
  * Link pembayaran hanya boleh ke host Sumopod: https, tanpa kredensial di URL, hostname persis sumopod.com atau *.sumopod.com.
  * Aturan ini sama dengan validasi base URL live di momong-api (payments/sumopod.ts). Host link hosted belum terdokumentasi resmi.
  */
+/** Host checkout Sumopod yang terverifikasi: live checkout.pymnt.app (order prod 3 Nov 2026), sandbox sumo.sandbox.pymnt.global. */
+const PAYMENT_LINK_DOMAINS = ["sumopod.com", "pymnt.app", "pymnt.global"];
+
 export function sumopodPaymentLink(value: unknown): URL | null {
   if (typeof value !== "string" || !value) return null;
   let url: URL;
   try { url = new URL(value); } catch { return null; }
   if (url.protocol !== "https:" || url.username || url.password) return null;
   const host = url.hostname.toLowerCase();
-  return host === "sumopod.com" || host.endsWith(".sumopod.com") ? url : null;
+  return PAYMENT_LINK_DOMAINS.some((d) => host === d || host.endsWith("." + d)) ? url : null;
 }
 
 /** /billing/plans dari server yang memakai PAYMENT_PROVIDER=sumopod punya metode bulanan "qris". Server Midtrans tidak. */

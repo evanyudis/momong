@@ -14,10 +14,10 @@ test("QRIS checkout request matches momong-api sumopodCheckout shapes", () => {
   assert.match(crypto.randomUUID(), /^[a-zA-Z0-9-]{16,64}$/);
 });
 
-test("payment link allowlist: https only, exact sumopod.com or *.sumopod.com, no credentials", () => {
-  for (const ok of ["https://pay.sumopod.com/link/abc123", "https://sumopod.com/pay/1", "https://a.b.sumopod.com/x", "https://PAY.SUMOPOD.COM/link/1"])
+test("payment link allowlist: https only, Sumopod and pymnt checkout hosts, no credentials", () => {
+  for (const ok of ["https://pay.sumopod.com/link/abc123", "https://sumopod.com/pay/1", "https://a.b.sumopod.com/x", "https://PAY.SUMOPOD.COM/link/1", "https://checkout.pymnt.app/payment-links/6d99da1f", "https://sumo.sandbox.pymnt.global/x"])
     assert.ok(sumopodPaymentLink(ok), ok);
-  for (const bad of ["http://pay.sumopod.com/link/1", "https://evilsumopod.com/x", "https://sumopod.com.evil.io/x", "https://pay.sumopod.com@evil.io/x",
+  for (const bad of ["http://pay.sumopod.com/link/1", "https://evilsumopod.com/x", "https://sumopod.com.evil.io/x", "https://evilpymnt.app/x", "https://pymnt.app.evil.io/x", "https://pay.sumopod.com@evil.io/x",
     "https://user:pw@pay.sumopod.com/x", "https://app.sandbox.midtrans.com/snap/v4/redirection/x", "javascript:alert(1)", "//pay.sumopod.com/x", "", undefined, null, 42])
     assert.equal(sumopodPaymentLink(bad), null, String(bad));
 });
