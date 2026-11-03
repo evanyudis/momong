@@ -20,12 +20,12 @@ test("S&K page renders both documents with placeholders visible as TODO and a wa
   } finally { await server.close(); }
 });
 
-test("monthly consent copy is exact, links to S&K, and sends consent version monthly-v2", () => {
+test("monthly consent copy is exact and links to S&K from monthly and lifetime checkout", () => {
   const src = readFileSync(new URL("./screens/Plus.tsx", import.meta.url), "utf8");
   assert.ok(src.includes('Saya paham Plus Bulanan Rp39.000 tidak diperpanjang otomatis, dan saya setuju dengan <a className="inline-link" href={TERMS_HREF}>Syarat & Ketentuan</a>.'));
   assert.ok(!src.includes("Saya setuju perpanjangan otomatis"));
-  assert.match(src, /MONTHLY_CONSENT_VERSION = "monthly-v2"/);
-  assert.match(src, /consentVersion: MONTHLY_CONSENT_VERSION/);
+  assert.match(src, /Hentikan perpanjangan/);
+  assert.ok(!/[Bb]atalkan perpanjangan/.test(src), "button copy unified to Hentikan perpanjangan");
   assert.match(src, /TERMS_HREF = "#\/syarat-ketentuan"/);
   assert.equal((src.match(/href=\{TERMS_HREF\}/g) ?? []).length, 2, "monthly consent and lifetime checkout both link S&K");
 });

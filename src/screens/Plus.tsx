@@ -8,12 +8,12 @@ import { PLUS_FEATURES } from "../content";
 import { isPlus } from "../store";
 import { PlanPicker, selectedPlan } from "../billing";
 import { PlusBadge, TopBar } from "../ui";
+import { checkoutErrorCopy, checkoutRequest, planAvailable, readConsent, sumopodPaymentLink, sumopodPlans, writeConsent } from "../checkout";
 
-/** Versi teks persetujuan Plus Bulanan. Naikkan setiap kali kalimat checkbox berubah. */
-export const MONTHLY_CONSENT_VERSION = "monthly-v2";
+export { MONTHLY_CONSENT_VERSION } from "../checkout";
 export const TERMS_HREF = "#/syarat-ketentuan";
 
-export type PaymentOrder = { orderId: string; status: string; grantedAt: string | null; plan?: string; amount?: number; createdAt?: string; redirectUrl?: string };
+export type PaymentOrder = { orderId: string; status: string; grantedAt: string | null; plan?: string; amount?: number; createdAt?: string; redirectUrl?: string; paymentCode?: string };
 export const paymentLabel = (order: PaymentOrder) => order.grantedAt ? order.plan === "monthly" ? "Plus · Bulanan aktif" : "Plus · Lifetime aktif" : ({
   deny: "Pembayaran ditolak", cancel: "Pembayaran dibatalkan", expire: "Pembayaran kedaluwarsa", failure: "Pembayaran gagal",
 } as Record<string, string>)[order.status] ?? "Menunggu konfirmasi pembayaran";
@@ -74,8 +74,8 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
   const [celebrate, setCelebrate] = useState(false);
   const keyboard = useRef(!!document.activeElement?.matches(":focus-visible"));
   const [plan, setPlan] = useState(selectedPlan);
-  const [method, setMethod] = useState("credit_card");
-  const [consent, setConsent] = useState(false);
+  const [consent, setConsentState] = useState(() => readConsent(sessionStorage, userId, "monthly"));
+  const setConsent = (value: boolean) => { writeConsent(sessionStorage, userId, "monthly", value); setConsentState(value); };
   const [online, setOnline] = useState(navigator.onLine);
   const [plans, setPlans] = useState<any>(null);
   const [billing, setBilling] = useState<any>(null);
@@ -120,8 +120,8 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [userId, round, online]);
-  const available = plan === "plus_lifetime" ? plans?.plans?.find((p: any) => p.id === plan)?.available :
-    plans?.plans?.find((p: any) => p.id === plan)?.methods?.find((m: any) => m.id === method)?.available;
+  const qris = sumopodPlans(plans);
+  const available = planAvailable(plans, plan);
 
 
 
@@ -136,6 +136,8 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
         if (cancelled) return;
         setOrder(data); setError("");
         if (data.grantedAt) await refreshMe();
+        // Kunci idempotensi yang ordernya gagal/kedaluwarsa dijawab checkout_expired oleh server; checkout baru butuh kunci baru.
+        else if (finishedPayment(data)) idempotency.current = crypto.randomUUID();
         if (finishedPayment(data)) return;
       } catch (e) {
         if (cancelled) return;
@@ -154,19 +156,18 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
     if (lock.current || lifetime || !userId || !online || !available || active && billing?.shared || plan === "monthly" && (!consent || active)) return;
     lock.current = true; setBusy(true); setError("");
     try {
-      const { data } = await api<{ orderId: string; redirectUrl: string }>(plan === "monthly" ? "/billing/monthly" : "/billing/lifetime", { method: "POST", body: JSON.stringify(plan === "monthly" ? { method, consent, consentVersion: MONTHLY_CONSENT_VERSION, idempotencyKey: idempotency.current } : {}) });
-      const url = new URL(data.redirectUrl);
-      if (url.protocol !== "https:" || url.hostname !== "app.sandbox.midtrans.com") throw new Error("invalid_checkout");
-      localStorage.setItem(key, data.orderId);
-      setOrderId(data.orderId);
+      const request = checkoutRequest(plan, idempotency.current);
+      const { data } = await api<{ orderId: string; grossAmount?: number; redirectUrl?: string; paymentCode?: string }>(request.path, { method: "POST", body: JSON.stringify(request.body) });
+      if (data.orderId) { localStorage.setItem(key, data.orderId); setOrderId(data.orderId); }
+      const url = sumopodPaymentLink(data.redirectUrl);
+      if (!url) throw new Error("invalid_checkout");
+      writeConsent(sessionStorage, userId, "monthly", false);
       location.assign(url.href);
     } catch (e) {
       if (e instanceof ApiError && e.code === "already_plus") await refreshMe().catch(() => {});
-      setError(e instanceof ApiError && e.code === "billing_unconfigured" ? "Pembayaran sandbox belum dikonfigurasi. Coba lagi setelah server siap."
-        : e instanceof ApiError && e.code === "production_disabled" ? "Pembayaran asli belum diaktifkan. Gunakan sandbox."
-        : e instanceof ApiError && e.code === "subscription_exists" ? "Masih ada langganan bulanan. Kelola atau batalkan perpanjangan di bawah sebelum membuat langganan baru."
-        : e instanceof ApiError && e.code === "checkout_pending" ? "Order sebelumnya sedang diperiksa. Cek status sebelum memulai pembayaran lain."
-        : "Checkout belum bisa dibuka. Cek koneksi lalu coba lagi.");
+      if (e instanceof ApiError && e.code === "checkout_expired") idempotency.current = crypto.randomUUID();
+      if (e instanceof ApiError && e.code === "checkout_pending") setRound((r) => r + 1);
+      setError(checkoutErrorCopy(e instanceof ApiError ? e.code : e instanceof Error ? e.message : undefined));
       lock.current = false; setBusy(false);
     }
   }
@@ -193,17 +194,16 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
         <PlanPicker value={plan} onChange={(p) => { setPlan(p); setConsent(false); }} />
         {active && <p className="muted">Upgrade Lifetime membayar penuh, tanpa prorata. Perpanjangan bulanan dihentikan setelah pembayaran sukses.</p>}
         {plan === "monthly" && <>
-          <label className="field"><span>Metode pembayaran</span><select className="input" value={method} onChange={(e) => { setMethod(e.target.value); setConsent(false); }}>
-            <option value="credit_card">Kartu</option><option value="gopay">GoPay</option>
-          </select></label>
+          <p className="muted">Bayar lewat QRIS. Link perpanjangan muncul di sini sekitar 3 hari sebelum periode berakhir.</p>
           <label className="plus-consent"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
             <span>Saya paham Plus Bulanan Rp39.000 tidak diperpanjang otomatis, dan saya setuju dengan <a className="inline-link" href={TERMS_HREF}>Syarat & Ketentuan</a>.</span>
           </label>
         </>}
         {plan === "plus_lifetime" && <p className="muted">Dengan menekan Konfirmasi, kamu setuju dengan <a className="inline-link" href={TERMS_HREF}>Syarat & Ketentuan</a>.</p>}
-        <p className="muted">Uji pembayaran sandbox. Tidak ada uang nyata yang ditagih. Sinkron dan pasangan tetap Free.</p>
+        <p className="muted">{plans?.sandbox === false ? "Pembayaran lewat QRIS, diproses Sumopod." : "Uji pembayaran sandbox. Tidak ada uang nyata yang ditagih."} Sinkron dan pasangan tetap Free.</p>
         {!online && <p role="status">Kamu offline. Status tersimpan tetap bisa dilihat; checkout membutuhkan koneksi.</p>}
-        {online && plans && !available && <p role="status">Metode sandbox ini belum diaktifkan. Pilih paket lain atau coba lagi setelah konfigurasi siap.</p>}
+        {online && plans && !qris && <p role="status">Pembayaran QRIS belum aktif di server. Coba lagi nanti.</p>}
+        {online && plans && qris && !available && <p role="status">Paket ini belum bisa dibayar. Pilih paket lain atau coba lagi setelah konfigurasi siap.</p>}
         <button className="btn btn-coral lg block" disabled={busy || !online || !available || active && billing?.shared || plan === "monthly" && (!consent || active) || !!orderId && (!order || !finishedPayment(order))} aria-busy={busy} onClick={checkout}>
           {busy ? "Menyiapkan checkout…" : "Konfirmasi · " + (plan === "monthly" ? "Rp39.000/bulan" : "Rp199.000 Lifetime")}
         </button>
@@ -211,6 +211,8 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
       {error && <div className="stack"><p role="alert" className="signin-error">{error}</p><button className="btn btn-soft block" onClick={() => setRound((r) => r + 1)}>Coba lagi</button></div>}
       {order && <section className="card plus-glass stack"><p role="status">{paymentLabel(order)}</p>
         {!finishedPayment(order) && <p className="muted">Akses aktif setelah pembayaran dikonfirmasi server.</p>}
+        {!finishedPayment(order) && sumopodPaymentLink(order.redirectUrl) && <a className="btn btn-coral block" href={sumopodPaymentLink(order.redirectUrl)!.href}>Buka link pembayaran</a>}
+        {finishedPayment(order) && !order.grantedAt && <p className="muted">Link ini sudah tidak bisa dipakai. Pilih paket lalu tekan Konfirmasi untuk membuat link baru.</p>}
         {userId && orderId && !lifetime && <button className="btn btn-soft block" onClick={() => setRound((r) => r + 1)}>Cek lagi</button>}
       </section>}
       <section className="card plus-glass stack">
@@ -223,15 +225,15 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
       </section>
       {billing?.subscriptions?.map((sub: any) => <section className="card plus-glass stack" key={sub.id}>
         <h2>Perpanjangan bulanan</h2>
-        <p>{({ active: "Aktif", provisioning: "Menyiapkan perpanjangan", cancel_pending: "Pembatalan sedang diproses", cancelled: "Perpanjangan dibatalkan", attention: "Perlu pemeriksaan pembayaran", inactive: "Perpanjangan gagal" } as Record<string, string>)[sub.state] ?? sub.state}</p>
-        {sub.periodEnd && <p className="muted">Periode dibayar hingga {new Date(sub.periodEnd).toLocaleDateString("id-ID")}. Pembatalan tidak menghapus akses periode ini.</p>}
+        <p>{({ active: "Aktif", provisioning: "Menyiapkan perpanjangan", cancel_pending: "Perpanjangan sedang dihentikan", cancelled: "Perpanjangan dihentikan", attention: "Perlu pemeriksaan pembayaran", inactive: "Perpanjangan gagal" } as Record<string, string>)[sub.state] ?? sub.state}</p>
+        {sub.periodEnd && <p className="muted">Periode dibayar hingga {new Date(sub.periodEnd).toLocaleDateString("id-ID")}. Menghentikan perpanjangan tidak menghapus akses periode ini.</p>}
         {sub.lastError && <p role="status">Perpanjangan belum siap. Pembayaran periode ini tetap berlaku.</p>}
         {!["cancelled", "cancel_pending"].includes(sub.state) && <button className="btn btn-soft block" disabled={busy || !online} onClick={async () => {
           if (lock.current) return; lock.current = true; setBusy(true);
           try { await api("/billing/subscriptions/" + encodeURIComponent(sub.id) + "/cancel", { method: "POST", body: "{}" }); setRound((r) => r + 1); }
-          catch { setError("Pembatalan belum berhasil. Coba lagi."); }
+          catch { setError("Perpanjangan belum berhasil dihentikan. Coba lagi."); }
           finally { lock.current = false; setBusy(false); }
-        }}>Batalkan perpanjangan</button>}
+        }}>Hentikan perpanjangan</button>}
       </section>)}
       {!!(billing?.history ?? billing?.orders)?.length && <section className="card plus-glass stack"><h2>Riwayat pembayaran</h2>{(billing.history ?? billing.orders).map((o: PaymentOrder) =>
         <div className="spread" key={o.orderId}><div><strong>{o.plan === "monthly" ? "Bulanan" : "Lifetime"}</strong><p className="muted">{paymentLabel(o)}</p></div>
