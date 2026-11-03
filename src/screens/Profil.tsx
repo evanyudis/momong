@@ -161,6 +161,7 @@ export function Profil() {
           }}>Keluar akun</button>
         </section>}
         <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>Momong · Catatan, bukan saran medis.</p>
+        <p className="faint" style={{ fontSize: 13, textAlign: "center" }}><a className="inline-link" href="#/kebijakan-privasi">Kebijakan Privasi</a> · <a className="inline-link" href="#/syarat-ketentuan">Syarat & Ketentuan</a></p>
       </div>
 
           <Sheet open={editingProfile} onOpenChange={(open) => { setEditingProfile(open); if (!open) publishName(); }} title="Edit profil"><div className="stack">

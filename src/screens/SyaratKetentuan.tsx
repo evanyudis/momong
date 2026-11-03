@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { TopBar } from "../ui";
+import { PRIVACY_HREF } from "./KebijakanPrivasi";
 
 /** Isi statis dari momong-legal/syarat-refund-v2.md. Placeholder sengaja tetap terlihat sebagai TODO sampai Evan mengisinya. */
 export const TERMS_SOURCE = "syarat-refund-v2";
@@ -18,7 +19,7 @@ export function SyaratKetentuan() {
 
       <article className="card solid stack" aria-labelledby="syarat-plus">
         <h1 id="syarat-plus">Syarat & Ketentuan Momong Plus</h1>
-        <p className="muted">Berlaku sejak: <Todo>tanggal publikasi</Todo> · Versi: <code>plus-v1</code></p>
+        <p className="muted">Berlaku sejak: 3 November 2026 · Versi: <code>plus-v1</code></p>
         <p>Halo! Ini aturan main Momong Plus, kami buat sesingkat dan sejelas mungkin. Dengan membeli Plus, kamu setuju dengan syarat di bawah.</p>
 
         <h2>1. Siapa kami</h2>
@@ -108,7 +109,7 @@ export function SyaratKetentuan() {
 
         <h2>11. Data pribadi</h2>
         <p>Kami memproses data pribadi sesuai <strong>UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi (UU PDP)</strong>. Data kehamilan dan kesehatan bayi termasuk data pribadi yang bersifat spesifik, jadi hanya kami pakai untuk menjalankan fitur Momong. Data ini tidak kami jual dan tidak dipakai untuk iklan.</p>
-        <p>Data akun dan sync disimpan di server PostgreSQL yang kami kelola sendiri, di VPS Tencent Cloud di Jakarta. Penjelasan lengkapnya ada di Kebijakan Privasi <Todo>link Kebijakan Privasi</Todo>.</p>
+        <p>Data akun dan sync disimpan di server PostgreSQL yang kami kelola sendiri, di VPS Tencent Cloud di Jakarta. Penjelasan lengkapnya ada di <a className="inline-link" href={PRIVACY_HREF}>Kebijakan Privasi</a>.</p>
 
         <h2>12. Pemakaian yang wajar</h2>
         <p>Jangan menyalahgunakan Momong, misalnya membobol akun orang lain, mengganggu server, atau menjual ulang akses Plus. Kalau itu terjadi, kami bisa menangguhkan akun. Kalau ternyata penangguhan itu bukan karena kesalahanmu, sisa periode Plus yang sudah dibayar kami kembalikan.</p>
@@ -125,7 +126,7 @@ export function SyaratKetentuan() {
 
       <article className="card solid stack" aria-labelledby="kebijakan-refund">
         <h1 id="kebijakan-refund">Kebijakan Refund Momong Plus</h1>
-        <p className="muted">Berlaku sejak: <Todo>tanggal publikasi</Todo> · Versi: <code>refund-v1</code></p>
+        <p className="muted">Berlaku sejak: 3 November 2026 · Versi: <code>refund-v1</code></p>
 
         <h2>1. Garansi 7 hari</h2>
         <ul>
