@@ -1,12 +1,8 @@
-import type { ReactNode } from "react";
 import { TopBar } from "../ui";
+import { PRIVACY_HREF } from "./KebijakanPrivasi";
 
-/** Isi statis dari momong-legal/syarat-refund-v2.md. Placeholder sengaja tetap terlihat sebagai TODO sampai Evan mengisinya. */
+/** Isi statis dari momong-legal/syarat-refund-v2.md. */
 export const TERMS_SOURCE = "syarat-refund-v2";
-
-function Todo({ children }: { children: ReactNode }) {
-  return <span className="pill coral legal-todo">TODO: {children}</span>;
-}
 
 const EMAIL = "contact.evanyudis@gmail.com";
 
@@ -14,11 +10,9 @@ export function SyaratKetentuan() {
   return <>
     <TopBar title="Syarat & Ketentuan" back="#/plus" />
     <div className="stack legal">
-      <p className="pill coral legal-todo" role="note">TODO: Draf v2, belum dipublikasikan, bukan nasihat hukum. Sisa placeholder diisi saat publish.</p>
-
       <article className="card solid stack" aria-labelledby="syarat-plus">
         <h1 id="syarat-plus">Syarat & Ketentuan Momong Plus</h1>
-        <p className="muted">Berlaku sejak: <Todo>tanggal publikasi</Todo> · Versi: <code>plus-v1</code></p>
+        <p className="muted">Berlaku sejak: 3 November 2026 · Versi: <code>plus-v1</code></p>
         <p>Halo! Ini aturan main Momong Plus, kami buat sesingkat dan sejelas mungkin. Dengan membeli Plus, kamu setuju dengan syarat di bawah.</p>
 
         <h2>1. Siapa kami</h2>
@@ -101,14 +95,15 @@ export function SyaratKetentuan() {
 
         <h2>10. Akun dan hapus data</h2>
         <ul>
-          <li>Kamu bisa minta datamu dilihat, dikoreksi, atau dihapus lewat email di pasal 1. Kami proses paling lama <strong>14 hari kerja</strong>.</li>
+          <li>Kamu bisa minta datamu dilihat, dikoreksi, atau dihapus lewat email di pasal 1. Kami tanggapi paling lambat <strong>3 x 24 jam</strong>, dan akses atau koreksi kami selesaikan dalam waktu itu. Penghapusan akun kami selesaikan paling lama <strong>14 hari kerja</strong>.</li>
+          <li>Catatan order pembayaran disimpan 10 tahun untuk kewajiban pembukuan dan pajak. Saat akun dihapus, order itu dianonimkan (dilepas dari akun dan identitasmu), bukan dihapus.</li>
           <li>Menghapus akun <strong>tidak otomatis mengembalikan dana</strong> Plus yang masih berjalan. Kalau perlu, ajukan refund dulu (lihat Kebijakan Refund).</li>
           <li>Catatan yang hanya ada di perangkatmu tetap di sana sampai kamu hapus sendiri, misalnya dengan menghapus data browser atau aplikasinya.</li>
         </ul>
 
         <h2>11. Data pribadi</h2>
         <p>Kami memproses data pribadi sesuai <strong>UU No. 27 Tahun 2022 tentang Pelindungan Data Pribadi (UU PDP)</strong>. Data kehamilan dan kesehatan bayi termasuk data pribadi yang bersifat spesifik, jadi hanya kami pakai untuk menjalankan fitur Momong. Data ini tidak kami jual dan tidak dipakai untuk iklan.</p>
-        <p>Data akun dan sync disimpan di server PostgreSQL yang kami kelola sendiri, di VPS Tencent Cloud di Jakarta. Penjelasan lengkapnya ada di Kebijakan Privasi <Todo>link Kebijakan Privasi</Todo>.</p>
+        <p>Data akun dan sync disimpan di server PostgreSQL yang kami kelola sendiri, di VPS Tencent Cloud di Jakarta. Penjelasan lengkapnya ada di <a className="inline-link" href={PRIVACY_HREF}>Kebijakan Privasi</a>.</p>
 
         <h2>12. Pemakaian yang wajar</h2>
         <p>Jangan menyalahgunakan Momong, misalnya membobol akun orang lain, mengganggu server, atau menjual ulang akses Plus. Kalau itu terjadi, kami bisa menangguhkan akun. Kalau ternyata penangguhan itu bukan karena kesalahanmu, sisa periode Plus yang sudah dibayar kami kembalikan.</p>
@@ -120,12 +115,12 @@ export function SyaratKetentuan() {
         <p>Kalau syarat ini berubah, kami kabari lewat aplikasi atau email paling lambat 14 hari sebelum berlaku. Perubahan yang merugikan kamu tidak berlaku untuk periode yang sudah dibayar.</p>
 
         <h2>15. Hukum dan sengketa</h2>
-        <p>Syarat ini tunduk pada hukum Republik Indonesia. Kalau ada masalah, hubungi kami dulu, kita selesaikan baik-baik. Kalau belum selesai juga, kamu tetap bisa menempuh jalur yang tersedia untuk konsumen, misalnya BPSK atau pengadilan negeri <Todo>domisili pengadilan</Todo>.</p>
+        <p>Syarat ini tunduk pada hukum Republik Indonesia. Kalau ada masalah, hubungi kami dulu, kita selesaikan baik-baik. Kalau belum selesai juga, kamu tetap bisa menempuh jalur yang tersedia untuk konsumen, misalnya BPSK atau <strong>Pengadilan Negeri Depok</strong>.</p>
       </article>
 
       <article className="card solid stack" aria-labelledby="kebijakan-refund">
         <h1 id="kebijakan-refund">Kebijakan Refund Momong Plus</h1>
-        <p className="muted">Berlaku sejak: <Todo>tanggal publikasi</Todo> · Versi: <code>refund-v1</code></p>
+        <p className="muted">Berlaku sejak: 3 November 2026 · Versi: <code>refund-v1</code></p>
 
         <h2>1. Garansi 7 hari</h2>
         <ul>
