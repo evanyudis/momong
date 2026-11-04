@@ -5,12 +5,13 @@ import { PLUS_ENABLED } from "../release";
 import { RestoreSheet } from "./Restore";
 import { InstallSheet } from "./Install";
 import { Bell, ChevronRight, Download, Sun, Moon, Monitor } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { plusRenewalStatus, type BillingAccount } from "../plus-renewal";
 import type { PlusVariant } from "../content";
 import { todayISO } from "../dates";
 import { profileName, useHousehold } from "../household";
 import { addBaby, babyProfiles, activeBabyId, isPlus, exportJSON, getPrefs, type Prefs, saveSettings, setPrefs, settings, useDB } from "../store";
-import { resetGuestData, signOut, updateDisplayName } from "../sync";
+import { api, resetGuestData, signOut, updateDisplayName } from "../sync";
 import { SyncDot } from "./Partner";
 import { DateInput, Header, PlusBadge, PlusSheet, Sheet, toast } from "../ui";
 
@@ -42,6 +43,18 @@ export function Profil() {
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [plus, setPlus] = useState<PlusVariant | null>(null);
+  const [billing, setBilling] = useState<{ userId: string; data: BillingAccount } | null>(null);
+  const userId = h.signedIn ? h.me?.user.id : undefined;
+  const monthly = h.me?.entitlement.plan === "monthly";
+  useEffect(() => {
+    if (!userId || !monthly || !PLUS_ENABLED) return;
+    let cancelled = false;
+    void api<BillingAccount>("/billing/account").then(({ data }) => {
+      if (!cancelled) setBilling({ userId, data });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [userId, monthly, h.me?.entitlement.expiresAt]);
+  const renewal = plusRenewalStatus(userId ? h.me?.entitlement : undefined, billing?.userId === userId ? billing?.data ?? null : null, Date.now());
 
   function publishName() {
     if (!h.signedIn) return;
@@ -76,8 +89,10 @@ export function Profil() {
         </section>
         <section className="card plus-card stack"><PlusMesh />
           <div className="spread"><div className="card-title">{isPlus() ? h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Lifetime" : h.me?.entitlement.plan === "trial" ? "Plus · Trial" : "Plus · Bulanan" : "Momong Plus"}</div><PlusBadge size="medium" /></div>
-          <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi. {isPlus() ? "Akses Plus kamu aktif." : !PLUS_ENABLED ? "Fitur Plus segera hadir." : null}</p>
-          {!PLUS_ENABLED && !isPlus() ? <button className="btn btn-coral block" disabled>Segera hadir</button> : isPlus() ? <a className="btn btn-coral block" href="#/plus">Lihat status Plus</a>
+          <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi. {isPlus() && renewal.state !== "expired" ? "Akses Plus kamu aktif." : !PLUS_ENABLED ? "Fitur Plus segera hadir." : null}</p>
+          {renewal.activeUntil && <p className="card-sub">{renewal.activeUntil}</p>}
+          {renewal.label && !(renewal.state === "expired" && renewal.action && !renewal.subtle) && <p className="card-sub">{renewal.label}</p>}
+          {!PLUS_ENABLED && !isPlus() ? <button className="btn btn-coral block" disabled>Segera hadir</button> : renewal.action ? <a className={renewal.subtle ? "link-btn" : "btn btn-coral block"} href="#/plus">{renewal.action}</a> : isPlus() || renewal.state === "expired" ? <a className="btn btn-coral block" href="#/plus">Lihat status Plus</a>
             : <button className="btn btn-coral block" aria-haspopup="dialog" onClick={() => setPlus("overview")}>Coba Plus</button>}
         </section>
         {(PLUS_ENABLED || isPlus()) && <section className="card solid stack">
