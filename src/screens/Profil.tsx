@@ -160,6 +160,7 @@ export function Profil() {
           <button className="btn btn-danger-soft block" onClick={() => {
             void signOut(); toast("Sudah keluar dari akun. Catatan tetap tersimpan di HP ini.");
           }}>Keluar akun</button>
+          <a className="btn btn-soft block" href="#/hapus-akun">Hapus akun</a>
         </section>}
         <p className="faint" style={{ fontSize: 13, textAlign: "center", marginTop: 8 }}>Momong · Catatan, bukan saran medis.</p>
         <p className="faint" style={{ fontSize: 13, textAlign: "center" }}><a className="inline-link" href="#/kebijakan-privasi">Kebijakan Privasi</a> · <a className="inline-link" href="#/syarat-ketentuan">Syarat & Ketentuan</a></p>
