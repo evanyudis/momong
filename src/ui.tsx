@@ -4,6 +4,8 @@ export { PlusBadge } from "./PlusBadge";
 import { PlusMesh } from "./PlusMesh";
 import { PLUS_ENABLED } from "./release";
 import { PlanPicker, selectedPlan } from "./billing";
+import { loadBillingPlans, type BillingPlans } from "./billing-plans";
+import { paymentModeCopy } from "./checkout";
 import { Baby, Bell, CalendarDays, ChartNoAxesColumn, CircleCheck, CircleAlert, Info, Check, ChevronLeft, FileText, Gift, History, Sparkles, Timer, Trash2, X } from "lucide-react";
 import { type ComponentProps, type ReactNode, type RefObject, createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -193,6 +195,15 @@ const FEATURE_ICONS = [Timer, Bell, ChartNoAxesColumn, History, FileText, Gift, 
 
 export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; onClose: () => void }) {
   const [plan, setPlan] = useState(selectedPlan);
+  const [plans, setPlans] = useState<BillingPlans | null>(null);
+  const paymentNote = paymentModeCopy(plans?.sandbox);
+  useEffect(() => {
+    if (!variant || !PLUS_ENABLED) return;
+    let cancelled = false;
+    setPlans(null);
+    void loadBillingPlans().then((data) => { if (!cancelled) setPlans(data); }).catch(() => { /* Agreement only until payment configuration is available. */ });
+    return () => { cancelled = true; };
+  }, [variant]);
   const [last, setLast] = useState<PlusVariant>("insights");
   useEffect(() => { if (variant) setLast(variant); }, [variant]);
   const c = PLUS_COPY[variant ?? last];
@@ -292,7 +303,7 @@ export function PlusSheet({ variant, onClose }: { variant: PlusVariant | null; o
             <div ref={foot} className="paywall-foot">
               {PLUS_ENABLED && <PlanPicker sheet value={plan} onChange={setPlan} />}
               {PLUS_ENABLED ? <a className="btn btn-coral lg block paywall-cta" href="#/plus" onClick={onClose}>Lanjut bayar · {plan === "plus_lifetime" ? "Lifetime" : "Bulanan"}</a> : <button className="btn btn-coral lg block paywall-cta" disabled>Segera hadir</button>}
-              <p className="paywall-note">{PLUS_ENABLED ? <>Pembayaran lewat Midtrans · Sandbox.<br />Tidak ada uang nyata yang ditagih. Kamu bisa cek dulu sebelum bayar.</> : <>Fitur Plus sedang disiapkan.<br />Fitur gratis tetap bisa digunakan.</>}</p>
+              <p className="paywall-note">{PLUS_ENABLED ? <>{paymentNote && <>{paymentNote}<br /></>}Dengan lanjut, kamu setuju dengan <a className="inline-link" href="#/syarat-ketentuan" onClick={onClose}>S&amp;K</a> dan <a className="inline-link" href="#/kebijakan-privasi" onClick={onClose}>Kebijakan Privasi</a>.</> : <>Fitur Plus sedang disiapkan.<br />Fitur gratis tetap bisa digunakan.</>}</p>
               <button type="button" className="paywall-later" onClick={onClose}>Nanti saja</button>
             </div>
           </div>
