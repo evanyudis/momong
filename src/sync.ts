@@ -4,6 +4,7 @@ import { bindInvitePreview, clearInvite, clearInviteFlow, googleReturnAction, ho
 import { PLUS_ENABLED } from "./release";
 import { hasProfile } from "./onboarding";
 import { AUTH_ATTEMPT_KEY, AUTH_NOTICE_KEY, SIGNIN_DRAFT_KEY, controllerChangeAction, failureFor, isAuthScreen, nameFromEmail, parseAuthAttempt, signInRetryStep, signupStep, type SignInFailure, type SignInMode } from "./signin";
+import { DELETE_RETURN, parsePreview, type DeletionPreview } from "./delete-account";
 import { setPlusAccess, isPlus, adoptLocalOwner, applyRemote, getPrefs, liftAnonRecords, markAllDirty, markPushed, mergeClaimedAnon, onLocalChange, parkProfileForJoin, pending, resetDeviceData, setPrefs, setRecordOwner, settings } from "./store";
 
 /** Public API base URL only. Secrets never live in this client.
@@ -128,7 +129,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<{ da
 export function authDestination(fallback = "#/profil") {
   const target = sessionStorage.getItem("bb_auth_return");
   sessionStorage.removeItem("bb_auth_return");
-  if (target === "#/plus" || target === "#/pasangan") return target;
+  if (target === "#/plus" || target === "#/pasangan" || target === DELETE_RETURN) return target;
   if (target && isSafeInviteReturn(target)) return target;
   const pending = readInvite();
   const accountId = state.me?.user.id ?? null;
@@ -148,7 +149,7 @@ export function pendingInviteSameFlow(now = Date.now()) {
 export async function destinationAfterLogin(fallback = "#/profil") {
   const target = sessionStorage.getItem("bb_auth_return");
   sessionStorage.removeItem("bb_auth_return");
-  if (target === "#/plus" || target === "#/pasangan") return target;
+  if (target === "#/plus" || target === "#/pasangan" || target === DELETE_RETURN) return target;
 
   const accountId = state.me?.user.id ?? null;
   if (accountId) {
@@ -657,6 +658,30 @@ export async function signOut() {
       method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body: "{}",
     }).catch(() => {});
   }
+}
+
+/** What Hapus akun will remove for this account. Null when the API answers something unexpected. */
+export async function loadDeletionPreview(): Promise<DeletionPreview | null> {
+  const { data } = await api<unknown>("/account/deletion");
+  return parsePreview(data);
+}
+
+/** Deletes the account on the server. Every session is gone afterwards, so the local session is cleared too.
+ *  `wipeDevice` also removes this phone's notes and caches; otherwise they stay as a guest's local notes. */
+export async function deleteAccount(body: { confirm: string; password?: string; acknowledgePlusLoss?: boolean }, wipeDevice: boolean) {
+  const userId = state.me?.user.id;
+  const { data } = await api<{ ok: boolean; deletionId: string }>("/account/delete", { method: "POST", body: JSON.stringify(body) });
+  if (userId) localStorage.removeItem(syncFlagKey(userId));
+  sessionStorage.removeItem("bb_auth_return");
+  clearSession();
+  if (wipeDevice) { resetDeviceData(); clearBrowserCaches(); }
+  return data;
+}
+
+/** No-password accounts need a login from the last 10 minutes. Sign out, then come back here after Masuk. */
+export async function reauthForDeletion() {
+  await signOut();
+  sessionStorage.setItem("bb_auth_return", DELETE_RETURN);
 }
 
 export function resetGuestData() {

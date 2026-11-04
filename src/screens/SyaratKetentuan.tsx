@@ -95,7 +95,8 @@ export function SyaratKetentuan() {
 
         <h2>10. Akun dan hapus data</h2>
         <ul>
-          <li>Kamu bisa minta datamu dilihat, dikoreksi, atau dihapus lewat email di pasal 1. Kami tanggapi paling lambat <strong>3 x 24 jam</strong>, dan akses atau koreksi kami selesaikan dalam waktu itu. Penghapusan akun kami selesaikan paling lama <strong>14 hari kerja</strong>.</li>
+          <li>Kamu bisa menghapus akun langsung di Profil → Hapus akun.</li>
+          <li>Kamu juga bisa minta datamu dilihat, dikoreksi, atau dihapus lewat email di pasal 1. Kami tanggapi paling lambat <strong>3 x 24 jam</strong>, dan akses atau koreksi kami selesaikan dalam waktu itu. Penghapusan akun kami selesaikan paling lama <strong>14 hari kerja</strong>.</li>
           <li>Catatan order pembayaran disimpan 10 tahun untuk kewajiban pembukuan dan pajak. Saat akun dihapus, order itu dianonimkan (dilepas dari akun dan identitasmu), bukan dihapus.</li>
           <li>Menghapus akun <strong>tidak otomatis mengembalikan dana</strong> Plus yang masih berjalan. Kalau perlu, ajukan refund dulu (lihat Kebijakan Refund).</li>
           <li>Catatan yang hanya ada di perangkatmu tetap di sana sampai kamu hapus sendiri, misalnya dengan menghapus data browser atau aplikasinya.</li>

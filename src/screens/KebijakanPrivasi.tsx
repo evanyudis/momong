@@ -127,8 +127,9 @@ export function KebijakanPrivasi() {
           <li><strong>Menarik persetujuan</strong> kapan saja: matikan "Bantu tingkatkan Momong", keluar dari household, atau minta akunmu dihapus. Menarik persetujuan tidak membatalkan pemrosesan yang sudah terjadi sebelumnya.</li>
           <li><strong>Mengajukan keberatan</strong> atas pemrosesan tertentu, dan mengadu ke lembaga pelindungan data pribadi yang berwenang.</li>
         </ol>
-        <p>Caranya: email <strong>{EMAIL}</strong> dari email yang terdaftar di akun Momong, dengan subjek <strong>"Privasi Momong"</strong> dan apa yang kamu minta. Kami mungkin meminta konfirmasi untuk memastikan itu memang kamu. Kami tanggapi paling lambat <strong>3 x 24 jam</strong>. Akses dan koreksi kami selesaikan dalam waktu itu. Penghapusan akun kami selesaikan paling lama <strong>14 hari kerja</strong>. Catatan order pembayaran dianonimkan, bukan dihapus (lihat pasal 10).</p>
-        <p>Menghapus akun tidak menghapus catatan yang masih ada di perangkatmu, dan tidak otomatis mengembalikan dana Plus. Kalau kamu anggota household orang lain, catatan bersama tetap ada di household itu setelah kamu keluar.</p>
+        <p>Hapus akun bisa langsung dari aplikasi: <strong>Profil → Hapus akun</strong>. Prosesnya langsung selesai.</p>
+        <p>Untuk permintaan lain, atau kalau kamu tidak bisa masuk: email <strong>{EMAIL}</strong> dari email yang terdaftar di akun Momong, dengan subjek <strong>"Privasi Momong"</strong> dan apa yang kamu minta. Kami mungkin meminta konfirmasi untuk memastikan itu memang kamu. Kami tanggapi paling lambat <strong>3 x 24 jam</strong>. Akses dan koreksi kami selesaikan dalam waktu itu. Penghapusan akun kami selesaikan paling lama <strong>14 hari kerja</strong>. Catatan order pembayaran dianonimkan, bukan dihapus (lihat pasal 10).</p>
+        <p>Menghapus akun lewat email tidak menghapus catatan yang masih ada di perangkatmu. Di layar Hapus akun, kamu bisa memilih ikut menghapusnya. Menghapus akun tidak otomatis mengembalikan dana Plus. Kalau kamu anggota household orang lain, catatan bersama tetap ada di household itu setelah kamu keluar.</p>
 
         <h2>12. Keamanan</h2>
         <ul>

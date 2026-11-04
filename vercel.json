@@ -72,6 +72,16 @@
         }
       ]
     }
+,
+    {
+      "source": "/account/:path*",
+      "headers": [
+        {
+          "key": "x-vercel-enable-rewrite-caching",
+          "value": "0"
+        }
+      ]
+    }
   ],
   "rewrites": [
     {
@@ -111,6 +121,12 @@
       "respectOriginCacheControl": false
     },
     {
+      "source": "/account/:path*",
+      "has": [{ "type": "host", "value": "staging.momong.evanyudis.com" }],
+      "destination": "https://momong-api-staging.evanyudis.my.id/account/:path*",
+      "respectOriginCacheControl": false
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://momong-api.evanyudis.my.id/api/:path*",
       "respectOriginCacheControl": false
@@ -138,6 +154,11 @@
     {
       "source": "/billing/:path*",
       "destination": "https://momong-api.evanyudis.my.id/billing/:path*",
+      "respectOriginCacheControl": false
+    },
+    {
+      "source": "/account/:path*",
+      "destination": "https://momong-api.evanyudis.my.id/account/:path*",
       "respectOriginCacheControl": false
     }
   ],

@@ -15,6 +15,7 @@ import { JoinLanding, MagicLanding, Partner } from "./screens/Partner";
 import { Plus } from "./screens/Plus";
 import { SyaratKetentuan } from "./screens/SyaratKetentuan";
 import { KebijakanPrivasi } from "./screens/KebijakanPrivasi";
+import { HapusAkun } from "./screens/HapusAkun";
 import { Profil } from "./screens/Profil";
 import { Reminders } from "./screens/Reminders";
 import { Report } from "./screens/Report";
@@ -58,6 +59,7 @@ export function App() {
   }
   else if (path === "/syarat-ketentuan") screen = <SyaratKetentuan />;
   else if (path === "/kebijakan-privasi") screen = <KebijakanPrivasi />;
+  else if (path === "/hapus-akun") screen = <HapusAkun />;
   else if (path === "/masuk-akun") screen = <SignIn key={params.get("mode") === "signup" ? "signup" : "login"} signup={params.get("mode") === "signup"} />;
   else if (step === "restoring") screen = <p role="status">Memulihkan catatan akun…</p>;
   else if (step === "restore-error") screen = <section className="card solid stack"><h1>Catatan belum bisa dipulihkan</h1><p role="alert">Cek koneksi lalu coba lagi sebelum mengatur profil.</p><button className="btn btn-ink block" onClick={() => void restoreAccount()}>Coba lagi</button><button className="link-btn" onClick={() => void signOut()}>Keluar akun</button></section>;
