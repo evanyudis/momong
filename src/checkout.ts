@@ -5,6 +5,12 @@ export type CheckoutPlan = "monthly" | "plus_lifetime";
 export const MONTHLY_CONSENT_VERSION = "monthly-v2";
 export const PAYMENT_METHOD = "qris";
 
+export function paymentModeCopy(sandbox: boolean | undefined): string | null {
+  if (sandbox === false) return "Pembayaran asli lewat Sumopod (QRIS dan lainnya).";
+  if (sandbox === true) return "Mode uji (sandbox). Tidak ada uang nyata yang ditagih.";
+  return null;
+}
+
 /** Body persis seperti yang dibaca momong-api main (sumopod-billing.ts sumopodCheckout). Lifetime tidak membaca body. */
 export function checkoutRequest(plan: CheckoutPlan, idempotencyKey: string) {
   return plan === "monthly"

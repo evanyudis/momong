@@ -8,9 +8,10 @@ import { reducedMotion } from "../motion";
 import { PLUS_FEATURES } from "../content";
 import { isPlus } from "../store";
 import { PlanPicker, selectedPlan } from "../billing";
+import { loadBillingPlans, type BillingPlans } from "../billing-plans";
 import { PlusBadge, TopBar } from "../ui";
 import { encode } from "uqr";
-import { blocksCheckout, checkoutErrorCode, checkoutErrorCopy, checkoutRequest, expiredPayment, finishedPayment, orderNotice, paymentLabel, planAvailable, readConsent, sumopodPaymentLink, sumopodPlans, writeConsent, type PaymentOrder } from "../checkout";
+import { blocksCheckout, checkoutErrorCode, checkoutErrorCopy, checkoutRequest, expiredPayment, finishedPayment, orderNotice, paymentLabel, paymentModeCopy, planAvailable, readConsent, sumopodPaymentLink, sumopodPlans, writeConsent, type PaymentOrder } from "../checkout";
 
 export { MONTHLY_CONSENT_VERSION } from "../checkout";
 export const TERMS_HREF = "#/syarat-ketentuan";
@@ -85,7 +86,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
   const [consent, setConsentState] = useState(() => readConsent(sessionStorage, userId, "monthly"));
   const setConsent = (value: boolean) => { writeConsent(sessionStorage, userId, "monthly", value); setConsentState(value); };
   const [online, setOnline] = useState(navigator.onLine);
-  const [plans, setPlans] = useState<any>(null);
+  const [plans, setPlans] = useState<BillingPlans | null>(null);
   const [plansFailed, setPlansFailed] = useState(false);
   const [billing, setBilling] = useState<any>(null);
   const idempotency = useRef(crypto.randomUUID());
@@ -121,7 +122,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
   }, []);
   useEffect(() => {
     let cancelled = false;
-    void api<any>("/billing/plans").then(({ data }) => { if (!cancelled) { setPlans(data); setPlansFailed(false); } }).catch(() => { if (!cancelled) { setPlansFailed(true); setError("Konfigurasi pembayaran belum bisa dimuat. Cek koneksi lalu coba lagi."); } });
+    void loadBillingPlans().then((data) => { if (!cancelled) { setPlans(data); setPlansFailed(false); } }).catch(() => { if (!cancelled) { setPlansFailed(true); setError("Konfigurasi pembayaran belum bisa dimuat. Cek koneksi lalu coba lagi."); } });
     if (userId) void api<any>("/billing/account").then(({ data }) => {
       if (cancelled) return; setBilling(data);
       const pending = data.orders.find((o: PaymentOrder) => blocksCheckout(o));
@@ -218,7 +219,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
           </label>
         </>}
         {plan === "plus_lifetime" && <p className="muted">Dengan menekan Konfirmasi, kamu setuju dengan <a className="inline-link" href={TERMS_HREF}>Syarat & Ketentuan</a>.</p>}
-        <p className="muted">{!plans ? plansFailed ? "Info pembayaran belum termuat." : "Memuat info pembayaran…" : plans.sandbox === false ? "Pembayaran lewat QRIS, diproses Sumopod." : "Uji pembayaran sandbox. Tidak ada uang nyata yang ditagih."} Sinkron dan pasangan tetap Free.</p>
+        <p className="muted">{!plans ? plansFailed ? "Info pembayaran belum termuat." : "Memuat info pembayaran…" : paymentModeCopy(plans.sandbox)} Sinkron dan pasangan tetap Free.</p>
         {!online && <p role="status">Kamu offline. Status tersimpan tetap bisa dilihat; checkout membutuhkan koneksi.</p>}
         {online && plans && !qris && <p role="status">Pembayaran QRIS belum aktif di server. Coba lagi nanti.</p>}
         {online && plans && qris && !available && <p role="status">Paket ini belum bisa dibayar. Pilih paket lain atau coba lagi setelah konfigurasi siap.</p>}

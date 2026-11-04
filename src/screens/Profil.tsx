@@ -76,7 +76,7 @@ export function Profil() {
         </section>
         <section className="card plus-card stack"><PlusMesh />
           <div className="spread"><div className="card-title">{isPlus() ? h.me?.entitlement.plan === "plus_lifetime" ? "Plus · Lifetime" : h.me?.entitlement.plan === "trial" ? "Plus · Trial" : "Plus · Bulanan" : "Momong Plus"}</div><PlusBadge size="medium" /></div>
-          <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi.  {isPlus() ? "Akses Plus kamu aktif." : "Fitur Plus segera hadir."}</p>
+          <p className="card-sub">Perkiraan, grafik, pengingat, riwayat lengkap, PDF tanpa batas, wishlist berbagi, dan multi bayi. {isPlus() ? "Akses Plus kamu aktif." : !PLUS_ENABLED ? "Fitur Plus segera hadir." : null}</p>
           {!PLUS_ENABLED && !isPlus() ? <button className="btn btn-coral block" disabled>Segera hadir</button> : isPlus() ? <a className="btn btn-coral block" href="#/plus">Lihat status Plus</a>
             : <button className="btn btn-coral block" aria-haspopup="dialog" onClick={() => setPlus("overview")}>Coba Plus</button>}
         </section>

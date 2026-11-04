@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { MONTHLY_CONSENT_VERSION, PAYMENT_LINK_HOSTS, blocksCheckout, checkoutErrorCode, checkoutErrorCopy, checkoutRequest, consentKey, expiredPayment, finishedPayment, orderNotice, paymentLabel, planAvailable, readConsent, sumopodPaymentLink, sumopodPlans, writeConsent, type PaymentOrder } from "./checkout";
+import { MONTHLY_CONSENT_VERSION, PAYMENT_LINK_HOSTS, blocksCheckout, checkoutErrorCode, checkoutErrorCopy, checkoutRequest, consentKey, expiredPayment, finishedPayment, orderNotice, paymentLabel, paymentModeCopy, planAvailable, readConsent, sumopodPaymentLink, sumopodPlans, writeConsent, type PaymentOrder } from "./checkout";
 import { parseHash, stripPaymentReturn } from "./route-parse";
+
+test("payment note distinguishes live, sandbox, and unknown configuration", () => {
+  assert.equal(paymentModeCopy(false), "Pembayaran asli lewat Sumopod (QRIS dan lainnya).");
+  assert.equal(paymentModeCopy(true), "Mode uji (sandbox). Tidak ada uang nyata yang ditagih.");
+  assert.equal(paymentModeCopy(undefined), null, "loading or missing sandbox flag must not imply test payments");
+});
 
 test("QRIS checkout request matches momong-api sumopodCheckout shapes", () => {
   assert.equal(MONTHLY_CONSENT_VERSION, "monthly-v2");

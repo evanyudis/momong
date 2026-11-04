@@ -889,7 +889,6 @@ html[data-keyboard] *, html[data-keyboard] *::before, html[data-keyboard] *::aft
 .plus-mesh > div { height: 100%; }
 .plus-mesh { opacity: .32; }
 .plus-pill::before, .plus-entry::before { content: ""; }
-.paywall .plus-mesh { bottom: auto; height: 320px; }
 
 /* Plus has its own immersive canvas; everyday screens keep neutral cards. */
 .feed-estimate-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
