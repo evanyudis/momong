@@ -162,5 +162,5 @@
       "respectOriginCacheControl": false
     }
   ],
-  "buildCommand": "VITE_PLUS_ENABLED=false npm run build"
+  "buildCommand": "if [ \"$VERCEL_ENV\" = production ]; then VITE_PLUS_ENABLED=true npm run build; else VITE_PLUS_ENABLED=false npm run build; fi"
 }
