@@ -1,3 +1,4 @@
+import { GlassSurface } from "../GlassSurface";
 import { RestoreSheet } from "./Restore";
 import { ChevronLeft } from "lucide-react";
 import { type FormEvent, useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
@@ -148,14 +149,14 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
   return (
     <>
       <header className="header signin-head">
-        {!onboarding && <a className="icon-btn" href="#/profil" aria-label="Kembali"><ChevronLeft size={22} /></a>}
+        {!onboarding && <a className="icon-btn" href="#/profil" aria-label="Kembali"><GlassSurface /><ChevronLeft size={22} /></a>}
         <span className="signin-brand">Momong</span>
         <h1>{onboarding ? "Selamat datang di Momong" : daftar ? "Buat akun Momong" : "Masuk ke Momong"}</h1>
         <p className="muted">{forPlus ? "Masuk atau daftar untuk lanjut dengan Momong Plus." : onboarding ? "Catat tanpa akun. Masuk untuk sinkron dengan pasangan." : "Supaya data tersimpan online. Sync dan pasangan tetap gratis."}</p>
       </header>
       <div className="signin" onKeyDownCapture={() => setStill(true)} onPointerDownCapture={() => setStill(false)}>
         <Form className="stack" onSubmit={submit} validationBehavior="native" aria-busy={pending}>
-          <Button className="btn btn-glass block" isDisabled={pending} onPress={google}><GoogleMark />Lanjut dengan Google</Button>
+          <Button className="btn btn-glass block" isDisabled={pending} onPress={google}><GlassSurface /><GoogleMark />Lanjut dengan Google</Button>
           {(s.googleCancelled || googleLeaving) && (
             <p className="muted signin-msg" role="status" {...msg(googleLeaving)}>Masuk Google dibatalkan.</p>
           )}
@@ -166,7 +167,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
             onChange={(value) => dispatch({ type: "email", value })}
           >
             <Label>Email</Label>
-            <Input ref={emailRef} className="input" placeholder="nama@email.com" autoCapitalize="none" spellCheck={false} />
+            <div className="glass-field"><GlassSurface /><Input ref={emailRef} className="input" placeholder="nama@email.com" autoCapitalize="none" spellCheck={false} /></div>
             {!s.emailError && <FieldError className="signin-error" />}
             {(s.emailError || errLeaving) && (
               <span id="signin-email-error" className="signin-error signin-msg" role="alert" {...msg(errLeaving)}>Email tidak cocok.</span>
@@ -177,7 +178,7 @@ export function SignIn({ onboarding = false, plus = false, signup = false }: { o
             value={s.password} onChange={(value) => dispatch({ type: "password", value })}
           >
             <Label>Kata sandi</Label>
-            <Input ref={passwordRef} className="input" />
+            <div className="glass-field"><GlassSurface /><Input ref={passwordRef} className="input" /></div>
             <FieldError className="signin-error" />
             {daftar && <small className="muted">Minimal 8 karakter.</small>}
           </TextField>

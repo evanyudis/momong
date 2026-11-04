@@ -1,3 +1,4 @@
+import { GlassSurface } from "./GlassSurface";
 import { PlusBadge } from "./PlusBadge";
 export { PlusBadge } from "./PlusBadge";
 import { PlusMesh } from "./PlusMesh";
@@ -158,7 +159,7 @@ export function Sheet({ open, onOpenChange, title, children, initialFocus }: {
         <Drawer.Overlay className="sheet-backdrop" style={{ zIndex: `calc(var(--z-sheet) + ${depth * 2})` }} />
         <Drawer.Content ref={drawer} className="sheet" style={{ zIndex: `calc(var(--z-sheet) + ${depth * 2 + 1})` }} aria-describedby={undefined} {...cancelledDrag} {...focus}>
           <Drawer.Handle className="sheet-grip" />
-          <div className="sheet-heading"><Drawer.Title asChild><h3 tabIndex={-1}>{title}</h3></Drawer.Title><Drawer.Close asChild><button type="button" className="icon-btn" aria-label="Tutup"><X size={20} /></button></Drawer.Close></div>
+          <div className="sheet-heading"><Drawer.Title asChild><h3 tabIndex={-1}>{title}</h3></Drawer.Title><Drawer.Close asChild><button type="button" className="icon-btn" aria-label="Tutup"><GlassSurface /><X size={20} /></button></Drawer.Close></div>
           <div className="sheet-body">{children}</div>
         </Drawer.Content>
       </Drawer.Portal>
@@ -173,7 +174,7 @@ export function DeleteButton({ label, onDelete, children, className = "icon-btn"
   const [error, setError] = useState("");
   const cancel = useRef<HTMLButtonElement>(null);
   return <>
-    <button type="button" className={className} aria-label={`Hapus ${label}`} aria-haspopup="dialog" onClick={() => { setError(""); setOpen(true); }}>{children ?? <Trash2 size={18} />}</button>
+    <button type="button" className={className} aria-label={`Hapus ${label}`} aria-haspopup="dialog" onClick={() => { setError(""); setOpen(true); }}>{className.includes("icon-btn") && <GlassSurface />}{children ?? <Trash2 size={18} />}</button>
     <Sheet open={open} onOpenChange={setOpen} title="Hapus catatan?" initialFocus={cancel}>
       <div className="stack" style={{ marginTop: 16 }}>
         <p>Hapus {label}? Data yang dihapus tidak bisa dikembalikan.</p>
@@ -333,7 +334,7 @@ export function Header({ title, aside }: { title: string; aside?: ReactNode }) {
 export function TopBar({ title, back = "#/" }: { title: string; back?: string }) {
   return (
     <div className="topbar">
-      <a className="icon-btn" href={back} aria-label="Kembali"><ChevronLeft size={22} /></a>
+      <a className="icon-btn" href={back} aria-label="Kembali"><GlassSurface /><ChevronLeft size={22} /></a>
       <h2>{title}</h2>
       <span />
     </div>

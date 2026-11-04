@@ -1,3 +1,4 @@
+import { GlassSurface } from "../GlassSurface";
 import { PlusMesh } from "../PlusMesh";
 import { PLUS_ENABLED } from "../release";
 import { Check, Plus } from "lucide-react";
@@ -100,7 +101,7 @@ export function Wishlist() {
         </section>
         <form className="row" onSubmit={add}>
           <input aria-label="Nama barang" className="input" placeholder="Tambah barang" maxLength={120} value={label} onChange={(e) => setLabel(e.target.value)} />
-          <button className="icon-btn" aria-label="Tambah" style={{ width: 52, height: 52 }}><Plus size={22} /></button>
+          <button className="icon-btn" aria-label="Tambah" style={{ width: 52, height: 52 }}><GlassSurface /><Plus size={22} /></button>
         </form>
         <section className="card plus-card stack"><PlusMesh />
           <h2>Bagikan daftar kado · Plus</h2>

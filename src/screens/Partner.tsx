@@ -1,3 +1,4 @@
+import { GlassSurface } from "../GlassSurface";
 import { Check, CloudOff, LoaderCircle, LogOut, Mail, MessageCircle, QrCode, RefreshCw, UserRound, UserRoundPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -356,7 +357,7 @@ function Household({ onJoin }: { onJoin: () => void }) {
               <div style={{ fontSize: 14, marginTop: 2 }}><SyncDot /></div>
             </div>
             <button className="btn btn-soft sm" onClick={() => setSyncEnabled(false)}>Matikan sinkron</button>
-            <button className="icon-btn" aria-label="Sinkron sekarang" onClick={() => void syncNow()}><RefreshCw size={18} /></button>
+            <button className="icon-btn" aria-label="Sinkron sekarang" onClick={() => void syncNow()}><GlassSurface /><RefreshCw size={18} /></button>
           </div>
         </section>
 

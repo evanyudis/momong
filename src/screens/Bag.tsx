@@ -1,3 +1,4 @@
+import { GlassSurface } from "../GlassSurface";
 import { Check, Plus } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { BAG_DEFAULTS } from "../content";
@@ -78,7 +79,7 @@ export function Bag() {
         ))}
         <form className="row" onSubmit={add}>
           <input className="input" aria-label="Nama barang" placeholder="Tambah barang" value={label} onChange={(e) => setLabel(e.target.value)} />
-          <button className="icon-btn" aria-label="Tambah" style={{ width: 52, height: 52 }}><Plus size={22} /></button>
+          <button className="icon-btn" aria-label="Tambah" style={{ width: 52, height: 52 }}><GlassSurface /><Plus size={22} /></button>
         </form>
       </div>
     </>

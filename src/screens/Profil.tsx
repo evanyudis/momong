@@ -1,3 +1,4 @@
+import { GlassSurface } from "../GlassSurface";
 import { PlusMesh } from "../PlusMesh";
 import { setTelemetryConsent, telemetryConfigured, telemetryConsent } from "../telemetry";
 import { PLUS_ENABLED } from "../release";
@@ -60,7 +61,7 @@ export function Profil() {
 
   return (
     <>
-      <Header title="Profil" aside={(PLUS_ENABLED || isPlus()) && <a className="icon-btn" href="#/pengingat" aria-label="Pengingat"><Bell aria-hidden="true" size={22} /></a>} />
+      <Header title="Profil" aside={(PLUS_ENABLED || isPlus()) && <a className="icon-btn" href="#/pengingat" aria-label="Pengingat"><GlassSurface /><Bell aria-hidden="true" size={22} /></a>} />
       <div className="stack">
         <section className="stack profile-summary">
           <div className="profile-identity">

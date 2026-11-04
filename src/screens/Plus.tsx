@@ -1,3 +1,4 @@
+import { GlassSurface } from "../GlassSurface";
 import { Baby, Bell, ChartNoAxesColumn, Clock, FileText, Gift, Milk } from "lucide-react";
 import { PlusMesh } from "../PlusMesh";
 import { PLUS_ENABLED } from "../release";
@@ -42,10 +43,10 @@ function PlusContent() {
   if (acc.me?.entitlement.earlyAccess && isPlus()) return <>
     <TopBar title={acc.me.entitlement.plan === "plus_lifetime" ? "Plus · Lifetime" : "Plus · Trial"} back="#/profil" />
     <div className="stack">
-      <section className="card plus-glass plus-hero stack"><PlusBadge size="medium" /><h1>Early access kamu aktif.</h1>
+      <section className="card plus-glass plus-hero stack"><GlassSurface /><PlusBadge size="medium" /><h1>Early access kamu aktif.</h1>
         <p>{acc.me.entitlement.plan === "plus_lifetime" ? "Akses Plus gratis tanpa batas waktu." : <>Gratis sampai {new Date(acc.me.entitlement.expiresAt!).toLocaleDateString("id-ID", { dateStyle: "long" })}.</>} Tidak ada tagihan atau perpanjangan otomatis. Akses berlaku untuk household kamu.</p>
       </section>
-      <section className="card plus-glass stack"><h2>Fitur Plus</h2>
+      <section className="card plus-glass stack"><GlassSurface /><h2>Fitur Plus</h2>
         <ul className="plus-page-features">{PLUS_FEATURES.map((feature, i) => <li key={feature.title}><FeatureIcon index={i} /><div><h3>{feature.title}</h3><p className="muted">{feature.body}</p><a className="link-btn" href={["#/insight", "#/pengingat", "#/insight", "#/log", "#/laporan", "#/kado", "#/profil"][i]}>Buka fitur</a></div></li>)}</ul>
       </section>
     </div>
@@ -53,12 +54,12 @@ function PlusContent() {
   if (!PLUS_ENABLED) return <>
     <TopBar title="Momong Plus" back="#/profil" />
     <div className="stack">
-      <section className="card plus-glass plus-hero stack"><PlusBadge size="medium" />
+      <section className="card plus-glass plus-hero stack"><GlassSurface /><PlusBadge size="medium" />
         <h1>Grafik, riwayat lengkap, dan laporan.</h1>
         <p>Momong Plus sedang disiapkan. Kamu bisa terus memakai fitur gratis, termasuk sinkronisasi dan akses pasangan.</p>
         <button className="btn btn-coral lg block" disabled>Segera hadir</button>
       </section>
-      <section className="card plus-glass stack">
+      <section className="card plus-glass stack"><GlassSurface />
         <h2>Yang sedang kami siapkan</h2>
         <ul className="plus-page-features">{PLUS_FEATURES.map((feature, i) => <li key={feature.title}>
           <FeatureIcon index={i} />
@@ -193,7 +194,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
     <TopBar title="Plus" back="#/profil" />
     {celebrate && <p className="plus-activation" role="status">Selamat datang di Momong Plus ✦</p>}
     <div className="stack">
-      <section className="card plus-glass plus-hero stack"><PlusBadge size="medium" />
+      <section className="card plus-glass plus-hero stack"><GlassSurface /><PlusBadge size="medium" />
         {plans?.sandbox === true && <span className="pill plus-chip">Momong Plus · Sandbox</span>}
         <h1>{active ? "Lebih dekat dengan polanya." : expired ? "Masa Plusmu sudah berakhir." : "Hari kecil. Cerita besar."}</h1>
         <p>{active ? "Semua fitur Plus siap dibuka dari perangkat ini." : expired ? "Catatanmu tetap tersimpan. Periksa perpanjangan atau pilih Lifetime untuk membuka Plus lagi." : "Pahami pola, simpan kenangan, dan bagi persiapan dengan orang tersayang."}</p>
@@ -206,7 +207,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
           <small>Perkiraan non-klinis dari catatan, bukan jadwal wajib.</small>
         </div>}
       </section>
-      {!lifetime && !billing?.shared && <section className="card plus-glass stack">
+      {!lifetime && !billing?.shared && <section className="card plus-glass stack"><GlassSurface />
         <h2>{active ? "Pilih Lifetime" : "Pilih yang pas untukmu"}</h2>
         <PlanPicker value={plan} onChange={(p) => { setPlan(p); setConsent(false); }} />
         {active && <p className="muted">Upgrade Lifetime membayar penuh, tanpa prorata. Perpanjangan bulanan dihentikan setelah pembayaran sukses.</p>}
@@ -226,7 +227,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
         </button>
       </section>}
       {error && <div className="stack"><p role="alert" className="signin-error">{error}</p><button className="btn btn-soft block" onClick={() => setRound((r) => r + 1)}>Coba lagi</button></div>}
-      {order && <section className="card plus-glass stack"><p role="status">{paymentLabel(order)}</p>
+      {order && <section className="card plus-glass stack"><GlassSurface /><p role="status">{paymentLabel(order)}</p>
         {orderNotice(order) && <p className="muted">{orderNotice(order)}</p>}
         {!finishedPayment(order) && <p className="muted">Akses aktif setelah pembayaran dikonfirmasi server.</p>}
         {!finishedPayment(order) && sumopodPaymentLink(order.redirectUrl) && <a className="btn btn-coral block" href={sumopodPaymentLink(order.redirectUrl)!.href}>Buka link pembayaran</a>}
@@ -234,7 +235,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
         {expiredPayment(order) && <p className="muted">Link ini sudah tidak bisa dipakai. Pilih paket lalu tekan Konfirmasi untuk membuat link baru.</p>}
         {userId && orderId && !lifetime && <button className="btn btn-soft block" onClick={() => setRound((r) => r + 1)}>Cek lagi</button>}
       </section>}
-      <section className="card plus-glass stack">
+      <section className="card plus-glass stack"><GlassSurface />
         <h2>{active ? "Plus kamu, siap dipakai" : "Ruang lebih untuk setiap tahap"}</h2>
         <ul className="plus-page-features">{PLUS_FEATURES.map((feature, i) => <li key={feature.title}>
           <FeatureIcon index={i} />
@@ -242,7 +243,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
             {active && <a className="link-btn" href={["#/insight", "#/pengingat", "#/insight", "#/log", "#/laporan", "#/kado", "#/profil"][i]}>Buka fitur</a>}
           </div></li>)}</ul>
       </section>
-      {billing?.subscriptions?.map((sub: any) => <section className="card plus-glass stack" key={sub.id}>
+      {billing?.subscriptions?.map((sub: any) => <section className="card plus-glass stack" key={sub.id}><GlassSurface />
         <h2>Perpanjangan bulanan</h2>
         <p>{({ active: "Aktif", provisioning: "Menyiapkan perpanjangan", cancel_pending: "Perpanjangan sedang dihentikan", cancelled: "Perpanjangan dihentikan", attention: "Perlu pemeriksaan pembayaran", inactive: "Perpanjangan gagal" } as Record<string, string>)[sub.state] ?? sub.state}</p>
         {sub.periodEnd && <p className="muted">Periode dibayar hingga {new Date(sub.periodEnd).toLocaleDateString("id-ID")}. Menghentikan perpanjangan tidak menghapus akses periode ini.</p>}
@@ -254,7 +255,7 @@ function PlusAccount({ userId, active }: { userId?: string; active: boolean }) {
           finally { lock.current = false; setBusy(false); }
         }}>Hentikan perpanjangan</button>}
       </section>)}
-      {!!(billing?.history ?? billing?.orders)?.length && <section className="card plus-glass stack"><h2>Riwayat pembayaran</h2>{(billing.history ?? billing.orders).map((o: PaymentOrder) =>
+      {!!(billing?.history ?? billing?.orders)?.length && <section className="card plus-glass stack"><GlassSurface /><h2>Riwayat pembayaran</h2>{(billing.history ?? billing.orders).map((o: PaymentOrder) =>
         <div className="spread" key={o.orderId}><div><strong>{o.plan === "monthly" ? "Bulanan" : "Lifetime"}</strong><p className="muted">{paymentLabel(o)}</p></div>
           <span className="num">{new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(o.amount ?? 0)}</span></div>)}</section>}
       <a className="btn btn-soft block" href="#/">Kembali ke catatan</a>

@@ -1,3 +1,4 @@
+import { GlassSurface } from "../GlassSurface";
 import Segmented from "../Segmented";
 import DayView from "./NewbornDayView";
 import { kinds as KINDS, type Kind } from "../newborn";
@@ -534,8 +535,8 @@ export function NewbornSheet({ kind, record, onClose }: { kind: Kind | null; rec
               if (e.key === "Enter") { e.preventDefault(); addTag(); }
               if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setAddingTag(false); setTagInput(""); }
             }} />
-            <button type="button" className="icon-btn" aria-label="Tambahkan tag" disabled={!tagInput.trim()} onClick={addTag}><Plus size={18} /></button>
-            <button type="button" className="icon-btn" aria-label="Batal tambah tag" onClick={() => { setAddingTag(false); setTagInput(""); }}><X size={18} /></button>
+            <button type="button" className="icon-btn" aria-label="Tambahkan tag" disabled={!tagInput.trim()} onClick={addTag}><GlassSurface /><Plus size={18} /></button>
+            <button type="button" className="icon-btn" aria-label="Batal tambah tag" onClick={() => { setAddingTag(false); setTagInput(""); }}><GlassSurface /><X size={18} /></button>
           </div>}
         </div>}
         {k === "diaper" && <Segmented label="Jenis popok" value={type} onChange={setType} options={[["pee", "Pipis"], ["poo", "Pup"], ["both", "Keduanya"]]} />}

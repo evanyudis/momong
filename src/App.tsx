@@ -1,8 +1,9 @@
+import { TabBar } from "glisse";
 import NewbornAdd from "./NewbornAdd";
 import { trackScreen } from "./telemetry";
 import { PLUS_ENABLED } from "./release";
 import { Baby, ChartNoAxesColumn, House, UserRound } from "lucide-react";
-import { type CSSProperties, useEffect, useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { afterNavigate } from "./motion";
 import { onboardingStep } from "./onboarding";
 import { restoreRoutePosition, useRoute } from "./route";
@@ -89,14 +90,15 @@ export function App() {
       <div className="page-wash" aria-hidden="true" />
       <main className="app">{screen}</main>
       {showTabs && (
-        <div className={s.birthMode === "postpartum" ? "bottom-dock" : undefined}><nav className="tabbar" aria-label="Navigasi utama" style={{ "--tab": TABS.findIndex((t) => t.path === path) } as CSSProperties}>
-          {TABS.map(({ href, path: p, label, Icon }) => (
-            <a key={p} href={href} aria-current={p === path ? "page" : undefined}>
-              <Icon size={24} strokeWidth={1.75} />
-              {label}
-            </a>
-          ))}
-        </nav>{s.birthMode === "postpartum" && <NewbornAdd key={babyKey} />}</div>
+        <div className={s.birthMode === "postpartum" ? "bottom-dock" : undefined}><TabBar
+          className="tabbar"
+          aria-label="Navigasi utama"
+          value={path}
+          onValueChange={(value) => { const tab = TABS.find(t => t.path === value); if (tab) location.hash = tab.href; }}
+          items={TABS.map(({ href, path: value, label, Icon }) => ({
+            href, value, label, icon: <Icon size={24} strokeWidth={1.75} aria-hidden="true" />,
+          }))}
+        />{s.birthMode === "postpartum" && <NewbornAdd key={babyKey} />}</div>
       )}
       <Toaster aboveNavigation={showTabs} />
     </>
